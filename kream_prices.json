@@ -1,0 +1,68 @@
+[
+  {
+    "product_id": "307489",
+    "kream": {
+      "product_id": "307489",
+      "product_name": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+      "product_name_en": "Adidas Originals Cloud Shoulder Bag XLarge Black",
+      "model_number": "JP0146",
+      "display_price": 103000,
+      "instant_buy_price": 103000,
+      "instant_sell_price": null,
+      "recent_trade_price": 105000,
+      "price_change": null,
+      "total_trades": 78,
+      "trade_history": [
+        {
+          "price": 105000,
+          "size": "ONE SIZE",
+          "date": "26/03/28"
+        },
+        {
+          "price": 97000,
+          "size": "ONE SIZE",
+          "date": "26/03/16"
+        },
+        {
+          "price": 97000,
+          "size": "ONE SIZE",
+          "date": "26/03/13"
+        },
+        {
+          "price": 102000,
+          "size": "ONE SIZE",
+          "date": "26/03/04"
+        },
+        {
+          "price": 104000,
+          "size": "ONE SIZE",
+          "date": "26/03/03"
+        }
+      ],
+      "sell_bids": [
+        {
+          "price": 103000,
+          "size": "ONE SIZE",
+          "quantity": 5
+        },
+        {
+          "price": 110000,
+          "size": "ONE SIZE",
+          "quantity": 2
+        }
+      ],
+      "buy_bids": [],
+      "collected_at": "2026-04-14T09:13:01.655725",
+      "source": "kream.co.kr",
+      "size_prices": [
+        {
+          "size": "ONE SIZE",
+          "buyNowPrice": 103000,
+          "sellNowPrice": null,
+          "sellBidCount": 7,
+          "buyBidCount": 0
+        }
+      ]
+    }
+  }
+]

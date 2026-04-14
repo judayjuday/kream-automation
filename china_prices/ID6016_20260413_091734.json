@@ -1,0 +1,43 @@
+{
+  "model": "ID6016",
+  "app": "识货",
+  "price_cny": null,
+  "product_name": null,
+  "size_prices": {},
+  "sellers": [
+    {
+      "shop": "识货最低价",
+      "platform": "识货",
+      "price_cny": 349,
+      "trusted": true,
+      "trust_reason": "识货 공식",
+      "collected_at": "2026-04-13T09:17:34.996399"
+    },
+    {
+      "shop": "官旗最低价",
+      "platform": "天猫",
+      "price_cny": 399,
+      "trusted": true,
+      "trust_reason": "官方旗舰店",
+      "collected_at": "2026-04-13T09:17:34.996461"
+    },
+    {
+      "shop": "淘宝最低价",
+      "platform": "淘宝",
+      "price_cny": 499,
+      "trusted": false,
+      "trust_reason": "일반 상점",
+      "collected_at": "2026-04-13T09:17:34.996475"
+    },
+    {
+      "shop": "小编精选推荐",
+      "platform": "기타",
+      "price_cny": 399,
+      "trusted": false,
+      "trust_reason": "일반 상점",
+      "collected_at": "2026-04-13T09:17:34.996483"
+    }
+  ],
+  "collected_at": "2026-04-13T09:16:32.363542",
+  "error": null
+}

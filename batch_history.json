@@ -1,0 +1,282 @@
+{
+  "history": [
+    {
+      "executed_at": "2026-04-14T09:13:30",
+      "type": "검색+마진계산",
+      "total": 13,
+      "success": 13,
+      "failed": 0,
+      "items": [
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 57240,
+          "instant_buy": 80000,
+          "margin": "+9,376 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IC8349",
+          "name": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 70669,
+          "instant_buy": 129000,
+          "margin": "+10,891 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9271",
+          "name": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 53883,
+          "instant_buy": 79000,
+          "margin": "+8,997 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9266",
+          "name": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 49407,
+          "instant_buy": 82000,
+          "margin": "+7,869 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JP0145",
+          "name": "아디다스 오리지널스 클라우드 숄더백 라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 60597,
+          "instant_buy": 89000,
+          "margin": "+9,755 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JP0146",
+          "name": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 65074,
+          "instant_buy": 103000,
+          "margin": "+9,948 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IC8349",
+          "name": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 70669,
+          "instant_buy": 129000,
+          "margin": "+10,891 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 57240,
+          "instant_buy": 80000,
+          "margin": "+9,376 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IC8349",
+          "name": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 70669,
+          "instant_buy": 129000,
+          "margin": "+10,891 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 57240,
+          "instant_buy": 80000,
+          "margin": "+9,376 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9271",
+          "name": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 53883,
+          "instant_buy": 79000,
+          "margin": "+8,997 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9266",
+          "name": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 49407,
+          "instant_buy": 82000,
+          "margin": "+7,869 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JP0146",
+          "name": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 65074,
+          "instant_buy": 103000,
+          "margin": "+9,948 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-14T08:38:24",
+      "type": "검색+마진계산",
+      "total": 13,
+      "success": 13,
+      "failed": 0,
+      "items": [
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 57240,
+          "instant_buy": 80000,
+          "margin": "+9,376 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IC8349",
+          "name": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 70669,
+          "instant_buy": 129000,
+          "margin": "+10,891 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9271",
+          "name": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 53883,
+          "instant_buy": 79000,
+          "margin": "+8,997 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9266",
+          "name": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 49407,
+          "instant_buy": 82000,
+          "margin": "+7,869 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JP0145",
+          "name": "아디다스 오리지널스 클라우드 숄더백 라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 60597,
+          "instant_buy": 89000,
+          "margin": "+9,755 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JP0146",
+          "name": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 65074,
+          "instant_buy": 103000,
+          "margin": "+9,948 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IC8349",
+          "name": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 70669,
+          "instant_buy": 129000,
+          "margin": "+10,891 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 57240,
+          "instant_buy": 80000,
+          "margin": "+9,376 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IC8349",
+          "name": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 70669,
+          "instant_buy": 129000,
+          "margin": "+10,891 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 57240,
+          "instant_buy": 80000,
+          "margin": "+9,376 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9271",
+          "name": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 53883,
+          "instant_buy": 79000,
+          "margin": "+8,997 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "KA9266",
+          "name": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 49407,
+          "instant_buy": 82000,
+          "margin": "+7,869 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JP0146",
+          "name": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 65074,
+          "instant_buy": 103000,
+          "margin": "+9,948 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    }
+  ]
+}

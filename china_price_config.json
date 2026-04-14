@@ -1,0 +1,50 @@
+{
+  "app_name": "识货",
+  "process_name": "ShihuoIPhone",
+  "window_size": {
+    "width": 1194,
+    "height": 862
+  },
+  "coordinates": {
+    "search_bar": {
+      "rel_x": -94,
+      "rel_y": 402,
+      "desc": "상단 검색바 (클릭하면 검색 모드 진입)"
+    },
+    "search_button": {
+      "rel_x": -109,
+      "rel_y": 626,
+      "desc": "搜索 버튼 (검색 실행)"
+    },
+    "first_result": {
+      "rel_x": -126,
+      "rel_y": 550,
+      "desc": "검색 결과 첫 번째 상품 (오른쪽 패널)"
+    },
+    "size_bar_start": {
+      "rel_x": -139,
+      "rel_y": 675,
+      "desc": "사이즈 바 첫 번째 사이즈"
+    },
+    "size_bar_scroll_right": {
+      "rel_x": -134,
+      "rel_y": 591,
+      "desc": "사이즈 바 오른쪽 끝 (스크롤 영역)"
+    },
+    "lowest_price": {
+      "rel_x": -95,
+      "rel_y": 577,
+      "desc": "全网最低 가격 텍스트"
+    },
+    "view_all_prices_btn": {
+      "rel_x": -127,
+      "rel_y": 778,
+      "desc": "하단 查看全网底价 빨간 버튼"
+    },
+    "seller_list_start": {
+      "rel_x": 710,
+      "rel_y": 327,
+      "desc": "판매처 리스트 첫 번째 항목"
+    }
+  }
+}

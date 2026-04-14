@@ -1,0 +1,1375 @@
+{
+  "counter": 58,
+  "queue": [
+    {
+      "id": 45,
+      "model": "IX7694",
+      "cny": 220.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "299955",
+        "nameKr": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+        "nameEn": "Adidas Always Original Denim Shoulder Bag Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 57240,
+        "margins": {
+          "margin_0": {
+            "sell_price": 64000,
+            "profit": 36
+          },
+          "margin_10": {
+            "sell_price": 71000,
+            "profit": 6574
+          },
+          "margin_15": {
+            "sell_price": 74000,
+            "profit": 9376
+          },
+          "margin_20": {
+            "sell_price": 77000,
+            "profit": 12178
+          }
+        },
+        "krwPrice": 49240,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "데님",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 80000,
+        "instantSellPrice": 55000,
+        "recentTradePrice": 79000,
+        "totalTrades": 147,
+        "sellBids": [
+          {
+            "price": 80000,
+            "size": "ONE SIZE",
+            "quantity": 4
+          },
+          {
+            "price": 89000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 90000,
+            "size": "ONE SIZE",
+            "quantity": 7
+          },
+          {
+            "price": 109000,
+            "size": "ONE SIZE",
+            "quantity": 3
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 55000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 30000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "데님",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 46,
+      "model": "IC8349",
+      "cny": 280.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "125755",
+        "nameKr": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+        "nameEn": "Adidas Always Original Shoulder Bag Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 70669,
+        "margins": {
+          "margin_0": {
+            "sell_price": 79000,
+            "profit": 617
+          },
+          "margin_10": {
+            "sell_price": 86000,
+            "profit": 7155
+          },
+          "margin_15": {
+            "sell_price": 90000,
+            "profit": 10891
+          },
+          "margin_20": {
+            "sell_price": 94000,
+            "profit": 14627
+          }
+        },
+        "krwPrice": 62669,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 129000,
+        "instantSellPrice": 97000,
+        "recentTradePrice": 130000,
+        "totalTrades": 864,
+        "sellBids": [
+          {
+            "price": 129000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 130000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 131000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 150000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 97000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 90000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 47,
+      "model": "KA9271",
+      "cny": 205.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "490300",
+        "nameKr": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
+        "nameEn": "Adidas Originals Cloud Shoulder Bag Crinkle Version Large Size Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 53883,
+        "margins": {
+          "margin_0": {
+            "sell_price": 61000,
+            "profit": 591
+          },
+          "margin_10": {
+            "sell_price": 67000,
+            "profit": 6195
+          },
+          "margin_15": {
+            "sell_price": 70000,
+            "profit": 8997
+          },
+          "margin_20": {
+            "sell_price": 72000,
+            "profit": 10865
+          }
+        },
+        "krwPrice": 45883,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 79000,
+        "instantSellPrice": 62000,
+        "recentTradePrice": 81000,
+        "totalTrades": 553,
+        "sellBids": [
+          {
+            "price": 79000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          },
+          {
+            "price": 80000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 84000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          },
+          {
+            "price": 85000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 86000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 62000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 61000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 59000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 50000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 45000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 48,
+      "model": "KA9266",
+      "cny": 185.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "490299",
+        "nameKr": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
+        "nameEn": "Adidas Crinkle Version Cloud Shoulder Bag Small Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 49407,
+        "margins": {
+          "margin_0": {
+            "sell_price": 56000,
+            "profit": 397
+          },
+          "margin_10": {
+            "sell_price": 61000,
+            "profit": 5067
+          },
+          "margin_15": {
+            "sell_price": 64000,
+            "profit": 7869
+          },
+          "margin_20": {
+            "sell_price": 67000,
+            "profit": 10671
+          }
+        },
+        "krwPrice": 41407,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 82000,
+        "instantSellPrice": 60000,
+        "recentTradePrice": 70000,
+        "totalTrades": 62,
+        "sellBids": [
+          {
+            "price": 82000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 89000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 97000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 98000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          },
+          {
+            "price": 109000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 60000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 30000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 49,
+      "model": "JP0145",
+      "cny": 235.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "401633",
+        "nameKr": "아디다스 오리지널스 클라우드 숄더백 라지 블랙",
+        "nameEn": "Adidas Originals Cloud Shoulder Bag Large Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 60597,
+        "margins": {
+          "margin_0": {
+            "sell_price": 68000,
+            "profit": 415
+          },
+          "margin_10": {
+            "sell_price": 75000,
+            "profit": 6953
+          },
+          "margin_15": {
+            "sell_price": 78000,
+            "profit": 9755
+          },
+          "margin_20": {
+            "sell_price": 81000,
+            "profit": 12557
+          }
+        },
+        "krwPrice": 52597,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 89000,
+        "instantSellPrice": null,
+        "recentTradePrice": 78000,
+        "totalTrades": 58,
+        "sellBids": [
+          {
+            "price": 89000,
+            "size": "ONE SIZE",
+            "quantity": 3
+          }
+        ],
+        "buyBids": [],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 50,
+      "model": "JP0146",
+      "cny": 255.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "307489",
+        "nameKr": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+        "nameEn": "Adidas Originals Cloud Shoulder Bag XLarge Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 65074,
+        "margins": {
+          "margin_0": {
+            "sell_price": 73000,
+            "profit": 608
+          },
+          "margin_10": {
+            "sell_price": 80000,
+            "profit": 7146
+          },
+          "margin_15": {
+            "sell_price": 83000,
+            "profit": 9948
+          },
+          "margin_20": {
+            "sell_price": 87000,
+            "profit": 13684
+          }
+        },
+        "krwPrice": 57074,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 103000,
+        "instantSellPrice": null,
+        "recentTradePrice": 105000,
+        "totalTrades": 78,
+        "sellBids": [
+          {
+            "price": 103000,
+            "size": "ONE SIZE",
+            "quantity": 5
+          },
+          {
+            "price": 110000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          }
+        ],
+        "buyBids": [],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 51,
+      "model": "IC8349",
+      "cny": 280.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "125755",
+        "nameKr": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+        "nameEn": "Adidas Always Original Shoulder Bag Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 70669,
+        "margins": {
+          "margin_0": {
+            "sell_price": 79000,
+            "profit": 617
+          },
+          "margin_10": {
+            "sell_price": 86000,
+            "profit": 7155
+          },
+          "margin_15": {
+            "sell_price": 90000,
+            "profit": 10891
+          },
+          "margin_20": {
+            "sell_price": 94000,
+            "profit": 14627
+          }
+        },
+        "krwPrice": 62669,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 129000,
+        "instantSellPrice": 97000,
+        "recentTradePrice": 130000,
+        "totalTrades": 864,
+        "sellBids": [
+          {
+            "price": 129000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 130000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 131000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 150000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 97000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 90000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 52,
+      "model": "IX7694",
+      "cny": 220.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "299955",
+        "nameKr": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+        "nameEn": "Adidas Always Original Denim Shoulder Bag Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 57240,
+        "margins": {
+          "margin_0": {
+            "sell_price": 64000,
+            "profit": 36
+          },
+          "margin_10": {
+            "sell_price": 71000,
+            "profit": 6574
+          },
+          "margin_15": {
+            "sell_price": 74000,
+            "profit": 9376
+          },
+          "margin_20": {
+            "sell_price": 77000,
+            "profit": 12178
+          }
+        },
+        "krwPrice": 49240,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "데님",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 80000,
+        "instantSellPrice": 55000,
+        "recentTradePrice": 79000,
+        "totalTrades": 147,
+        "sellBids": [
+          {
+            "price": 80000,
+            "size": "ONE SIZE",
+            "quantity": 4
+          },
+          {
+            "price": 89000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 90000,
+            "size": "ONE SIZE",
+            "quantity": 7
+          },
+          {
+            "price": 109000,
+            "size": "ONE SIZE",
+            "quantity": 3
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 55000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 30000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "데님",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 53,
+      "model": "IC8349",
+      "cny": 280.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "125755",
+        "nameKr": "아디다스 올웨이즈 오리지널 숄더백 블랙",
+        "nameEn": "Adidas Always Original Shoulder Bag Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 70669,
+        "margins": {
+          "margin_0": {
+            "sell_price": 79000,
+            "profit": 617
+          },
+          "margin_10": {
+            "sell_price": 86000,
+            "profit": 7155
+          },
+          "margin_15": {
+            "sell_price": 90000,
+            "profit": 10891
+          },
+          "margin_20": {
+            "sell_price": 94000,
+            "profit": 14627
+          }
+        },
+        "krwPrice": 62669,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 129000,
+        "instantSellPrice": 97000,
+        "recentTradePrice": 130000,
+        "totalTrades": 864,
+        "sellBids": [
+          {
+            "price": 129000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 130000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 131000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 150000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 97000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 90000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 54,
+      "model": "IX7694",
+      "cny": 220.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "299955",
+        "nameKr": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+        "nameEn": "Adidas Always Original Denim Shoulder Bag Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 57240,
+        "margins": {
+          "margin_0": {
+            "sell_price": 64000,
+            "profit": 36
+          },
+          "margin_10": {
+            "sell_price": 71000,
+            "profit": 6574
+          },
+          "margin_15": {
+            "sell_price": 74000,
+            "profit": 9376
+          },
+          "margin_20": {
+            "sell_price": 77000,
+            "profit": 12178
+          }
+        },
+        "krwPrice": 49240,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "데님",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 80000,
+        "instantSellPrice": 55000,
+        "recentTradePrice": 79000,
+        "totalTrades": 147,
+        "sellBids": [
+          {
+            "price": 80000,
+            "size": "ONE SIZE",
+            "quantity": 4
+          },
+          {
+            "price": 89000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 90000,
+            "size": "ONE SIZE",
+            "quantity": 7
+          },
+          {
+            "price": 109000,
+            "size": "ONE SIZE",
+            "quantity": 3
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 55000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 30000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "데님",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 55,
+      "model": "KA9271",
+      "cny": 205.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "490300",
+        "nameKr": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
+        "nameEn": "Adidas Originals Cloud Shoulder Bag Crinkle Version Large Size Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 53883,
+        "margins": {
+          "margin_0": {
+            "sell_price": 61000,
+            "profit": 591
+          },
+          "margin_10": {
+            "sell_price": 67000,
+            "profit": 6195
+          },
+          "margin_15": {
+            "sell_price": 70000,
+            "profit": 8997
+          },
+          "margin_20": {
+            "sell_price": 72000,
+            "profit": 10865
+          }
+        },
+        "krwPrice": 45883,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 79000,
+        "instantSellPrice": 62000,
+        "recentTradePrice": 81000,
+        "totalTrades": 553,
+        "sellBids": [
+          {
+            "price": 79000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          },
+          {
+            "price": 80000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 84000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          },
+          {
+            "price": 85000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 86000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 62000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 61000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 59000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 50000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 45000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 56,
+      "model": "KA9266",
+      "cny": 185.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "490299",
+        "nameKr": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
+        "nameEn": "Adidas Crinkle Version Cloud Shoulder Bag Small Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 49407,
+        "margins": {
+          "margin_0": {
+            "sell_price": 56000,
+            "profit": 397
+          },
+          "margin_10": {
+            "sell_price": 61000,
+            "profit": 5067
+          },
+          "margin_15": {
+            "sell_price": 64000,
+            "profit": 7869
+          },
+          "margin_20": {
+            "sell_price": 67000,
+            "profit": 10671
+          }
+        },
+        "krwPrice": 41407,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 82000,
+        "instantSellPrice": 60000,
+        "recentTradePrice": 70000,
+        "totalTrades": 62,
+        "sellBids": [
+          {
+            "price": 82000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 89000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 97000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 98000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          },
+          {
+            "price": 109000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "buyBids": [
+          {
+            "price": 60000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          },
+          {
+            "price": 30000,
+            "size": "ONE SIZE",
+            "quantity": 1
+          }
+        ],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 57,
+      "model": "JP0146",
+      "cny": 255.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "productId": "307489",
+        "nameKr": "아디다스 오리지널스 클라우드 숄더백 엑스라지 블랙",
+        "nameEn": "Adidas Originals Cloud Shoulder Bag XLarge Black",
+        "brand": "Adidas",
+        "kreamSizes": [],
+        "totalCost": 65074,
+        "margins": {
+          "margin_0": {
+            "sell_price": 73000,
+            "profit": 608
+          },
+          "margin_10": {
+            "sell_price": 80000,
+            "profit": 7146
+          },
+          "margin_15": {
+            "sell_price": 83000,
+            "profit": 9948
+          },
+          "margin_20": {
+            "sell_price": 87000,
+            "profit": 13684
+          }
+        },
+        "krwPrice": 57074,
+        "customs": 0,
+        "importVat": 0,
+        "sizeMargins": [],
+        "gosi": {
+          "manufacturer": "Adidas",
+          "type": "숄더백",
+          "material": "상품별 상이",
+          "color": "블랙",
+          "size": "상품별 상이",
+          "hs_code": "4202.92",
+          "tariff": 8
+        },
+        "instantBuyPrice": 103000,
+        "instantSellPrice": null,
+        "recentTradePrice": 105000,
+        "totalTrades": 78,
+        "sellBids": [
+          {
+            "price": 103000,
+            "size": "ONE SIZE",
+            "quantity": 5
+          },
+          {
+            "price": 110000,
+            "size": "ONE SIZE",
+            "quantity": 2
+          }
+        ],
+        "buyBids": [],
+        "sizeDeliveryPrices": []
+      },
+      "gosi": {
+        "manufacturer": "Adidas",
+        "type": "숄더백",
+        "material": "상품별 상이",
+        "color": "블랙",
+        "size": "상품별 상이",
+        "hs_code": "4202.92",
+        "tariff": 8
+      }
+    },
+    {
+      "id": 58,
+      "model": "JP0145",
+      "cny": 235.0,
+      "category": "가방",
+      "categoryAuto": false,
+      "sizes": [],
+      "sizeSystem": "",
+      "size": "ONE SIZE",
+      "shipping": 8000,
+      "quantity": 1,
+      "bid_days": 30,
+      "status": "완료",
+      "result": {
+        "brand": "Adidas",
+        "buyBids": [],
+        "customs": 0,
+        "gosi": {
+          "color": "블랙",
+          "hs_code": "4202.92",
+          "manufacturer": "Adidas",
+          "material": "상품별 상이",
+          "size": "상품별 상이",
+          "tariff": 8,
+          "type": "숄더백"
+        },
+        "importVat": 0,
+        "instantBuyPrice": 89000,
+        "instantSellPrice": null,
+        "kreamSizes": [],
+        "krwPrice": 52597,
+        "margins": {
+          "margin_0": {
+            "profit": 415,
+            "sell_price": 68000
+          },
+          "margin_10": {
+            "profit": 6953,
+            "sell_price": 75000
+          },
+          "margin_15": {
+            "profit": 9755,
+            "sell_price": 78000
+          },
+          "margin_20": {
+            "profit": 12557,
+            "sell_price": 81000
+          }
+        },
+        "nameEn": "Adidas Originals Cloud Shoulder Bag Large Black",
+        "nameKr": "아디다스 오리지널스 클라우드 숄더백 라지 블랙",
+        "productId": "401633",
+        "recentTradePrice": 78000,
+        "sellBids": [
+          {
+            "price": 89000,
+            "quantity": 3,
+            "size": "ONE SIZE"
+          }
+        ],
+        "sizeDeliveryPrices": [],
+        "sizeMargins": [],
+        "totalCost": 60597,
+        "totalTrades": 58
+      },
+      "gosi": {
+        "color": "블랙",
+        "hs_code": "4202.92",
+        "manufacturer": "Adidas",
+        "material": "상품별 상이",
+        "size": "상품별 상이",
+        "tariff": 8,
+        "type": "숄더백"
+      }
+    }
+  ]
+}

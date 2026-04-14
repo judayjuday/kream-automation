@@ -1,4 +1,6 @@
 auth_state.json
-kream_data_template.xlsx
-__pycache__/
+auth_state_kream.json
+__pycache__
 *.pyc
+debug_screenshots/
+server.log

@@ -1,0 +1,4074 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KREAM 판매자 대시보드</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/pretendard/1.3.9/static/pretendard.min.css" rel="stylesheet">
+<style>
+:root {
+  --bg: #fafafa;
+  --card: #ffffff;
+  --border: #e5e5e5;
+  --text: #111111;
+  --text2: #666666;
+  --text3: #999999;
+  --accent: #31b46e;
+  --accent-light: #e8f7ef;
+  --danger: #f15746;
+  --danger-light: #fef0ee;
+  --warning: #ff7500;
+  --warning-light: #fff5eb;
+  --blue: #297dcb;
+  --blue-light: #edf4fc;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Pretendard', -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+
+.app { display: flex; height: 100vh; }
+
+/* 사이드바 */
+.sidebar { width: 220px; background: #222; color: #fff; padding: 24px 0; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.sidebar-rate { margin-top: auto; padding: 10px 20px; border-top: 1px solid #333; font-size: 11px; color: #999; line-height: 1.5; }
+.sidebar-logo { font-size: 20px; font-weight: 800; padding: 0 20px 24px; letter-spacing: -0.5px; }
+.sidebar-logo span { color: var(--accent); }
+.nav-group { margin-bottom: 8px; }
+.nav-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; padding: 12px 20px 6px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; transition: all 0.15s; font-size: 13px; color: #ccc; }
+.nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.nav-item.active { background: rgba(49,180,110,0.15); color: var(--accent); border-right: 3px solid var(--accent); }
+.nav-icon { width: 18px; text-align: center; font-size: 15px; }
+
+/* 메인 */
+.main { flex: 1; overflow-y: auto; padding: 0; }
+.header { padding: 20px 32px; border-bottom: 1px solid var(--border); background: var(--card); display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; font-weight: 700; }
+.header-info { font-size: 12px; color: var(--text3); }
+
+.content { padding: 24px 32px; }
+
+/* 탭 */
+.tab-view { display: none; }
+.tab-view.active { display: block; }
+
+/* 카드 */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.card-title .icon { font-size: 18px; }
+
+/* 입력 폼 */
+.form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.form-label { font-size: 13px; color: var(--text2); min-width: 120px; font-weight: 500; }
+.form-input { height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 14px; font-family: inherit; outline: none; transition: border 0.15s; }
+.form-input:focus { border-color: var(--accent); }
+.form-input-sm { width: 120px; }
+.form-input-md { width: 200px; }
+.form-input-lg { width: 320px; }
+.form-select { height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 14px; font-family: inherit; background: #fff; cursor: pointer; }
+
+/* 버튼 */
+.btn { height: 38px; padding: 0 20px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #28a35e; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #d94a3b; }
+.btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { background: #f5f5f5; }
+.btn-sm { height: 32px; padding: 0 14px; font-size: 12px; }
+.btn-lg { height: 44px; padding: 0 28px; font-size: 15px; }
+
+/* 메트릭 카드 */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.metric { background: var(--bg); border-radius: 10px; padding: 16px; }
+.metric-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+.metric-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+.metric-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.metric-green .metric-value { color: var(--accent); }
+.metric-red .metric-value { color: var(--danger); }
+.metric-blue .metric-value { color: var(--blue); }
+
+/* 테이블 */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: center; padding: 10px 8px; background: var(--bg); color: var(--text2); font-weight: 600; font-size: 12px; border-bottom: 2px solid #222; white-space: nowrap; }
+td { text-align: center; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: #f9f9f9; }
+tr.selected td { background: var(--accent-light); }
+
+/* 배지 */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-good { background: var(--accent-light); color: var(--accent); }
+.badge-ok { background: var(--warning-light); color: var(--warning); }
+.badge-bad { background: var(--danger-light); color: var(--danger); }
+
+/* 스텝 */
+.steps { display: flex; gap: 0; margin-bottom: 24px; }
+.step { flex: 1; padding: 14px 16px; background: var(--bg); border: 1px solid var(--border); text-align: center; font-size: 13px; font-weight: 600; color: var(--text3); position: relative; cursor: pointer; transition: all 0.15s; }
+.step:first-child { border-radius: 10px 0 0 10px; }
+.step:last-child { border-radius: 0 10px 10px 0; }
+.step.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.step.done { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+.step-num { font-size: 16px; font-weight: 800; display: block; }
+
+/* 로그 */
+.log-area { background: #1a1a1a; color: #ddd; border-radius: 10px; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; max-height: 300px; overflow-y: auto; line-height: 1.8; user-select: text; -webkit-user-select: text; cursor: text; }
+.log-success { color: var(--accent); }
+.log-error { color: var(--danger); }
+.log-info { color: var(--blue); }
+.log-warn { color: var(--warning); }
+
+/* 가격 선택 행 */
+.price-row { cursor: pointer; transition: all 0.1s; }
+.price-row:hover { background: var(--accent-light) !important; }
+.price-row.selected { background: var(--accent-light) !important; }
+.price-row.selected td:first-child { font-weight: 700; color: var(--accent); }
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .content { padding: 16px; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+}
+
+/* 기타 */
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+.text-green { color: var(--accent); }
+.text-red { color: var(--danger); }
+.text-blue { color: var(--blue); }
+.text-muted { color: var(--text3); }
+.text-bold { font-weight: 700; }
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+.flex { display: flex; align-items: center; gap: 8px; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 사이드바 -->
+  <div class="sidebar">
+    <div class="sidebar-logo">KREAM <span>셀러</span></div>
+    <div class="nav-group">
+      <div class="nav-label">판매 관리</div>
+      <div class="nav-item active" onclick="showTab('register')">
+        <span class="nav-icon">📦</span> 상품 등록/입찰
+      </div>
+      <div class="nav-item" onclick="showTab('margin')">
+        <span class="nav-icon">💰</span> 마진 계산기
+      </div>
+      <div class="nav-item" onclick="showTab('bulk')">
+        <span class="nav-icon">📋</span> 대량 등록
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">데이터</div>
+      <div class="nav-item" onclick="showTab('discover')">
+        <span class="nav-icon">🔎</span> 상품 발굴
+      </div>
+      <div class="nav-item" onclick="showTab('adjust')">
+        <span class="nav-icon">🎯</span> 가격 자동 조정
+      </div>
+      <div class="nav-item" onclick="showTab('prices')">
+        <span class="nav-icon">📊</span> 가격 수집
+      </div>
+      <div class="nav-item" onclick="showTab('mybids')">
+        <span class="nav-icon">📑</span> 입찰 관리
+      </div>
+      <div class="nav-item" onclick="showTab('history')">
+        <span class="nav-icon">📝</span> 실행 이력
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">설정</div>
+      <div class="nav-item" onclick="showTab('settings')">
+        <span class="nav-icon">⚙️</span> 환율/수수료
+      </div>
+    </div>
+    <div class="sidebar-rate">
+      <div id="sidebar-rate-text" style="font-weight:600; color:#bbb">CNY — 원</div>
+      <div id="sidebar-rate-time" style="font-size:10px; color:#666">환율 로딩 중...</div>
+    </div>
+  </div>
+
+  <!-- 메인 -->
+  <div class="main">
+    <div class="header">
+      <h1 id="page-title">상품 등록 / 입찰</h1>
+      <div class="header-info"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e2889786839b899087838fa2858f838b8ecc818d8f">[email&#160;protected]</a></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══ 탭1: 상품 등록/입찰 (큐 방식) ═══ -->
+      <div id="tab-register" class="tab-view active">
+
+        <!-- 내 입찰 현황 동기화 -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
+          <button class="btn btn-outline" id="sync-bids-btn" onclick="syncMyBids()">내 입찰 현황 동기화 🔄</button>
+          <span id="sync-bids-status" style="font-size:12px; color:var(--text3)">동기화 안 됨</span>
+        </div>
+
+        <!-- 상품 추가 폼 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📥</span> 상품 추가</div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end">
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">모델번호/품번 *</div>
+              <input type="text" class="form-input" id="q-model" placeholder="IX7694" style="width:160px" onkeydown="if(event.key==='Enter')queueAdd()">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">카테고리</div>
+              <select class="form-select" id="q-category" style="width:130px">
+                <option value="">자동 판별</option>
+                <option value="가방">가방 (8%)</option>
+                <option value="신발">신발 (13%)</option>
+                <option value="의류">의류 (13%)</option>
+              </select>
+            </div>
+            <div id="q-cny-wrap">
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">중국가 (CNY) *</div>
+              <input type="number" class="form-input" id="q-cny" placeholder="220" style="width:100px" onkeydown="if(event.key==='Enter')queueAdd()">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">배송비</div>
+              <input type="number" class="form-input" id="q-ship" value="8000" style="width:90px">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">수량</div>
+              <input type="number" class="form-input" id="q-qty" value="1" min="1" style="width:60px">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">만료일</div>
+              <select class="form-select" id="q-bid-days" style="width:80px">
+                <option value="30" selected>30일</option>
+                <option value="60">60일</option>
+                <option value="90">90일</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="q-add-btn" onclick="queueAdd()" style="height:38px">+ 큐에 추가</button>
+          </div>
+
+          <!-- 사이즈별 가격 입력 (항상 표시) -->
+          <div id="q-shoe-area" style="margin-top:16px; padding:16px; background:var(--bg); border-radius:8px; border:1px solid var(--border)">
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px">
+              <strong style="font-size:13px">사이즈별 가격 (mm)</strong>
+              <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer">
+                <input type="checkbox" id="q-same-price" onchange="qToggleSamePrice()"> 전사이즈 동일가
+              </label>
+            </div>
+            <!-- 동일가 모드 -->
+            <div id="q-same-price-area" style="display:none; margin-bottom:12px">
+              <div style="display:flex; gap:8px; align-items:center; font-size:13px">
+                <span>중국가(CNY):</span>
+                <input type="number" class="form-input" id="q-same-cny" placeholder="314" style="width:90px; height:30px; font-size:12px">
+                <span>사이즈 범위:</span>
+                <input type="text" class="form-input" id="q-same-from" placeholder="250" style="width:60px; height:30px; font-size:12px">
+                <span>~</span>
+                <input type="text" class="form-input" id="q-same-to" placeholder="280" style="width:60px; height:30px; font-size:12px">
+              </div>
+            </div>
+            <!-- 개별 사이즈 테이블 -->
+            <div id="q-sizes-table-area">
+              <table style="width:auto; font-size:12px">
+                <thead><tr><th style="width:80px">사이즈(mm)</th><th style="width:100px">중국가(CNY)</th><th style="width:40px"></th></tr></thead>
+                <tbody id="q-sizes-tbody"></tbody>
+              </table>
+              <button class="btn btn-outline btn-sm" onclick="qAddSizeRow()" style="margin-top:4px; font-size:11px">+ 사이즈 행 추가</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 큐 테이블 -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">📋</span> 상품 큐 (<span id="q-count">0</span>건)</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button class="btn btn-outline btn-sm" onclick="queueDownloadExcel()">큐 다운로드</button>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('q-upload-file').click()">큐 업로드</button>
+              <button class="btn btn-outline btn-sm" onclick="queueDownloadTemplate()" style="color:var(--text2)">양식 다운로드</button>
+              <input type="file" id="q-upload-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="queueUploadExcel(this)">
+              <button class="btn btn-outline btn-sm" onclick="queueClear()">전체 삭제</button>
+              <button class="btn btn-primary btn-sm" id="q-exec-btn" onclick="queueExecute()">일괄 실행 (KREAM 검색 + 마진 계산)</button>
+              <label style="font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text2)">
+                <input type="checkbox" id="q-auto-exec-toggle" onchange="toggleAutoExec()"> 자동 실행
+              </label>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px">#</th>
+                  <th>모델번호</th>
+                  <th>카테고리</th>
+                  <th>사이즈</th>
+                  <th>중국가(CNY)</th>
+                  <th>배송비</th>
+                  <th>수량</th>
+                  <th>만료일</th>
+                  <th>상태</th>
+                  <th style="width:110px">액션</th>
+                </tr>
+              </thead>
+              <tbody id="q-tbody">
+                <tr><td colspan="10" class="text-muted">큐가 비어있습니다. 위에서 상품을 추가하세요.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="log-area" id="q-log" style="display:none; margin-top:12px; max-height:200px"></div>
+        </div>
+
+        <!-- 결과 테이블 -->
+        <div class="card" id="q-result-card" style="display:none">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">📊</span> 일괄 실행 결과</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <label style="font-size:12px; display:flex; align-items:center; gap:4px">
+                기본 마진율:
+                <select class="form-select" id="q-default-margin" style="height:30px; font-size:12px; width:80px" onchange="queueBuildResults()">
+                  <option value="10">10%</option>
+                  <option value="15" selected>15%</option>
+                  <option value="20">20%</option>
+                </select>
+              </label>
+              <button class="btn btn-outline btn-sm" onclick="queueExportExcel()">CSV 다운로드</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="q-res-all" onchange="queueToggleAll(this)"></th>
+                  <th>모델번호</th>
+                  <th>상품명</th>
+                  <th>카테고리</th>
+                  <th>원가</th>
+                  <th>즉시구매가</th>
+                  <th style="background:var(--blue-light); color:var(--blue)">내 입찰가</th>
+                  <th style="background:var(--accent-light)">입찰 예정가</th>
+                  <th>수량</th>
+                  <th>예상 마진</th>
+                  <th>고시정보</th>
+                  <th style="width:100px">액션</th>
+                </tr>
+              </thead>
+              <tbody id="q-result-tbody"></tbody>
+            </table>
+          </div>
+          <!-- 상세 분석 패널 (토글) -->
+          <div id="q-detail-panel" style="display:none"></div>
+          <div class="mt-16" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <button class="btn btn-outline btn-lg" onclick="queueDownloadBackupExcel()">엑셀 백업 다운로드</button>
+            <button class="btn btn-outline btn-lg" onclick="document.getElementById('q-backup-upload-file').click()">엑셀 백업 업로드</button>
+            <input type="file" id="q-backup-upload-file" accept=".csv" style="display:none" onchange="queueUploadBackupExcel(this)">
+            <button class="btn btn-outline btn-lg" onclick="queueConfirmExcel()">엑셀 생성 (수동 업로드)</button>
+            <button class="btn btn-primary btn-lg" id="q-auto-bid-btn" onclick="queueConfirmAutoBid()">자동 입찰 (Playwright)</button>
+            <span id="q-result-summary" class="text-muted" style="font-size:12px"></span>
+          </div>
+          <!-- 자동입찰 제어 버튼 (진행 중에만 표시) -->
+          <div id="q-auto-controls" style="display:none; margin-top:8px; display:none; gap:8px; align-items:center">
+            <button class="btn btn-outline" id="q-pause-btn" onclick="autoBidPause()" style="border-color:var(--warning);color:var(--warning)">일시정지</button>
+            <button class="btn btn-outline" id="q-resume-btn" onclick="autoBidResume()" style="display:none; border-color:var(--accent);color:var(--accent)">이어서 진행</button>
+            <button class="btn btn-outline" id="q-stop-btn" onclick="autoBidStop()" style="display:none; border-color:var(--danger);color:var(--danger)">중단</button>
+            <span id="q-auto-status" class="text-muted" style="font-size:12px"></span>
+          </div>
+          <div class="log-area" id="q-auto-log" style="display:none; margin-top:12px; max-height:250px"></div>
+        </div>
+      </div>
+
+      <!-- 상세 편집 모달 -->
+      <div id="q-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; justify-content:center; align-items:center">
+        <div style="background:#fff; border-radius:12px; width:560px; max-height:85vh; overflow-y:auto; padding:24px; position:relative">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+            <h3 id="q-modal-title" style="font-size:16px; font-weight:700"></h3>
+            <button onclick="qModalClose()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text3)">&times;</button>
+          </div>
+          <div id="q-modal-body"></div>
+          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px; border-top:1px solid var(--border); padding-top:16px">
+            <button class="btn btn-outline" onclick="qModalClose()">취소</button>
+            <button class="btn btn-primary" onclick="qModalSave()">저장</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭2: 마진 계산기 ═══ -->
+      <div id="tab-margin" class="tab-view">
+        <!-- 상품 검색 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🔍</span> 상품 조회</div>
+          <div class="form-row">
+            <span class="form-label">모델번호(품번)</span>
+            <input type="text" class="form-input form-input-lg" id="quick-model" placeholder="1183C431-020, IX7693 등" onkeydown="if(event.key==='Enter')quickSearchByModel()">
+            <button class="btn btn-primary" onclick="quickSearchByModel()" style="margin-left:8px">KREAM 검색</button>
+          </div>
+          <div class="form-row">
+            <span class="form-label">상품번호</span>
+            <input type="text" class="form-input form-input-sm" id="quick-pid" placeholder="299954 (직접 입력 가능)">
+            <button class="btn" onclick="quickSearch()" style="margin-left:8px">가격 조회</button>
+            <span id="quick-search-status" style="color:var(--text2); font-size:12px; margin-left:8px"></span>
+          </div>
+          <div id="quick-product-info" style="display:none; background:var(--accent-light); border-radius:8px; padding:12px; margin-bottom:8px; font-size:13px"></div>
+        </div>
+
+        <!-- 마진 계산 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">💰</span> 마진 계산</div>
+          <div style="display:flex; gap:24px; flex-wrap:wrap">
+            <div style="flex:1; min-width:280px">
+              <div class="form-row">
+                <span class="form-label">중국 구매가 (CNY)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-cny" value="200" oninput="quickCalc()">
+                <button class="btn" onclick="quickChinaPrice()" style="margin-left:4px; font-size:11px; padding:4px 10px" title="识货/得物 앱에서 가격 조회">🇨🇳 조회</button>
+                <span style="font-size:11px; color:var(--text3); margin-left:4px" id="quick-cny-krw"></span>
+              </div>
+              <div class="form-row">
+                <span class="form-label">카테고리</span>
+                <select class="form-select" id="quick-cat" onchange="quickCalc()">
+                  <option value="0.08">가방 (8%)</option>
+                  <option value="0.13">신발/의류 (13%)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <span class="form-label">해외 배송비 (원)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-ship" value="8000" oninput="quickCalc()">
+              </div>
+              <div class="form-row">
+                <span class="form-label">KREAM 판매가 (원)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-sell" value="76000" oninput="quickCalc()">
+              </div>
+            </div>
+            <!-- 최소 판매가 역계산 -->
+            <div style="flex:1; min-width:280px; background:var(--bg); border-radius:8px; padding:16px">
+              <div style="font-weight:600; margin-bottom:8px">최소 판매가 역계산</div>
+              <div id="quick-reverse" style="font-size:13px; line-height:2">
+                <div>CNY 가격을 입력하면 자동 계산됩니다.</div>
+              </div>
+            </div>
+          </div>
+          <div class="metrics mt-16" id="quick-metrics"></div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭3: 대량 입찰 ═══ -->
+      <div id="tab-bulk" class="tab-view">
+        <div class="card">
+          <div class="card-title"><span class="icon">📋</span> 대량 입찰 엑셀 생성</div>
+          <p class="text-muted mb-16">상품 리스트를 입력하면 KREAM 대량입찰 양식 엑셀을 자동 생성합니다.</p>
+          <div style="background:var(--bg); border-radius:8px; padding:16px; margin-bottom:16px">
+            <div style="font-weight:600; margin-bottom:8px">상품 추가</div>
+            <div class="form-row">
+              <span class="form-label">상품번호</span>
+              <input type="text" class="form-input form-input-sm" id="bulk-pid" placeholder="299954">
+              <span class="form-label" style="margin-left:8px">모델번호</span>
+              <input type="text" class="form-input form-input-sm" id="bulk-model" placeholder="IX7693">
+              <span class="form-label" style="margin-left:8px">영문명</span>
+              <input type="text" class="form-input form-input-lg" id="bulk-name" placeholder="Product Name">
+              <span class="form-label" style="margin-left:8px">옵션</span>
+              <input type="text" class="form-input form-input-sm" id="bulk-size" value="ONE SIZE" style="width:80px">
+              <span class="form-label" style="margin-left:8px">가격</span>
+              <input type="number" class="form-input form-input-sm" id="bulk-price" placeholder="79000" style="width:90px">
+              <span class="form-label" style="margin-left:8px">수량</span>
+              <input type="number" class="form-input form-input-sm" id="bulk-qty" value="1" style="width:50px">
+              <button class="btn btn-primary" onclick="bulkAdd()" style="margin-left:8px">추가</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>상품번호</th><th>모델번호</th><th>영문명</th><th>옵션</th><th>가격</th><th>수량</th><th>삭제</th></tr></thead>
+            <tbody id="bulk-tbody"><tr><td colspan="7" class="text-muted">상품을 추가하세요</td></tr></tbody>
+          </table>
+          <div style="margin-top:16px; display:flex; gap:8px">
+            <button class="btn btn-accent" onclick="bulkGenerate()">엑셀 생성</button>
+            <button class="btn" onclick="bulkDownload()">엑셀 다운로드</button>
+            <button class="btn btn-primary" onclick="bulkUpload()">KREAM에 업로드</button>
+            <span id="bulk-status" style="color:var(--text2); font-size:13px; line-height:36px; margin-left:8px"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭4: 가격 수집 ═══ -->
+      <!-- ═══ 탭: 상품 발굴 ═══ -->
+      <div id="tab-discover" class="tab-view">
+        <!-- KREAM 키워드 검색 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🔍</span> KREAM 키워드 검색</div>
+          <div class="form-row">
+            <input type="text" class="form-input form-input-lg" id="kw-input" placeholder="키워드 입력 후 추가 (예: 토쿠텐)" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();kwAddTag()}">
+            <button class="btn" onclick="kwAddTag()" style="margin-left:8px">추가</button>
+            <button class="btn btn-primary" id="kw-search-btn" onclick="kwSearch()" style="margin-left:4px">검색</button>
+            <button class="btn" onclick="kwBulkPrice()" style="margin-left:4px">선택 일괄 가격 수집</button>
+            <button class="btn" onclick="kwDownloadExcel()" style="margin-left:4px">엑셀 다운로드</button>
+          </div>
+          <div id="kw-tags" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; min-height:8px"></div>
+          <div id="kw-status" style="font-size:12px; color:var(--text3); margin-top:4px"></div>
+          <div id="kw-result" hidden style="margin-top:12px; overflow-x:auto; max-height:500px; overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:35px"><input type="checkbox" id="kw-check-all" onchange="document.querySelectorAll('.kw-cb').forEach(c=>c.checked=this.checked)"></th>
+                  <th>키워드</th>
+                  <th>브랜드</th>
+                  <th>상품명</th>
+                  <th>모델번호</th>
+                  <th>표시가</th>
+                  <th>거래수</th>
+                  <th>상품ID</th>
+                  <th>액션</th>
+                </tr>
+              </thead>
+              <tbody id="kw-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 엑셀 데이터 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📊</span> KREAM 데이터 (엑셀)</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <label class="btn" style="cursor:pointer; font-size:12px; padding:6px 14px">
+                엑셀 업로드 <input type="file" accept=".xlsx" onchange="discUpload(this)" hidden>
+              </label>
+              <button class="btn btn-primary" onclick="discLoad()" style="font-size:12px; padding:6px 14px">데이터 불러오기</button>
+            </div>
+          </div>
+          <!-- 서브탭 -->
+          <div style="display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:16px">
+            <button class="btn" id="disc-tab-overseas" onclick="discShowTab('overseas')" style="border:none; border-bottom:2px solid var(--accent); border-radius:0; font-weight:600; padding:10px 20px">해외직구 TOP 100</button>
+            <button class="btn" id="disc-tab-surge" onclick="discShowTab('surge')" style="border:none; border-radius:0; padding:10px 20px; color:var(--text2)">검색량 급등</button>
+            <button class="btn" id="disc-tab-brand" onclick="discShowTab('brand')" style="border:none; border-radius:0; padding:10px 20px; color:var(--text2)">BRAND TOP 100</button>
+          </div>
+
+          <!-- 필터 -->
+          <div class="form-row" style="margin-bottom:12px">
+            <span class="form-label">카테고리</span>
+            <select class="form-select" id="disc-cat-filter" onchange="discRender()" style="width:160px">
+              <option value="">전체</option>
+              <option value="sneakers">스니커즈</option>
+              <option value="bag">가방</option>
+              <option value="apparel">의류</option>
+            </select>
+            <span class="form-label" style="margin-left:12px">검색</span>
+            <input type="text" class="form-input form-input-lg" id="disc-search" oninput="discRender()" placeholder="브랜드, 상품명, 모델번호 검색...">
+          </div>
+
+          <!-- 테이블 -->
+          <div style="overflow-x:auto; max-height:600px; overflow-y:auto">
+            <table>
+              <thead id="disc-thead"></thead>
+              <tbody id="disc-tbody">
+                <tr><td colspan="8" class="text-muted">데이터를 불러오세요</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="disc-status" style="margin-top:8px; font-size:12px; color:var(--text3)"></div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭: 가격 자동 조정 ═══ -->
+      <div id="tab-adjust" class="tab-view">
+        <!-- 스캔 버튼 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🎯</span> 가격 자동 조정</div>
+          <p class="text-muted" style="margin-bottom:12px">판매자센터에서 내 입찰 목록을 수집하고, 시장 현황을 분석하여 최적 가격을 제안합니다.</p>
+          <div style="display:flex; gap:12px; align-items:center">
+            <button class="btn btn-primary" id="adj-scan-btn" onclick="adjScan()" style="font-size:14px; padding:10px 24px">
+              내 입찰 스캔 + 시장 분석
+            </button>
+            <span id="adj-scan-status" style="color:var(--text2); font-size:13px"></span>
+          </div>
+        </div>
+
+        <!-- 제안 테이블 -->
+        <div class="card" style="margin-top:16px" id="adj-result-card" hidden>
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 조정 제안 (<span id="adj-count">0</span>건)</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn" onclick="adjSelectAll()" style="font-size:12px; padding:4px 12px">전체 선택</button>
+              <button class="btn" onclick="adjDeselectAll()" style="font-size:12px; padding:4px 12px">전체 해제</button>
+              <button class="btn btn-accent" onclick="adjExecute()" style="font-size:13px; padding:8px 20px">선택한 상품 일괄 조정</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="adj-check-all" onchange="adjToggleAll(this.checked)"></th>
+                  <th>상품명</th>
+                  <th>사이즈</th>
+                  <th>현재 입찰가</th>
+                  <th>현재 순번</th>
+                  <th>시장 최저가</th>
+                  <th>추천가</th>
+                  <th>추천 순번</th>
+                  <th>제안</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody id="adj-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 조정 로그 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📋</span> 실행 로그</div>
+          <div id="adj-log" style="background:#1a1a1a; color:#eee; padding:12px; border-radius:8px; max-height:200px; overflow-y:auto; font-family:monospace; font-size:12px;">
+            대기 중...
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-prices" class="tab-view">
+        <div class="card">
+          <div class="card-title"><span class="icon">📊</span> KREAM 가격 수집</div>
+          <p class="text-muted mb-16">상품번호를 입력하면 KREAM에서 가격 정보를 자동 수집합니다.</p>
+          <div class="form-row">
+            <span class="form-label">상품번호</span>
+            <input type="text" class="form-input form-input-lg" id="collect-ids" placeholder="299954, 12831 (쉼표로 구분)">
+            <button class="btn btn-primary" onclick="alert('python3 kream_collector.py --mode collect --products ' + document.getElementById('collect-ids').value.replace(/,/g,' ') + '\n\n터미널에서 실행하세요')">수집 시작</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭: 입찰 관리 ═══ -->
+      <div id="tab-mybids" class="tab-view">
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📑</span> 내 입찰 목록</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-primary" id="mybids-load-btn" onclick="mybidsLoad()">입찰 목록 조회</button>
+              <button class="btn" onclick="mybidsDeleteSelected()" style="color:var(--danger)">선택 삭제</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="mybids-check-all" onchange="document.querySelectorAll('.mybid-cb').forEach(c=>c.checked=this.checked)"></th>
+                  <th>주문번호</th>
+                  <th>상품명</th>
+                  <th>모델번호</th>
+                  <th>사이즈</th>
+                  <th>입찰가</th>
+                  <th>순번</th>
+                  <th>유형</th>
+                  <th>액션</th>
+                </tr>
+              </thead>
+              <tbody id="mybids-tbody">
+                <tr><td colspan="9" class="text-muted">조회 버튼을 눌러주세요</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="mybids-status" style="margin-top:8px; font-size:12px; color:var(--text3)"></div>
+        </div>
+        <!-- 수정/삭제 로그 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📋</span> 실행 로그</div>
+          <div id="mybids-log" style="background:#1a1a1a; color:#eee; padding:12px; border-radius:8px; max-height:200px; overflow-y:auto; font-family:monospace; font-size:12px;">대기 중...</div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭5: 실행 이력 ═══ -->
+      <div id="tab-history" class="tab-view">
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">📝</span> 실행 이력</span>
+            <span class="text-muted" style="font-size:12px">최근 30건</span>
+          </div>
+          <div id="batch-history-list">
+            <div class="text-muted" style="padding:20px; text-align:center">이력을 불러오는 중...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭6: 설정 ═══ -->
+      <div id="tab-settings" class="tab-view">
+        <div class="card">
+          <div class="card-title"><span class="icon">⚙️</span> 환율 / 수수료 설정</div>
+          <div class="form-row">
+            <span class="form-label">CNY→KRW 환율</span>
+            <input type="number" class="form-input form-input-sm" id="set-cny-rate" value="218.12" step="0.01" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">USD→KRW 환율</span>
+            <input type="number" class="form-input form-input-sm" id="set-usd-rate" value="1495.76" step="0.01" onchange="saveSettings()">
+          </div>
+          <div class="form-row" style="align-items:center; gap:10px">
+            <span class="form-label"></span>
+            <button class="btn btn-outline btn-sm" onclick="refreshExchangeRate()" id="btn-fetch-rate" style="font-size:12px; padding:4px 12px">환율 가져오기</button>
+            <span id="rate-fetch-status" style="font-size:11px; color:var(--text3)"></span>
+          </div>
+          <div class="form-row">
+            <span class="form-label">KREAM 수수료율</span>
+            <select class="form-select" id="set-fee" onchange="saveSettings()">
+              <option value="0.06">6% (기본)</option>
+              <option value="0.055">5.5%</option>
+              <option value="0.035">3.5% (이벤트)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <span class="form-label">고정수수료 (부가세포함)</span>
+            <input type="number" class="form-input form-input-sm" id="set-fixed" value="2500" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">기본 해외배송비</span>
+            <input type="number" class="form-input form-input-sm" id="set-ship" value="8000" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">목표 마진율</span>
+            <input type="number" class="form-input form-input-sm" id="set-target" value="15" step="1" onchange="saveSettings()"> %
+          </div>
+          <div class="form-row">
+            <span class="form-label">Headless 모드</span>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" id="set-headless" checked onchange="saveSettings()">
+              <span id="headless-label" style="font-size:13px">ON (백그라운드 실행)</span>
+            </label>
+            <span style="font-size:11px; color:var(--text3); margin-left:8px">OFF = 브라우저 표시 (디버깅용)</span>
+          </div>
+          <div class="divider"></div>
+          <div class="card-title"><span class="icon">📝</span> 고시정보 기본값</div>
+          <div class="form-row">
+            <span class="form-label">제조국</span>
+            <input type="text" class="form-input form-input-lg" id="set-country" value="상품별 상이 (케어라벨 참고)" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">품질보증기준</span>
+            <input type="text" class="form-input form-input-lg" id="set-warranty" value="관련 법 및 소비자 분쟁 해결 기준에 따름" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">AS 전화번호</span>
+            <input type="text" class="form-input form-input-md" id="set-phone" value="01075446127" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">원산지 (가방)</span>
+            <input type="text" class="form-input form-input-lg" id="set-origin-bag" value="China (중국) (CN)" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">HS코드 (가방)</span>
+            <input type="text" class="form-input form-input-md" id="set-hs-bag" value="4202.92" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">원산지 (신발)</span>
+            <input type="text" class="form-input form-input-lg" id="set-origin-shoe" value="China (중국) (CN)" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">HS코드 (신발)</span>
+            <input type="text" class="form-input form-input-md" id="set-hs-shoe" value="6404.11" onchange="saveSettings()">
+          </div>
+          <div class="mt-16">
+            <button class="btn btn-primary" onclick="saveSettings(); alert('저장 완료!')">설정 저장</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// ═══ 설정 ═══
+let SETTINGS = {
+  cnyRate: 218.12,
+  usdRate: 1495.76,
+  feeRate: 0.06,
+  fixedFee: 2500,
+  defaultShip: 8000,
+  targetMargin: 15,
+  cnyMargin: 1.03,
+  vatRate: 0.10,
+  usdLimit: 150,
+  tariffBag: 0.08,
+  tariffShoe: 0.13,
+};
+
+let selectedPrice = 0;
+let currentProduct = {};
+
+// ═══ 탭 전환 ═══
+function showTab(id) {
+  document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  
+  const titles = {
+    register: '상품 등록 / 입찰',
+    margin: '마진 계산기',
+    bulk: '대량 등록',
+    discover: '상품 발굴',
+    adjust: '가격 자동 조정',
+    prices: '가격 수집',
+    mybids: '입찰 관리',
+    history: '실행 이력',
+    settings: '환율 / 수수료 설정'
+  };
+  document.getElementById('page-title').textContent = titles[id] || '';
+  
+  if (id === 'margin') quickCalc();
+  if (id === 'history') loadBatchHistory();
+}
+
+// ═══ 스텝 전환 ═══
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('reg-step' + i).style.display = i === n ? 'block' : 'none';
+    const step = document.getElementById('step' + i);
+    step.className = 'step' + (i === n ? ' active' : (i < n ? ' done' : ''));
+  }
+}
+
+function backStep1() { setStep(1); }
+function goStep2() { calculateMargin(); setStep(2); }
+function goStep3() { buildPriceTable(); setStep(3); }
+function goStep4() { buildSummary(); setStep(4); }
+
+// ═══ 마진 계산 핵심 ═══
+function calcCost(cny, category, shipFee) {
+  const rate = SETTINGS.cnyRate * SETTINGS.cnyMargin;
+  const buyKRW = Math.round(cny * rate);
+  const usdEquiv = Math.round(cny * SETTINGS.cnyRate / SETTINGS.usdRate * 100) / 100;
+  const overLimit = usdEquiv > SETTINGS.usdLimit;
+  const tariff = (category === '가방') ? SETTINGS.tariffBag : SETTINGS.tariffShoe;
+  
+  let customs = 0, importVat = 0;
+  if (overLimit) {
+    customs = Math.round(cny * SETTINGS.cnyRate * tariff);
+    importVat = Math.round((cny * SETTINGS.cnyRate + customs) * SETTINGS.vatRate);
+  }
+  
+  return {
+    buyKRW, usdEquiv, overLimit, customs, importVat,
+    totalCost: buyKRW + customs + importVat + shipFee,
+    shipFee, tariff, cny, rate
+  };
+}
+
+function calcSettlement(sellPrice) {
+  const commission = Math.round(sellPrice * SETTINGS.feeRate);
+  const commVat = Math.round(commission * SETTINGS.vatRate);
+  const totalFee = commission + commVat + SETTINGS.fixedFee;
+  return {
+    commission, commVat, fixedFee: SETTINGS.fixedFee,
+    totalFee, settlement: sellPrice - totalFee
+  };
+}
+
+function calcMargin(cost, settlement) {
+  const margin = settlement - cost.totalCost;
+  const marginRate = cost.totalCost > 0 ? Math.round(margin / cost.totalCost * 1000) / 10 : 0;
+  return { margin, marginRate };
+}
+
+// ═══ 상품 검색 (Flask API 연결) ═══
+function searchProduct() {
+  const model = document.getElementById('reg-model').value.trim();
+  const productId = document.getElementById('reg-product-id').value.trim();
+  if (!model && !productId) { alert('모델번호 또는 상품번호를 입력하세요'); return; }
+
+  const resultBox = document.getElementById('search-result');
+  resultBox.style.display = 'block';
+  resultBox.innerHTML = '<span style="color:var(--text2)">🔍 KREAM에서 실시간 검색 중... (20~30초 소요)</span>';
+
+  const payload = productId ? { productId } : { model };
+
+  fetch('/api/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.taskId) pollTask(res.taskId, onSearchResult, resultBox);
+    else resultBox.innerHTML = '<span style="color:var(--danger)">API 오류</span>';
+  })
+  .catch(err => {
+    resultBox.innerHTML = `<span style="color:var(--danger)">서버 연결 실패: ${err.message}</span>`;
+  });
+}
+
+function pollTask(taskId, callback, statusEl) {
+  const poll = setInterval(() => {
+    fetch('/api/task/' + taskId)
+    .then(r => r.json())
+    .then(task => {
+      if (task.status === 'done' || task.status === 'error') {
+        clearInterval(poll);
+        callback(task);
+      } else if (statusEl && task.logs && task.logs.length > 0) {
+        const last = task.logs[task.logs.length - 1];
+        statusEl.innerHTML = `<span style="color:var(--text2)">🔄 ${last.msg}</span>`;
+      }
+    })
+    .catch(() => clearInterval(poll));
+  }, 1500);
+}
+
+function onSearchResult(task) {
+  const resultBox = document.getElementById('search-result');
+
+  // 세션 만료 감지
+  if (task.result && task.result.kream && task.result.kream.session_expired) {
+    const which = task.result.kream.session_expired === 'kream' ? 'KREAM 일반 사이트' : '판매자센터';
+    resultBox.innerHTML = `<div style="color:var(--danger); font-weight:600; padding:12px; background:var(--danger-light); border-radius:8px">
+      ⚠ 세션 만료! ${which} 재로그인이 필요합니다.<br>
+      <span style="font-size:12px; font-weight:400">터미널: python3 kream_bot.py --mode ${task.result.kream.session_expired === 'kream' ? 'login-kream' : 'login'}</span>
+    </div>`;
+    return;
+  }
+
+  if (task.status === 'error' || !task.result) {
+    const errMsg = task.logs && task.logs.length > 0
+      ? task.logs[task.logs.length - 1].msg : '검색 실패';
+    resultBox.innerHTML = `
+      <div style="color:var(--warning)">⚠ ${errMsg}</div>
+      <div style="color:var(--text2); font-size:12px; margin-top:4px">
+        상품번호를 직접 입력한 후 다시 검색하세요.
+      </div>
+    `;
+    return;
+  }
+
+  const kream = task.result.kream || {};
+  const pid = kream.product_id || '';
+  const brand = (kream.product_name_en || '').split(' ')[0] || '';
+
+  document.getElementById('reg-product-id').value = pid;
+  if (brand) document.getElementById('gosi-maker').value = brand;
+
+  const bidList = (kream.sell_bids || []).map(b => ({p: b.price, q: b.quantity || 1}));
+
+  currentProduct = {
+    model: kream.model_number || document.getElementById('reg-model').value,
+    productId: pid,
+    name_en: kream.product_name_en || '',
+    name_kr: kream.product_name || '',
+    brand: brand,
+    buyNow: kream.instant_buy_price || 0,
+    sellNow: kream.instant_sell_price || 0,
+    recent: kream.recent_trade_price || kream.display_price || 0,
+    overseasBuy: 0,
+    bidList: bidList
+  };
+
+  let bidListHtml = '';
+  if (bidList.length > 0) {
+    bidListHtml = '<div style="margin-top:8px"><strong>판매 입찰 현황:</strong> ';
+    bidListHtml += bidList.map(b => `${b.p.toLocaleString()}원(${b.q})`).join(' / ');
+    bidListHtml += '</div>';
+  }
+
+  const buyBids = kream.buy_bids || [];
+  let buyBidHtml = '';
+  if (buyBids.length > 0) {
+    buyBidHtml = '<div style="margin-top:4px"><strong>구매 입찰 현황:</strong> ';
+    buyBidHtml += buyBids.map(b => `${b.price.toLocaleString()}원(${b.quantity || 1})`).join(' / ');
+    buyBidHtml += '</div>';
+  }
+
+  resultBox.innerHTML = `
+    <div style="font-weight:600; font-size:14px; margin-bottom:4px">✅ ${currentProduct.name_en}</div>
+    <div style="color:var(--text2)">${currentProduct.name_kr}</div>
+    <div style="margin-top:6px; display:flex; gap:16px; flex-wrap:wrap;">
+      <span>상품번호: <strong>${pid}</strong></span>
+      <span>브랜드: <strong>${brand}</strong></span>
+      <span>즉시구매가: <strong style="color:var(--danger)">${currentProduct.buyNow ? currentProduct.buyNow.toLocaleString() + '원' : '-'}</strong></span>
+      <span>즉시판매가: <strong style="color:var(--accent)">${currentProduct.sellNow ? currentProduct.sellNow.toLocaleString() + '원' : '-'}</strong></span>
+      <span>최근거래가: <strong>${currentProduct.recent ? currentProduct.recent.toLocaleString() + '원' : '-'}</strong></span>
+      <span>총거래: <strong>${kream.total_trades || '-'}</strong>건</span>
+    </div>
+    ${bidListHtml}
+    ${buyBidHtml}
+  `;
+}
+
+// ═══ STEP2: 마진 확인 ═══
+function calculateMargin() {
+  const cny = parseFloat(document.getElementById('reg-cny').value) || 0;
+  const cat = document.getElementById('reg-category').value;
+  const ship = parseFloat(document.getElementById('reg-ship').value) || SETTINGS.defaultShip;
+  
+  const cost = calcCost(cny, cat, ship);
+  
+  const metricsHtml = `
+    <div class="metric">
+      <div class="metric-label">구매가 (원화)</div>
+      <div class="metric-value">${cost.buyKRW.toLocaleString()}원</div>
+      <div class="metric-sub">CNY ${cny} × ${Math.round(cost.rate)}원</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">관세 + 부가세</div>
+      <div class="metric-value">${cost.overLimit ? (cost.customs + cost.importVat).toLocaleString() + '원' : '면세'}</div>
+      <div class="metric-sub">${cost.usdEquiv}$ ${cost.overLimit ? '(150$ 초과)' : '(150$ 이하)'}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">해외 배송비</div>
+      <div class="metric-value">${cost.shipFee.toLocaleString()}원</div>
+    </div>
+    <div class="metric metric-blue">
+      <div class="metric-label">총 원가</div>
+      <div class="metric-value">${cost.totalCost.toLocaleString()}원</div>
+    </div>
+  `;
+  document.getElementById('margin-metrics').innerHTML = metricsHtml;
+  
+  // KREAM 시장 현황 (수집 전 placeholder)
+  const kreamHtml = `
+    <div class="metric">
+      <div class="metric-label">즉시구매가</div>
+      <div class="metric-value">${currentProduct.buyNow ? currentProduct.buyNow.toLocaleString() + '원' : '-'}</div>
+      <div class="metric-sub">KREAM 수집 필요</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">즉시판매가</div>
+      <div class="metric-value">${currentProduct.sellNow ? currentProduct.sellNow.toLocaleString() + '원' : '-'}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">최근거래가</div>
+      <div class="metric-value">${currentProduct.recent ? currentProduct.recent.toLocaleString() + '원' : '-'}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">손익분기 판매가</div>
+      <div class="metric-value text-red">${findBreakEven(cost.totalCost).toLocaleString()}원</div>
+      <div class="metric-sub">이 이하 = 손해</div>
+    </div>
+  `;
+  document.getElementById('kream-metrics').innerHTML = kreamHtml;
+}
+
+function findBreakEven(totalCost) {
+  for (let p = 20000; p <= 500000; p += 1000) {
+    const s = calcSettlement(p);
+    if (s.settlement >= totalCost) return p;
+  }
+  return 0;
+}
+
+// ═══ STEP3: 가격 테이블 ═══
+function buildPriceTable() {
+  const cny = parseFloat(document.getElementById('reg-cny').value) || 0;
+  const cat = document.getElementById('reg-category').value;
+  const ship = parseFloat(document.getElementById('reg-ship').value) || SETTINGS.defaultShip;
+  const cost = calcCost(cny, cat, ship);
+  
+  const breakEven = findBreakEven(cost.totalCost);
+  const target15 = findTargetPrice(cost.totalCost, SETTINGS.targetMargin);
+  
+  // 가격 범위 생성
+  const prices = new Set();
+  for (let p = Math.max(20000, breakEven - 5000); p <= target15 + 30000; p += 1000) {
+    prices.add(p);
+  }
+  // 주요 포인트 추가
+  [breakEven, target15, breakEven + 5000, target15 + 10000].forEach(p => prices.add(Math.round(p/1000)*1000));
+  
+  const sorted = [...prices].sort((a,b) => a - b);
+  // 적절한 간격으로 필터
+  const step = Math.max(1000, Math.round(sorted.length / 15) * 1000);
+  const filtered = sorted.filter(p => p % step === 0 || p === breakEven || p === target15);
+  
+  let html = '';
+  filtered.forEach(price => {
+    const s = calcSettlement(price);
+    const m = calcMargin(cost, s.settlement);
+    
+    let badgeClass = 'badge-bad';
+    let badgeText = '비추';
+    if (m.marginRate >= SETTINGS.targetMargin) { badgeClass = 'badge-good'; badgeText = '추천'; }
+    else if (m.marginRate >= 5) { badgeClass = 'badge-ok'; badgeText = '보통'; }
+    
+    const isBreakEven = price === breakEven;
+    const isTarget = price === target15;
+    
+    html += `<tr class="price-row" onclick="selectPrice(${price})" data-price="${price}">
+      <td style="font-weight:600">${price.toLocaleString()}원 ${isBreakEven ? '<span class="text-red" style="font-size:11px">← 손익분기</span>' : ''} ${isTarget ? '<span class="text-green" style="font-size:11px">← 목표마진</span>' : ''}</td>
+      <td>${s.totalFee.toLocaleString()}원</td>
+      <td>${s.settlement.toLocaleString()}원</td>
+      <td class="${m.margin >= 0 ? 'text-green' : 'text-red'}" style="font-weight:600">${m.margin >= 0 ? '+' : ''}${m.margin.toLocaleString()}원</td>
+      <td class="${m.margin >= 0 ? 'text-green' : 'text-red'}">${m.marginRate}%</td>
+      <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+    </tr>`;
+  });
+  
+  document.getElementById('price-table-body').innerHTML = html;
+  document.getElementById('selected-price-card').style.display = 'none';
+}
+
+function findTargetPrice(totalCost, targetRate) {
+  for (let p = 20000; p <= 500000; p += 1000) {
+    const s = calcSettlement(p);
+    const margin = s.settlement - totalCost;
+    if (totalCost > 0 && (margin / totalCost * 100) >= targetRate) return p;
+  }
+  return 0;
+}
+
+function selectPrice(price) {
+  selectedPrice = price;
+  document.querySelectorAll('.price-row').forEach(r => {
+    r.classList.toggle('selected', parseInt(r.dataset.price) === price);
+  });
+  
+  const cny = parseFloat(document.getElementById('reg-cny').value) || 0;
+  const cat = document.getElementById('reg-category').value;
+  const ship = parseFloat(document.getElementById('reg-ship').value) || SETTINGS.defaultShip;
+  const cost = calcCost(cny, cat, ship);
+  const s = calcSettlement(price);
+  const m = calcMargin(cost, s.settlement);
+  
+  document.getElementById('selected-price-card').style.display = 'block';
+  document.getElementById('selected-price-info').innerHTML = `
+    <div class="metrics">
+      <div class="metric metric-green">
+        <div class="metric-label">선택한 판매가</div>
+        <div class="metric-value">${price.toLocaleString()}원</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">정산금액</div>
+        <div class="metric-value">${s.settlement.toLocaleString()}원</div>
+        <div class="metric-sub">수수료 ${s.totalFee.toLocaleString()}원 차감</div>
+      </div>
+      <div class="metric ${m.margin >= 0 ? 'metric-green' : 'metric-red'}">
+        <div class="metric-label">순마진</div>
+        <div class="metric-value">${m.margin >= 0 ? '+' : ''}${m.margin.toLocaleString()}원</div>
+        <div class="metric-sub">마진율 ${m.marginRate}%</div>
+      </div>
+    </div>
+  `;
+}
+
+function selectCustomPrice() {
+  const price = parseInt(document.getElementById('custom-price').value);
+  if (!price || price < 20000) { alert('2만원 이상 입력하세요'); return; }
+  selectPrice(Math.round(price / 1000) * 1000);
+}
+
+// ═══ STEP4: 등록 ═══
+function buildSummary() {
+  const productId = document.getElementById('reg-product-id').value;
+  const model = document.getElementById('reg-model').value;
+  const cat = document.getElementById('reg-category').value;
+  const cny = document.getElementById('reg-cny').value;
+  const size = document.getElementById('reg-size').value || 'ONE SIZE';
+  const qty = document.getElementById('reg-qty').value || 1;
+  const gosiAlready = document.getElementById('gosi-already').checked;
+  const gosiType = document.getElementById('gosi-type').value;
+  const gosiMaterial = document.getElementById('gosi-material').value;
+  const gosiColor = document.getElementById('gosi-color').value;
+  const gosiSize = document.getElementById('gosi-size').value;
+  const gosiMaker = document.getElementById('gosi-maker').value;
+  
+  const cnyVal = parseFloat(cny) || 0;
+  const cost = calcCost(cnyVal, cat, parseFloat(document.getElementById('reg-ship').value) || SETTINGS.defaultShip);
+  const s = calcSettlement(selectedPrice);
+  const m = calcMargin(cost, s.settlement);
+  
+  let gosiHtml = gosiAlready 
+    ? '<span class="badge badge-good">이미 등록됨 → 입찰만 진행</span>'
+    : `${cat} / ${gosiType} / ${gosiMaterial} / ${gosiColor} / ${gosiSize} / ${gosiMaker}`;
+  
+  document.getElementById('reg-summary').innerHTML = `
+    <table style="font-size:14px">
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2); width:100px">상품번호</td><td style="font-weight:600">${productId}</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">모델번호</td><td>${model}</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">카테고리</td><td>${cat}</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">사이즈</td><td>${size}</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">수량</td><td>${qty}개</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">구매가</td><td>CNY ${cny} (원가 ${cost.totalCost.toLocaleString()}원)</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">입찰가</td><td style="font-weight:700; color:var(--accent); font-size:16px">${selectedPrice.toLocaleString()}원</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">순마진</td><td class="${m.margin >= 0 ? 'text-green' : 'text-red'}" style="font-weight:700">${m.margin >= 0 ? '+' : ''}${m.margin.toLocaleString()}원 (${m.marginRate}%)</td></tr>
+      <tr><td style="padding:6px 16px 6px 0; color:var(--text2)">고시정보</td><td>${gosiHtml}</td></tr>
+    </table>
+  `;
+}
+
+function executeRegister() {
+  const log = document.getElementById('reg-log');
+  const productId = document.getElementById('reg-product-id').value;
+  const model = document.getElementById('reg-model').value;
+  const gosiAlready = document.getElementById('gosi-already').checked;
+  const size = document.getElementById('reg-size').value || 'ONE SIZE';
+  const qty = parseInt(document.getElementById('reg-qty').value) || 1;
+  const cat = document.getElementById('reg-category').value;
+
+  if (!productId) { alert('상품번호를 입력하세요'); return; }
+  if (!selectedPrice) { alert('판매가를 선택하세요'); return; }
+
+  log.innerHTML = '';
+  addLog(log, 'info', '🤖 KREAM 자동화 시작... (Playwright 실행 중)');
+
+  const payload = {
+    productId,
+    price: selectedPrice,
+    size,
+    quantity: qty,
+    gosiAlready,
+    gosi: {
+      category: cat === '신발' ? '신발' : '가방',
+      type: document.getElementById('gosi-type').value || '',
+      material: document.getElementById('gosi-material').value || '',
+      color: document.getElementById('gosi-color').value || '',
+      size: document.getElementById('gosi-size').value || '',
+      maker: document.getElementById('gosi-maker').value || '',
+      country: '상품별 상이 (케어라벨 참고)',
+      warranty: '관련 법 및 소비자 분쟁 해결 기준에 따름',
+      phone: '01075446127',
+    }
+  };
+
+  fetch('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.taskId) { addLog(log, 'error', 'API 오류'); return; }
+    // 태스크 폴링
+    let lastLogIdx = 0;
+    const poll = setInterval(() => {
+      fetch('/api/task/' + res.taskId)
+      .then(r => r.json())
+      .then(task => {
+        // 새 로그만 표시
+        const newLogs = (task.logs || []).slice(lastLogIdx);
+        newLogs.forEach(l => addLog(log, l.level, l.msg));
+        lastLogIdx = (task.logs || []).length;
+
+        if (task.status === 'done' || task.status === 'error') {
+          clearInterval(poll);
+          if (task.status === 'done' && task.result && task.result.success) {
+            addLog(log, 'success', '🎉 모든 작업 완료!');
+            addHistory(gosiAlready ? '입찰' : '고시+입찰', productId, model, selectedPrice);
+            const regSize = size || 'ONE SIZE';
+            const regEntry = { productId, model, size: regSize, price: selectedPrice, date: new Date().toLocaleString('ko-KR'), source: 'placed' };
+            myBidsMap[`${productId}_${regSize}`] = regEntry;
+            myBidsLocal.bids = (myBidsLocal.bids||[]).filter(b => !(b.productId === productId && b.size === regSize));
+            myBidsLocal.bids.push(regEntry);
+            updateSyncStatus();
+          } else if (task.status === 'error') {
+            addLog(log, 'error', '❌ 작업 실패');
+          }
+        }
+      })
+      .catch(() => clearInterval(poll));
+    }, 2000);
+  })
+  .catch(err => {
+    addLog(log, 'error', '서버 연결 실패: ' + err.message);
+  });
+}
+
+function addLog(el, type, msg) {
+  const line = document.createElement('div');
+  line.className = 'log-' + type;
+  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ═══ 고시정보 토글 ═══
+function toggleGosiFields() {
+  const already = document.getElementById('gosi-already').checked;
+  document.getElementById('gosi-section').style.display = already ? 'none' : 'block';
+}
+
+// ═══ 실행 이력 (batch 단위) ═══
+let batchHistoryData = [];
+
+function loadBatchHistory() {
+  fetch('/api/batch-history').then(r => r.json()).then(data => {
+    batchHistoryData = data.history || [];
+    renderBatchHistory();
+  }).catch(() => {
+    document.getElementById('batch-history-list').innerHTML =
+      '<div class="text-muted" style="padding:20px; text-align:center">이력을 불러올 수 없습니다</div>';
+  });
+}
+
+function renderBatchHistory() {
+  const container = document.getElementById('batch-history-list');
+  if (!batchHistoryData.length) {
+    container.innerHTML = '<div class="text-muted" style="padding:20px; text-align:center">아직 실행 이력이 없습니다</div>';
+    return;
+  }
+
+  let html = '';
+  batchHistoryData.forEach((batch, idx) => {
+    const dt = new Date(batch.executed_at);
+    const dateStr = dt.getFullYear() + '/' +
+      String(dt.getMonth()+1).padStart(2,'0') + '/' +
+      String(dt.getDate()).padStart(2,'0') + ' ' +
+      String(dt.getHours()).padStart(2,'0') + ':' +
+      String(dt.getMinutes()).padStart(2,'0');
+    const typeBadge = batch.type === '자동입찰'
+      ? '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;font-size:11px">자동입찰</span>'
+      : '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:4px;font-size:11px">' + (batch.type||'실행') + '</span>';
+
+    html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">`;
+    html += `<div onclick="toggleBatchDetail(${idx})" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;background:var(--bg2);transition:background 0.15s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">`;
+    html += `<div style="display:flex;align-items:center;gap:12px">`;
+    html += `<span id="batch-arrow-${idx}" style="font-size:10px;color:var(--text3);transition:transform 0.2s;display:inline-block">&#9654;</span>`;
+    html += `<span style="font-size:13px;font-weight:600">${dateStr}</span>`;
+    html += typeBadge;
+    html += `</div>`;
+    html += `<div style="display:flex;align-items:center;gap:16px;font-size:13px">`;
+    html += `<span>총 <strong>${batch.total}</strong>건</span>`;
+    html += `<span style="color:var(--accent)">성공 <strong>${batch.success}</strong></span>`;
+    if (batch.failed > 0) html += `<span style="color:var(--danger)">실패 <strong>${batch.failed}</strong></span>`;
+    html += `</div></div>`;
+
+    // 상세 테이블 (숨김)
+    html += `<div id="batch-detail-${idx}" style="display:none;border-top:1px solid var(--border);padding:0">`;
+    html += `<table style="font-size:12px;margin:0"><thead><tr>`;
+    html += `<th style="padding:8px 12px">모델번호</th><th style="padding:8px 12px">상품명</th>`;
+    if (batch.type === '자동입찰') {
+      html += `<th style="padding:8px 12px">사이즈</th><th style="padding:8px 12px">입찰가</th>`;
+    } else {
+      html += `<th style="padding:8px 12px">원가</th><th style="padding:8px 12px">즉시구매가</th>`;
+    }
+    html += `<th style="padding:8px 12px">마진</th><th style="padding:8px 12px">상태</th></tr></thead><tbody>`;
+
+    (batch.items || []).forEach(item => {
+      const statusColor = (item.status||'').includes('완료') ? 'var(--accent)' :
+        (item.status||'').includes('실패') ? 'var(--danger)' : 'var(--text2)';
+      html += `<tr>`;
+      html += `<td style="padding:6px 12px;font-weight:600">${item.model||'-'}</td>`;
+      html += `<td style="padding:6px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name||'-'}</td>`;
+      if (batch.type === '자동입찰') {
+        html += `<td style="padding:6px 12px">${item.size||'-'}</td>`;
+        html += `<td style="padding:6px 12px">${item.bid_price ? item.bid_price.toLocaleString() + '원' : '-'}</td>`;
+      } else {
+        html += `<td style="padding:6px 12px">${item.cost ? item.cost.toLocaleString() + '원' : '-'}</td>`;
+        html += `<td style="padding:6px 12px">${item.instant_buy ? item.instant_buy.toLocaleString() + '원' : '-'}</td>`;
+      }
+      html += `<td style="padding:6px 12px;color:${item.margin && item.margin.startsWith('+') ? 'var(--accent)' : 'var(--text2)'}">${item.margin||'-'}</td>`;
+      html += `<td style="padding:6px 12px;color:${statusColor};font-weight:600">${item.status||'-'}</td>`;
+      html += `</tr>`;
+    });
+
+    html += `</tbody></table></div></div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function toggleBatchDetail(idx) {
+  const detail = document.getElementById('batch-detail-' + idx);
+  const arrow = document.getElementById('batch-arrow-' + idx);
+  if (detail.style.display === 'none') {
+    detail.style.display = 'block';
+    arrow.style.transform = 'rotate(90deg)';
+  } else {
+    detail.style.display = 'none';
+    arrow.style.transform = 'rotate(0deg)';
+  }
+}
+
+// 하위 호환: 개별 입찰 시에도 addHistory 유지 (기존 localStorage 기반)
+function addHistory(type, productId, model, price) {
+  // localStorage 기록은 유지하되 메인 UI는 batch 기반
+  const now = new Date();
+  const dateStr = now.getFullYear() + '/' +
+    String(now.getMonth()+1).padStart(2,'0') + '/' +
+    String(now.getDate()).padStart(2,'0') + ' ' +
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0');
+  let history = JSON.parse(localStorage.getItem('kream_history') || '[]');
+  history.unshift({ date: dateStr, type, productId, model, price, success: 1, fail: 0 });
+  if (history.length > 100) history = history.slice(0, 100);
+  localStorage.setItem('kream_history', JSON.stringify(history));
+}
+
+function loadHistory() {
+  // batch 히스토리를 서버에서 로드
+  loadBatchHistory();
+}
+
+// ═══ 빠른 마진 계산기 ═══
+function quickCalc() {
+  const cny = parseFloat(document.getElementById('quick-cny').value) || 0;
+  const tariff = parseFloat(document.getElementById('quick-cat').value);
+  const ship = parseFloat(document.getElementById('quick-ship').value) || 0;
+  const sell = parseFloat(document.getElementById('quick-sell').value) || 0;
+
+  const cat = tariff === 0.08 ? '가방' : '신발';
+  const cost = calcCost(cny, cat, ship);
+  const s = calcSettlement(sell);
+  const m = calcMargin(cost, s.settlement);
+
+  // CNY 원화 환산 표시
+  if (cny > 0) {
+    document.getElementById('quick-cny-krw').textContent = `= ${cost.buyKRW.toLocaleString()}원 (${cost.usdEquiv}$)`;
+  }
+
+  // 메인 메트릭
+  document.getElementById('quick-metrics').innerHTML = `
+    <div class="metric metric-blue">
+      <div class="metric-label">총 원가</div>
+      <div class="metric-value">${cost.totalCost.toLocaleString()}원</div>
+      <div class="metric-sub">구매 ${cost.buyKRW.toLocaleString()} + 관부가세 ${(cost.customs+cost.importVat).toLocaleString()} + 배송 ${ship.toLocaleString()}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">정산금액</div>
+      <div class="metric-value">${s.settlement.toLocaleString()}원</div>
+      <div class="metric-sub">수수료 ${s.commission.toLocaleString()} + VAT ${s.commVat.toLocaleString()} + 고정 ${SETTINGS.fixedFee.toLocaleString()}</div>
+    </div>
+    <div class="metric ${m.margin >= 0 ? 'metric-green' : 'metric-red'}">
+      <div class="metric-label">순마진</div>
+      <div class="metric-value">${m.margin >= 0 ? '+' : ''}${m.margin.toLocaleString()}원</div>
+      <div class="metric-sub">마진율 ${m.marginRate}%</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">판단</div>
+      <div class="metric-value">${m.marginRate >= SETTINGS.targetMargin ? '✅ 추천' : m.marginRate >= 5 ? '⚠️ 보통' : '❌ 비추'}</div>
+      <div class="metric-sub">목표: ${SETTINGS.targetMargin}% 이상</div>
+    </div>
+  `;
+
+  // 최소 판매가 역계산
+  if (cny > 0 && cost.totalCost > 0) {
+    const be = findBreakEven(cost.totalCost);
+    const m10 = findTargetPrice(cost.totalCost, 10);
+    const m15 = findTargetPrice(cost.totalCost, 15);
+    const m20 = findTargetPrice(cost.totalCost, 20);
+
+    document.getElementById('quick-reverse').innerHTML = `
+      <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:4px 12px; align-items:center">
+        <span style="color:var(--danger); font-weight:600">손익분기</span>
+        <span style="font-weight:700">${be.toLocaleString()}원</span>
+        <span style="font-size:11px; color:var(--text3)">정산 ${calcSettlement(be).settlement.toLocaleString()}원 = 원가 ${cost.totalCost.toLocaleString()}원</span>
+        <span style="color:var(--warning)">마진 10%</span>
+        <span style="font-weight:600">${m10.toLocaleString()}원</span>
+        <span style="font-size:11px; color:var(--text3)">순이익 +${(calcSettlement(m10).settlement - cost.totalCost).toLocaleString()}원</span>
+        <span style="color:var(--accent); font-weight:600">마진 15%</span>
+        <span style="font-weight:700; color:var(--accent)">${m15.toLocaleString()}원</span>
+        <span style="font-size:11px; color:var(--text3)">순이익 +${(calcSettlement(m15).settlement - cost.totalCost).toLocaleString()}원</span>
+        <span style="color:var(--accent)">마진 20%</span>
+        <span style="font-weight:600">${m20.toLocaleString()}원</span>
+        <span style="font-size:11px; color:var(--text3)">순이익 +${(calcSettlement(m20).settlement - cost.totalCost).toLocaleString()}원</span>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3)">
+        수수료: 판매가×${(SETTINGS.feeRate*100)}% + VAT(수수료×10%) + 고정 ${SETTINGS.fixedFee.toLocaleString()}원
+      </div>
+    `;
+  } else {
+    document.getElementById('quick-reverse').innerHTML = '<div>CNY 가격을 입력하면 자동 계산됩니다.</div>';
+  }
+}
+
+// ═══ 설정 저장/로드 ═══
+function saveSettings() {
+  const prevCny = SETTINGS.cnyRate;
+  SETTINGS.cnyRate = parseFloat(document.getElementById('set-cny-rate').value) || 218.12;
+  SETTINGS.usdRate = parseFloat(document.getElementById('set-usd-rate').value) || 1495.76;
+  SETTINGS.feeRate = parseFloat(document.getElementById('set-fee').value) || 0.06;
+  SETTINGS.fixedFee = parseFloat(document.getElementById('set-fixed').value) || 2500;
+  SETTINGS.defaultShip = parseFloat(document.getElementById('set-ship').value) || 8000;
+  SETTINGS.targetMargin = parseFloat(document.getElementById('set-target').value) || 15;
+  SETTINGS.headless = document.getElementById('set-headless').checked;
+
+  const hl = document.getElementById('headless-label');
+  hl.textContent = SETTINGS.headless ? 'ON (백그라운드 실행)' : 'OFF (브라우저 표시)';
+
+  // 사이드바 환율 표시 갱신 (수동 변경 시)
+  const rateText = document.getElementById('sidebar-rate-text');
+  if (rateText) rateText.textContent = `CNY ${SETTINGS.cnyRate.toFixed(2)}원`;
+  const rateTime = document.getElementById('sidebar-rate-time');
+  if (rateTime && rateTime.textContent === '환율 로딩 중...') rateTime.textContent = '수동 설정';
+
+  localStorage.setItem('kream_settings', JSON.stringify(SETTINGS));
+  // 서버에도 저장 (headless 설정은 서버에서 읽음)
+  fetch('/api/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({headless: SETTINGS.headless})
+  });
+
+  // 환율 변경 시 큐 원가 재계산
+  if (prevCny !== SETTINGS.cnyRate) recalcQueueCosts();
+}
+
+function loadSettings() {
+  const saved = localStorage.getItem('kream_settings');
+  if (saved) {
+    Object.assign(SETTINGS, JSON.parse(saved));
+    document.getElementById('set-cny-rate').value = SETTINGS.cnyRate;
+    document.getElementById('set-usd-rate').value = SETTINGS.usdRate;
+    document.getElementById('set-fee').value = SETTINGS.feeRate;
+    document.getElementById('set-fixed').value = SETTINGS.fixedFee;
+    document.getElementById('set-ship').value = SETTINGS.defaultShip;
+    document.getElementById('set-target').value = SETTINGS.targetMargin;
+    if (SETTINGS.headless !== undefined) {
+      document.getElementById('set-headless').checked = SETTINGS.headless;
+      document.getElementById('headless-label').textContent =
+        SETTINGS.headless ? 'ON (백그라운드 실행)' : 'OFF (브라우저 표시)';
+    }
+  }
+  // 서버에서 최신 환율 조회 (silent: 변경 없으면 재계산 안 함)
+  fetchExchangeRate(true);
+}
+
+// ═══ 환율 자동 조회 ═══
+function updateExchangeRateUI(cny, usd, updatedAt) {
+  const rateText = document.getElementById('sidebar-rate-text');
+  const rateTime = document.getElementById('sidebar-rate-time');
+  const cnyInput = document.getElementById('set-cny-rate');
+  const usdInput = document.getElementById('set-usd-rate');
+
+  if (rateText) rateText.textContent = `CNY ${parseFloat(cny).toFixed(2)}원`;
+  if (rateTime) rateTime.textContent = updatedAt ? `${updatedAt} 업데이트` : '';
+  if (cnyInput) cnyInput.value = cny;
+  if (usdInput) usdInput.value = usd;
+}
+
+function fetchExchangeRate(silent) {
+  fetch('/api/exchange-rate')
+    .then(r => r.json())
+    .then(data => {
+      const prevCny = SETTINGS.cnyRate;
+      SETTINGS.cnyRate = parseFloat(data.cny) || SETTINGS.cnyRate;
+      SETTINGS.usdRate = parseFloat(data.usd) || SETTINGS.usdRate;
+      updateExchangeRateUI(SETTINGS.cnyRate, SETTINGS.usdRate, data.updated_at || '기본값');
+      localStorage.setItem('kream_settings', JSON.stringify(SETTINGS));
+      if (!silent && prevCny !== SETTINGS.cnyRate) recalcQueueCosts();
+    })
+    .catch(() => {
+      // 서버 연결 실패 시 현재 SETTINGS 기본값으로 표시
+      updateExchangeRateUI(SETTINGS.cnyRate, SETTINGS.usdRate, '오프라인');
+    });
+}
+
+function refreshExchangeRate() {
+  const btn = document.getElementById('btn-fetch-rate');
+  const status = document.getElementById('rate-fetch-status');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = '조회 중...';
+
+  fetch('/api/exchange-rate/refresh', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        const prevCny = SETTINGS.cnyRate;
+        SETTINGS.cnyRate = parseFloat(data.cny) || SETTINGS.cnyRate;
+        SETTINGS.usdRate = parseFloat(data.usd) || SETTINGS.usdRate;
+        updateExchangeRateUI(data.cny, data.usd, data.updated_at);
+        localStorage.setItem('kream_settings', JSON.stringify(SETTINGS));
+        if (status) status.textContent = '업데이트 완료!';
+        setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+        if (prevCny !== SETTINGS.cnyRate) recalcQueueCosts();
+      } else {
+        if (status) status.textContent = '조회 실패';
+      }
+    })
+    .catch(() => { if (status) status.textContent = '오류 발생'; })
+    .finally(() => { if (btn) btn.disabled = false; });
+}
+
+// 환율 변경 시 큐 내 완료 항목 원가 재계산
+function recalcQueueCosts() {
+  let changed = false;
+  queueData.forEach(item => {
+    if (!item.result) return;
+    const r = item.result;
+    const ship = item.shipping || SETTINGS.defaultShip;
+
+    if (r.sizeMargins && r.sizeMargins.length > 0) {
+      r.sizeMargins.forEach(sz => {
+        const cost = calcCost(parseFloat(sz.cny) || 0, item.category, ship);
+        sz.totalCost = cost.totalCost;
+      });
+      // 대표 totalCost = 최저 사이즈 기준
+      const repCny = Math.min(...r.sizeMargins.map(s => parseFloat(s.cny) || 0));
+      r.totalCost = calcCost(repCny, item.category, ship).totalCost;
+    } else if (item.cny != null) {
+      r.totalCost = calcCost(parseFloat(item.cny), item.category, ship).totalCost;
+    }
+    changed = true;
+  });
+  if (changed) queueBuildResults();
+}
+
+// ═══ 가격 자동 조정 (새 방식) ═══
+let adjData = null;  // {bids, market, recommendations}
+
+function adjLog(level, msg) {
+  const log = document.getElementById('adj-log');
+  if (log.innerText === '대기 중...') log.innerHTML = '';
+  const color = level === 'success' ? '#4CAF50' : level === 'error' ? '#f44' : '#aaa';
+  const ts = new Date().toLocaleTimeString();
+  log.innerHTML += `<div style="color:${color}">[${ts}] ${msg}</div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── 1~3단계: 스캔 ──
+function adjScan() {
+  const btn = document.getElementById('adj-scan-btn');
+  const status = document.getElementById('adj-scan-status');
+  btn.disabled = true;
+  btn.textContent = '스캔 중...';
+  status.textContent = '판매자센터에서 입찰 목록 수집 중 (30~60초 소요)';
+  adjLog('info', '스캔 시작: 내 입찰 수집 → 시장 분석 → 제안 생성');
+
+  fetch('/api/adjust/scan', {method: 'POST'})
+  .then(r => r.json())
+  .then(res => {
+    if (!res.taskId) { adjLog('error', 'API 오류'); btn.disabled = false; btn.textContent = '내 입찰 스캔 + 시장 분석'; return; }
+
+    let lastLogIdx = 0;
+    const poll = setInterval(() => {
+      fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+        // 로그 표시
+        (task.logs || []).slice(lastLogIdx).forEach(l => adjLog(l.level, l.msg));
+        lastLogIdx = (task.logs || []).length;
+
+        if (task.logs && task.logs.length > 0) {
+          status.textContent = task.logs[task.logs.length - 1].msg;
+        }
+
+        if (task.status === 'done' || task.status === 'error') {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '내 입찰 스캔 + 시장 분석';
+
+          if (task.status === 'done' && task.result) {
+            adjData = task.result;
+            renderAdjustResult();
+            status.textContent = '스캔 완료!';
+          } else {
+            status.textContent = '스캔 실패';
+          }
+        }
+      }).catch(() => { clearInterval(poll); btn.disabled = false; btn.textContent = '내 입찰 스캔 + 시장 분석'; });
+    }, 2000);
+  })
+  .catch(err => {
+    adjLog('error', '서버 연결 실패: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = '내 입찰 스캔 + 시장 분석';
+    status.textContent = '';
+  });
+}
+
+// ── 4단계: 제안 테이블 렌더링 ──
+function renderAdjustResult() {
+  if (!adjData || !adjData.recommendations) return;
+  const recs = adjData.recommendations;
+  const card = document.getElementById('adj-result-card');
+  card.hidden = false;
+  document.getElementById('adj-count').textContent = recs.length;
+
+  const tbody = document.getElementById('adj-table-body');
+  let html = '';
+
+  recs.forEach((rec, idx) => {
+    const pid = rec.productId;
+    const mkt = (adjData.market || {})[pid] || {};
+    const marketLow = mkt.instant_buy_price || '-';
+    const isRaise = rec.action === 'raise';
+    const checked = isRaise ? 'checked' : '';
+
+    const priceDiff = rec.recommendPrice - rec.currentPrice;
+    let recBadge, recColor;
+    if (isRaise) {
+      recBadge = `<span class="badge badge-good">상향 +${priceDiff.toLocaleString()}원</span>`;
+      recColor = 'color:var(--accent); font-weight:700';
+    } else {
+      recBadge = '<span class="badge" style="background:#eee; color:#666">유지</span>';
+      recColor = 'color:var(--text2)';
+    }
+
+    html += `<tr data-idx="${idx}" data-order="${rec.orderId}" style="${!isRaise ? 'opacity:0.6' : ''}">
+      <td><input type="checkbox" class="adj-cb" data-idx="${idx}" ${checked} ${!isRaise ? 'disabled' : ''}></td>
+      <td style="max-width:220px">
+        <div style="font-weight:600; font-size:12px">${rec.nameKr || rec.nameEn || '-'}</div>
+        <div style="color:var(--text3); font-size:11px">#${pid}</div>
+      </td>
+      <td>${rec.size}</td>
+      <td style="font-weight:600">${rec.currentPrice.toLocaleString()}원</td>
+      <td>${rec.currentRank || '-'}위</td>
+      <td>${typeof marketLow === 'number' ? marketLow.toLocaleString() + '원' : marketLow}</td>
+      <td style="${recColor}">${rec.recommendPrice.toLocaleString()}원</td>
+      <td>${rec.recommendRank || '-'}위</td>
+      <td>${recBadge}</td>
+      <td style="font-size:12px; max-width:180px; color:var(--text2)">${rec.reason}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html || '<tr><td colspan="10" class="text-muted">입찰 내역 없음</td></tr>';
+}
+
+function adjSelectAll() {
+  document.querySelectorAll('.adj-cb:not(:disabled)').forEach(cb => cb.checked = true);
+  document.getElementById('adj-check-all').checked = true;
+}
+function adjDeselectAll() {
+  document.querySelectorAll('.adj-cb').forEach(cb => cb.checked = false);
+  document.getElementById('adj-check-all').checked = false;
+}
+function adjToggleAll(checked) {
+  document.querySelectorAll('.adj-cb:not(:disabled)').forEach(cb => cb.checked = checked);
+}
+
+// ── 5단계: 승인된 건만 실행 ──
+function adjExecute() {
+  if (!adjData || !adjData.recommendations) { alert('먼저 스캔을 실행하세요'); return; }
+
+  const selected = [];
+  document.querySelectorAll('.adj-cb:checked').forEach(cb => {
+    const idx = parseInt(cb.dataset.idx);
+    const rec = adjData.recommendations[idx];
+    if (rec && rec.action === 'raise') {
+      selected.push({orderId: rec.orderId, newPrice: rec.recommendPrice});
+    }
+  });
+
+  if (selected.length === 0) { alert('조정할 상품을 선택하세요'); return; }
+  if (!confirm(`${selected.length}건의 입찰가를 수정합니다. 진행하시겠습니까?`)) return;
+
+  adjLog('info', `일괄 조정 시작: ${selected.length}건`);
+
+  fetch('/api/adjust/execute', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items: selected})
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.taskId) { adjLog('error', 'API 오류'); return; }
+
+    let lastLogIdx = 0;
+    const poll = setInterval(() => {
+      fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+        (task.logs || []).slice(lastLogIdx).forEach(l => adjLog(l.level, l.msg));
+        lastLogIdx = (task.logs || []).length;
+
+        if (task.status === 'done' || task.status === 'error') {
+          clearInterval(poll);
+          if (task.result) {
+            adjLog('success', `완료: ${task.result.success}/${task.result.total}건 성공`);
+          }
+        }
+      }).catch(() => clearInterval(poll));
+    }, 2000);
+  })
+  .catch(err => adjLog('error', '서버 연결 실패: ' + err.message));
+}
+
+// ═══ KREAM 키워드 검색 ═══
+let kwResults = [];
+let kwTags = [];
+
+function kwAddTag() {
+  const input = document.getElementById('kw-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (kwTags.includes(val)) { input.value = ''; return; }
+  kwTags.push(val);
+  input.value = '';
+  kwRenderTags();
+}
+
+function kwRemoveTag(idx) {
+  kwTags.splice(idx, 1);
+  kwRenderTags();
+}
+
+function kwRenderTags() {
+  document.getElementById('kw-tags').innerHTML = kwTags.map((t, i) =>
+    `<span style="display:inline-flex; align-items:center; gap:4px; background:var(--accent-light); color:var(--accent); border-radius:20px; padding:4px 12px; font-size:13px; font-weight:600">
+      ${t}
+      <span onclick="kwRemoveTag(${i})" style="cursor:pointer; font-size:15px; line-height:1; margin-left:2px; color:var(--text2)">&times;</span>
+    </span>`
+  ).join('');
+}
+
+function kwSearch() {
+  if (kwTags.length === 0) { alert('키워드를 추가하세요'); return; }
+
+  const btn = document.getElementById('kw-search-btn');
+  btn.disabled = true; btn.textContent = '검색 중...';
+  kwResults = [];
+  kwRender();
+
+  let idx = 0;
+  function nextKeyword() {
+    if (idx >= kwTags.length) {
+      btn.disabled = false; btn.textContent = '검색';
+      // 중복 제거
+      const seen = new Set();
+      kwResults = kwResults.filter(p => {
+        if (seen.has(p.productId)) return false;
+        seen.add(p.productId);
+        return true;
+      });
+      kwRender();
+      document.getElementById('kw-status').textContent =
+        `${kwTags.length}개 키워드 → 총 ${kwResults.length}건 (중복 제거됨)`;
+      return;
+    }
+
+    const kw = kwTags[idx]; idx++;
+    document.getElementById('kw-status').textContent =
+      `[${idx}/${kwTags.length}] "${kw}" 검색 중...`;
+
+    fetch('/api/keyword-search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({keyword: kw, maxScroll: 3})
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.taskId) { nextKeyword(); return; }
+      pollTask(res.taskId, task => {
+        if (task.status === 'done' && task.result) {
+          const prods = (task.result.products || []).map(p => ({...p, keyword: kw}));
+          kwResults = kwResults.concat(prods);
+          kwRender();
+          document.getElementById('kw-status').textContent =
+            `[${idx}/${kwTags.length}] "${kw}" → ${prods.length}건 (누적 ${kwResults.length}건)`;
+        }
+        setTimeout(nextKeyword, 1000);
+      }, null);
+    })
+    .catch(() => setTimeout(nextKeyword, 500));
+  }
+
+  nextKeyword();
+}
+
+function kwRender() {
+  const div = document.getElementById('kw-result');
+  const tbody = document.getElementById('kw-tbody');
+  div.hidden = false;
+
+  if (kwResults.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-muted">결과 없음</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = kwResults.map((p, i) => `<tr>
+    <td><input type="checkbox" class="kw-cb" data-idx="${i}" data-pid="${p.productId}"></td>
+    <td><span style="background:var(--blue-light); color:var(--blue); border-radius:10px; padding:2px 8px; font-size:11px">${p.keyword || '-'}</span></td>
+    <td>${p.brand}</td>
+    <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${p.nameKr}">${p.nameKr}</td>
+    <td style="font-size:12px; color:var(--text2); font-family:monospace">${p.model || '<span style="color:var(--text3)">-</span>'}</td>
+    <td style="font-weight:600">${p.price ? p.price.toLocaleString()+'원' : '-'}</td>
+    <td style="font-size:12px">${p.trades ? p.trades.toLocaleString() : '-'}</td>
+    <td>${p.productId}</td>
+    <td style="white-space:nowrap">
+      <button class="btn" onclick="discSearch('${p.productId}')" style="font-size:11px; padding:3px 8px; margin-right:3px" title="가격 수집">🔍</button>
+      <button class="btn btn-accent" onclick="discGoBid('${p.productId}','${(p.model||'').replace(/'/g,'')}')" style="font-size:11px; padding:3px 8px" title="입찰하기">💰</button>
+    </td>
+  </tr>`).join('');
+}
+
+function kwBulkPrice() {
+  const checked = Array.from(document.querySelectorAll('.kw-cb:checked'));
+  if (checked.length === 0) { alert('상품을 선택하세요'); return; }
+  const pids = checked.map(c => c.dataset.pid);
+  document.getElementById('kw-status').textContent = `${pids.length}건 일괄 가격 수집 중...`;
+
+  let idx = 0;
+  function next() {
+    if (idx >= pids.length) {
+      document.getElementById('kw-status').textContent = `${pids.length}건 수집 완료`;
+      return;
+    }
+    const pid = pids[idx]; idx++;
+    document.getElementById('kw-status').textContent = `[${idx}/${pids.length}] #${pid} 수집 중...`;
+
+    fetch('/api/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({productId: pid})
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.taskId) { next(); return; }
+      pollTask(res.taskId, task => {
+        if (task.status === 'done' && task.result && task.result.kream) {
+          const k = task.result.kream;
+          // kwResults 업데이트
+          const item = kwResults.find(x => x.productId === pid);
+          if (item) {
+            item.instantBuy = k.instant_buy_price;
+            item.instantSell = k.instant_sell_price;
+            item.recentTrade = k.recent_trade_price || k.display_price;
+            item.sellBids = k.sell_bids;
+            item.buyBids = k.buy_bids;
+            item.sizePrices = k.size_prices || [];
+            item.priceCollected = true;
+          }
+          kwRenderUpdated();
+        }
+        setTimeout(next, 1000);
+      }, null);
+    })
+    .catch(() => setTimeout(next, 500));
+  }
+  next();
+}
+
+function kwRenderUpdated() {
+  kwResults.forEach((p, i) => {
+    if (!p.priceCollected) return;
+    const row = document.querySelector(`.kw-cb[data-idx="${i}"]`);
+    if (!row) return;
+    const tr = row.closest('tr');
+    if (!tr) return;
+    const cells = tr.querySelectorAll('td');
+    if (cells.length < 7) return;
+    // 표시가 컬럼 (idx=5)에 상세 가격 추가
+    cells[5].innerHTML = `
+      <div style="font-weight:600">${p.price ? p.price.toLocaleString()+'원' : '-'}</div>
+      <div style="font-size:11px; color:var(--accent)">구매 ${p.instantBuy ? p.instantBuy.toLocaleString() : '-'}</div>
+      <div style="font-size:11px; color:var(--danger)">판매 ${p.instantSell ? p.instantSell.toLocaleString() : '-'}</div>
+    `;
+    // 사이즈별 가격 (있으면 행 아래 펼치기)
+    if (p.sizePrices && p.sizePrices.length > 1) {
+      let existing = tr.nextElementSibling;
+      if (existing && existing.classList.contains('kw-size-row')) existing.remove();
+      const sizeRow = document.createElement('tr');
+      sizeRow.className = 'kw-size-row';
+      const sizeHtml = p.sizePrices.map(s =>
+        `<span style="display:inline-block; background:${s.buyNowPrice ? 'var(--accent-light)' : '#f5f5f5'}; border-radius:4px; padding:2px 6px; margin:1px; font-size:11px">${s.size} <strong>${s.buyNowPrice ? s.buyNowPrice.toLocaleString() : '-'}</strong></span>`
+      ).join('');
+      sizeRow.innerHTML = `<td colspan="9" style="padding:4px 8px 8px 40px; background:#fafafa; font-size:11px"><strong>사이즈별:</strong> ${sizeHtml}</td>`;
+      tr.after(sizeRow);
+    }
+  });
+}
+
+function kwDownloadExcel() {
+  if (kwResults.length === 0) { alert('검색 결과가 없습니다'); return; }
+  // POST로 데이터 보내서 엑셀 다운로드
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/api/keyword-search/download';
+  form.style.display = 'none';
+  // JSON을 hidden input으로
+  const input = document.createElement('input');
+  input.name = 'products';
+  input.value = JSON.stringify(kwResults);
+  form.appendChild(input);
+  // fetch로 blob 다운로드
+  fetch('/api/keyword-search/download', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({products: kwResults})
+  })
+  .then(r => r.blob())
+  .then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kream_search_result.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+// ═══ 상품 발굴 ═══
+let discData = null;
+let discTab = 'overseas';
+
+function discLoad() {
+  document.getElementById('disc-status').textContent = '로딩 중...';
+  fetch('/api/discovery').then(r => r.json()).then(data => {
+    if (data.error && !data.overseas_top100) {
+      document.getElementById('disc-status').textContent = '오류: ' + data.error;
+      return;
+    }
+    discData = data;
+    discRender();
+    const total = (data.overseas_top100||[]).length + (data.search_surge||[]).length;
+    document.getElementById('disc-status').textContent = `데이터 로드 완료 (해외직구 ${(data.overseas_top100||[]).length}건, 검색급등 ${(data.search_surge||[]).length}건, 브랜드 ${(data.brand_top100||[]).length}건)`;
+  }).catch(err => {
+    document.getElementById('disc-status').textContent = '서버 연결 실패';
+  });
+}
+
+function discUpload(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  document.getElementById('disc-status').textContent = '업로드 중...';
+  fetch('/api/discovery/upload', {method: 'POST', body: fd})
+  .then(r => r.json())
+  .then(res => {
+    if (res.ok) { document.getElementById('disc-status').textContent = '업로드 완료!'; discLoad(); }
+    else document.getElementById('disc-status').textContent = '오류: ' + res.error;
+  });
+}
+
+function discShowTab(tab) {
+  discTab = tab;
+  ['overseas','surge','brand'].forEach(t => {
+    const btn = document.getElementById('disc-tab-' + t);
+    btn.style.borderBottom = t === tab ? '2px solid var(--accent)' : 'none';
+    btn.style.fontWeight = t === tab ? '600' : '400';
+    btn.style.color = t === tab ? 'var(--text)' : 'var(--text2)';
+  });
+  discRender();
+}
+
+function discRender() {
+  if (!discData) return;
+  const catFilter = document.getElementById('disc-cat-filter').value.toLowerCase();
+  const search = document.getElementById('disc-search').value.toLowerCase();
+  const thead = document.getElementById('disc-thead');
+  const tbody = document.getElementById('disc-tbody');
+
+  let items = [];
+  let headers = '';
+
+  if (discTab === 'overseas') {
+    items = discData.overseas_top100 || [];
+    headers = '<tr><th>순위</th><th>브랜드</th><th>상품명</th><th>모델번호</th><th>카테고리</th><th>상품ID</th><th>액션</th></tr>';
+  } else if (discTab === 'surge') {
+    items = discData.search_surge || [];
+    headers = '<tr><th>급등률</th><th>브랜드</th><th>상품명</th><th>모델번호</th><th>카테고리</th><th>상품ID</th><th>액션</th></tr>';
+  } else {
+    items = discData.brand_top100 || [];
+    headers = '<tr><th>브랜드</th><th>상품명</th><th>상품ID</th><th>액션</th></tr>';
+  }
+  thead.innerHTML = headers;
+
+  // 필터
+  let filtered = items;
+  if (catFilter) {
+    filtered = filtered.filter(x => (x.category || '').toLowerCase().includes(catFilter));
+  }
+  if (search) {
+    filtered = filtered.filter(x =>
+      (x.brand || '').toLowerCase().includes(search) ||
+      (x.name || '').toLowerCase().includes(search) ||
+      (x.model || '').toLowerCase().includes(search) ||
+      (x.productId || '').includes(search)
+    );
+  }
+
+  // 정렬
+  if (discTab === 'overseas') filtered.sort((a,b) => (a.rank||999) - (b.rank||999));
+  else if (discTab === 'surge') filtered.sort((a,b) => (b.surge||0) - (a.surge||0));
+
+  // 최대 200건
+  const show = filtered.slice(0, 200);
+
+  let html = '';
+  show.forEach(item => {
+    const pid = item.productId;
+    const actionBtns = `
+      <button class="btn" onclick="discSearch('${pid}')" style="font-size:11px; padding:3px 8px; margin-right:4px" title="가격 조회">🔍 가격</button>
+      <button class="btn btn-accent" onclick="discGoBid('${pid}','${(item.model||'').replace(/'/g,'')}')" style="font-size:11px; padding:3px 8px" title="입찰하기">💰 입찰</button>
+    `;
+
+    if (discTab === 'overseas') {
+      html += `<tr>
+        <td style="font-weight:700; color:var(--accent)">${item.rank || '-'}</td>
+        <td>${item.brand}</td>
+        <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${item.name}</td>
+        <td style="font-size:12px; color:var(--text2)">${item.model || '-'}</td>
+        <td style="font-size:12px">${item.category || '-'}</td>
+        <td>${pid}</td>
+        <td style="white-space:nowrap">${actionBtns}</td>
+      </tr>`;
+    } else if (discTab === 'surge') {
+      const surgeVal = item.surge || 0;
+      const surgeColor = surgeVal >= 200 ? 'var(--danger)' : surgeVal >= 100 ? 'var(--warning)' : 'var(--text)';
+      html += `<tr>
+        <td style="font-weight:700; color:${surgeColor}">${surgeVal}%</td>
+        <td>${item.brand}</td>
+        <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${item.name}</td>
+        <td style="font-size:12px; color:var(--text2)">${item.model || '-'}</td>
+        <td style="font-size:12px">${item.category || '-'}</td>
+        <td>${pid}</td>
+        <td style="white-space:nowrap">${actionBtns}</td>
+      </tr>`;
+    } else {
+      html += `<tr>
+        <td>${item.brand}</td>
+        <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${item.name}</td>
+        <td>${pid}</td>
+        <td style="white-space:nowrap">${actionBtns}</td>
+      </tr>`;
+    }
+  });
+
+  tbody.innerHTML = html || '<tr><td colspan="8" class="text-muted">결과 없음</td></tr>';
+  document.getElementById('disc-status').textContent = `${filtered.length}건 중 ${show.length}건 표시`;
+}
+
+function discSearch(pid) {
+  // 가격 조회 → search-result에 표시
+  const resultBox = document.getElementById('search-result');
+  document.getElementById('reg-product-id').value = pid;
+
+  // 탭 전환 → 상품 등록 탭
+  document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-register').classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-title').textContent = '상품 등록 / 입찰';
+  setStep(1);
+
+  // 검색 실행
+  resultBox.style.display = 'block';
+  resultBox.innerHTML = '<span style="color:var(--text2)">🔍 상품 #' + pid + ' 가격 수집 중...</span>';
+
+  fetch('/api/search', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({productId: pid})
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.taskId) pollTask(res.taskId, onSearchResult, resultBox);
+  });
+}
+
+function discGoBid(pid, model) {
+  document.getElementById('reg-product-id').value = pid;
+  document.getElementById('reg-model').value = model;
+
+  document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-register').classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-title').textContent = '상품 등록 / 입찰';
+  setStep(1);
+
+  // 자동 검색
+  searchProduct();
+}
+
+// ═══ 내 입찰 현황 ═══
+let myBidsLocal = { bids: [], lastSync: null };
+let myBidsMap = {};  // key: `${productId}_${size}` → bid entry
+
+function myBidsRebuildMap() {
+  myBidsMap = {};
+  (myBidsLocal.bids || []).forEach(b => {
+    const key = `${b.productId}_${b.size}`;
+    myBidsMap[key] = b;
+  });
+}
+
+function loadMyBidsLocal() {
+  fetch('/api/my-bids/local').then(r => r.json()).then(data => {
+    myBidsLocal = data;
+    myBidsRebuildMap();
+    updateSyncStatus();
+  }).catch(() => {});
+}
+
+function updateSyncStatus() {
+  const el = document.getElementById('sync-bids-status');
+  if (!el) return;
+  if (myBidsLocal.lastSync) {
+    el.textContent = `마지막 동기화: ${myBidsLocal.lastSync} (${(myBidsLocal.bids||[]).length}건)`;
+    el.style.color = 'var(--accent)';
+  } else {
+    el.textContent = (myBidsLocal.bids||[]).length > 0
+      ? `로컬 기록 ${myBidsLocal.bids.length}건`
+      : '동기화 안 됨';
+    el.style.color = 'var(--text3)';
+  }
+}
+
+function syncMyBids() {
+  const btn = document.getElementById('sync-bids-btn');
+  const status = document.getElementById('sync-bids-status');
+  btn.disabled = true;
+  btn.textContent = '동기화 중...';
+  status.textContent = '판매자센터 접속 중... (30~60초 소요)';
+  status.style.color = 'var(--text2)';
+
+  fetch('/api/my-bids/sync', { method: 'POST' })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.taskId) {
+      btn.disabled = false; btn.textContent = '내 입찰 현황 동기화 🔄';
+      status.textContent = '오류 발생'; status.style.color = 'var(--danger)';
+      return;
+    }
+    const poll = setInterval(() => {
+      fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+        if (task.logs && task.logs.length > 0)
+          status.textContent = task.logs[task.logs.length - 1].msg;
+        if (task.status === 'done' || task.status === 'error') {
+          clearInterval(poll);
+          btn.disabled = false; btn.textContent = '내 입찰 현황 동기화 🔄';
+          if (task.status === 'done' && task.result) {
+            myBidsLocal = task.result;
+            myBidsRebuildMap();
+            updateSyncStatus();
+            queueBuildResults();
+          } else {
+            status.textContent = '동기화 실패'; status.style.color = 'var(--danger)';
+          }
+        }
+      }).catch(() => {
+        clearInterval(poll);
+        btn.disabled = false; btn.textContent = '내 입찰 현황 동기화 🔄';
+      });
+    }, 2000);
+  })
+  .catch(() => {
+    btn.disabled = false; btn.textContent = '내 입찰 현황 동기화 🔄';
+    status.textContent = '서버 연결 실패'; status.style.color = 'var(--danger)';
+  });
+}
+
+// ═══ 상품 큐 + 일괄 실행 ═══
+
+function queueDownloadExcel() {
+  if (queueData.length === 0) { alert('큐가 비어있습니다.'); return; }
+  fetch('/api/queue/download-excel')
+    .then(res => {
+      if (!res.ok) throw new Error('다운로드 실패');
+      return res.blob();
+    })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'queue_' + new Date().toISOString().slice(0,10) + '.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(err => alert(err.message));
+}
+
+function queueDownloadTemplate() {
+  fetch('/api/queue/template')
+    .then(res => {
+      if (!res.ok) throw new Error('템플릿 다운로드 실패');
+      return res.blob();
+    })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'kream_queue_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(err => alert(err.message));
+}
+
+let queueData = [];
+let qSizeRows = [];
+let qModalItemId = null;
+
+const KR_SIZES = ['220','225','230','235','240','245','250','255','260','265','270','275','280','285','290','295','300'];
+
+// ── 사이즈 입력 여부에 따라 카테고리·CNY 표시 자동 전환 ──
+function qUpdateShoeMode() {
+  const hasSizes = qSizeRows.some(r => r.size && r.size.trim() !== '');
+  if (hasSizes) {
+    document.getElementById('q-category').value = '신발';
+    document.getElementById('q-cny-wrap').style.display = 'none';
+  } else {
+    document.getElementById('q-cny-wrap').style.display = '';
+    // 카테고리는 사용자 선택 유지 (강제 변경 안 함)
+  }
+}
+
+function qToggleSamePrice() {
+  const same = document.getElementById('q-same-price').checked;
+  document.getElementById('q-same-price-area').style.display = same ? 'block' : 'none';
+  document.getElementById('q-sizes-table-area').style.display = same ? 'none' : 'block';
+}
+
+function qAddSizeRow(sz, cny) {
+  const id = Date.now() + Math.random();
+  qSizeRows.push({ id, size: sz || '', cny: cny || '' });
+  qRenderSizeRows();
+}
+
+function qRemoveSizeRow(id) {
+  qSizeRows = qSizeRows.filter(r => r.id !== id);
+  qRenderSizeRows();
+}
+
+function qRenderSizeRows() {
+  const tbody = document.getElementById('q-sizes-tbody');
+  tbody.innerHTML = qSizeRows.map(r =>
+    `<tr>
+      <td><input type="text" class="form-input" value="${r.size}" data-rid="${r.id}" data-field="size" style="width:70px; height:28px; font-size:12px" placeholder="38" onchange="qSizeRowChange(this)"></td>
+      <td><input type="number" class="form-input" value="${r.cny}" data-rid="${r.id}" data-field="cny" style="width:90px; height:28px; font-size:12px" placeholder="314" onchange="qSizeRowChange(this)"></td>
+      <td><button onclick="qRemoveSizeRow(${r.id})" style="background:none; border:none; cursor:pointer; font-size:14px; color:var(--danger)">&#x1f5d1;</button></td>
+    </tr>`
+  ).join('');
+}
+
+function qSizeRowChange(el) {
+  const rid = parseFloat(el.dataset.rid);
+  const field = el.dataset.field;
+  const row = qSizeRows.find(r => r.id === rid);
+  if (row) row[field] = field === 'cny' ? parseFloat(el.value) || '' : el.value;
+  if (field === 'size') qUpdateShoeMode();
+}
+
+function qBuildSizesFromInput() {
+  if (document.getElementById('q-same-price').checked) {
+    const cny = parseFloat(document.getElementById('q-same-cny').value);
+    const from = document.getElementById('q-same-from').value.trim();
+    const to = document.getElementById('q-same-to').value.trim();
+    if (!cny || !from || !to) return null;
+    const pool = KR_SIZES;
+    const fi = pool.indexOf(from), ti = pool.indexOf(to);
+    if (fi < 0 || ti < 0 || fi > ti) return null;
+    return pool.slice(fi, ti + 1).map(s => ({ size: s, cny_price: cny }));
+  }
+  // 개별 입력
+  // DOM에서 최신 값 읽기
+  document.querySelectorAll('#q-sizes-tbody input').forEach(el => {
+    const rid = parseFloat(el.dataset.rid);
+    const field = el.dataset.field;
+    const row = qSizeRows.find(r => r.id === rid);
+    if (row) row[field] = field === 'cny' ? parseFloat(el.value) || '' : el.value;
+  });
+  const valid = qSizeRows.filter(r => r.size && r.cny);
+  if (valid.length === 0) return null;
+  return valid.map(r => ({ size: String(r.size), cny_price: parseFloat(r.cny) }));
+}
+
+// ── 큐 추가 ──
+function queueAdd() {
+  const model = document.getElementById('q-model').value.trim();
+  if (!model) { alert('모델번호를 입력하세요'); document.getElementById('q-model').focus(); return; }
+
+  // DOM에서 최신 사이즈 값 읽기
+  document.querySelectorAll('#q-sizes-tbody input').forEach(el => {
+    const rid = parseFloat(el.dataset.rid);
+    const field = el.dataset.field;
+    const row = qSizeRows.find(r => r.id === rid);
+    if (row) row[field] = field === 'cny' ? parseFloat(el.value) || '' : el.value;
+  });
+
+  const isShoeMode = qSizeRows.some(r => r.size && r.size.trim() !== '');
+
+  const payload = {
+    model,
+    category: document.getElementById('q-category').value,
+    shipping: parseInt(document.getElementById('q-ship').value) || 8000,
+    quantity: parseInt(document.getElementById('q-qty').value) || 1,
+    bid_days: parseInt(document.getElementById('q-bid-days').value) || 30,
+  };
+
+  if (isShoeMode) {
+    const sizes = qBuildSizesFromInput();
+    if (!sizes || sizes.length === 0) { alert('사이즈와 가격을 입력하세요'); return; }
+    payload.sizes = sizes;
+    payload.sizeSystem = 'KR';
+    payload.category = '신발';
+  } else {
+    const cny = parseFloat(document.getElementById('q-cny').value);
+    if (!cny || cny <= 0) { alert('중국 구매가(CNY)를 입력하세요'); return; }
+    payload.cny = cny;
+  }
+
+  fetch('/api/queue/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.ok) {
+      queueData.push(res.item);
+      queueRender();
+      // 폼 초기화
+      document.getElementById('q-model').value = '';
+      document.getElementById('q-cny').value = '';
+      document.getElementById('q-category').value = '';
+      document.getElementById('q-cny-wrap').style.display = '';
+      document.getElementById('q-same-price').checked = false;
+      document.getElementById('q-same-price-area').style.display = 'none';
+      document.getElementById('q-sizes-table-area').style.display = 'block';
+      qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
+      qRenderSizeRows();
+      document.getElementById('q-model').focus();
+      triggerAutoExecIfEnabled();
+    } else {
+      alert(res.error || '추가 실패');
+    }
+  });
+}
+
+// ── 큐 테이블 렌더링 ──
+function queueRender() {
+  const tbody = document.getElementById('q-tbody');
+  document.getElementById('q-count').textContent = queueData.length;
+
+  if (queueData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-muted">큐가 비어있습니다. 위에서 상품을 추가하세요.</td></tr>';
+    return;
+  }
+
+  const statusColors = {
+    '대기': 'var(--text3)', '검색 중': 'var(--blue)', '계산 중': 'var(--warning)',
+    '완료': 'var(--accent)', '실패': 'var(--danger)'
+  };
+
+  let html = '';
+  queueData.forEach((item, i) => {
+    const isMisc = item.category === '미분류';
+    let catLabel;
+    if (item.status === '완료' || item.status === '대기') {
+      // 인라인 드롭다운
+      catLabel = `<select class="form-select" style="height:26px;font-size:11px;width:95px;${isMisc?'border-color:var(--danger);color:var(--danger)':''}" onchange="queueChangeCategory(${item.id},this.value)">
+        <option value="" ${!item.category?'selected':''}>자동 판별</option>
+        <option value="가방" ${item.category==='가방'?'selected':''}>가방 (8%)</option>
+        <option value="신발" ${item.category==='신발'?'selected':''}>신발 (13%)</option>
+        <option value="의류" ${item.category==='의류'?'selected':''}>의류 (13%)</option>
+        <option value="미분류" ${isMisc?'selected':''} style="color:var(--danger)">미분류</option>
+      </select>${item.categoryAuto ? '<span style="font-size:9px;color:var(--text3);margin-left:2px">자동</span>' : ''}`;
+    } else {
+      catLabel = item.category || '<span class="text-muted">자동</span>';
+    }
+    const sc = statusColors[item.status] || 'var(--text3)';
+
+    // 사이즈/가격 표시
+    let sizeLabel, cnyLabel;
+    if (item.sizes && item.sizes.length > 0) {
+      const szList = item.sizes.map(s => s.size);
+      sizeLabel = `${szList[0]}~${szList[szList.length-1]} (${szList.length}사이즈)`;
+      const prices = item.sizes.map(s => s.cny_price);
+      const mn = Math.min(...prices), mx = Math.max(...prices);
+      cnyLabel = mn === mx ? `¥${mn}` : `¥${mn}~${mx}`;
+    } else {
+      sizeLabel = item.size || '<span class="text-muted">ONE SIZE</span>';
+      cnyLabel = item.cny != null ? `¥${item.cny}` : '-';
+    }
+
+    const modelLink = item.result
+      ? `<a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="상세 보기">${item.model}</a>`
+      : `<strong>${item.model}</strong>`;
+
+    html += `<tr>
+      <td>${i + 1}</td>
+      <td>${modelLink}</td>
+      <td>${catLabel}</td>
+      <td>${sizeLabel}</td>
+      <td>${cnyLabel}</td>
+      <td>${item.shipping.toLocaleString()}</td>
+      <td style="cursor:pointer" onclick="qEditQty(${item.id}, this)" title="클릭하여 수정"><span style="border-bottom:1px dotted var(--text3)">${item.quantity}</span></td>
+      <td><select class="form-select" style="height:26px;font-size:11px;width:68px" onchange="queueChangeBidDays(${item.id},this.value)">
+        <option value="30" ${(item.bid_days||30)==30?'selected':''}>30일</option>
+        <option value="60" ${(item.bid_days||30)==60?'selected':''}>60일</option>
+        <option value="90" ${(item.bid_days||30)==90?'selected':''}>90일</option>
+      </select></td>
+      <td><span style="color:${sc}; font-weight:600">${item.status}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="queueCopy(${item.id})" style="padding:2px 8px; font-size:11px; margin-right:3px" title="동일 품번으로 새 항목 추가">복사</button>
+        <button class="btn btn-outline btn-sm" onclick="queueDelete(${item.id})" style="padding:2px 8px; font-size:11px">삭제</button>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function queueChangeCategory(id, cat) {
+  fetch('/api/queue/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: cat, categoryAuto: false })
+  }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      const item = queueData.find(q => q.id === id);
+      if (item) { item.category = cat; item.categoryAuto = false; }
+    }
+  });
+}
+
+function queueChangeBidDays(id, days) {
+  const item = queueData.find(q => q.id === id);
+  if (item) item.bid_days = parseInt(days);
+  fetch('/api/queue/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bid_days: parseInt(days) })
+  });
+}
+
+// ── 큐 수량 인라인 편집 ──
+function qEditQty(id, td) {
+  const item = queueData.find(q => q.id === id);
+  if (!item) return;
+  const prev = item.quantity;
+  td.innerHTML = `<input type="number" min="1" value="${prev}"
+    style="width:48px;height:24px;font-size:12px;text-align:center;border:1px solid var(--accent);border-radius:4px;padding:0 4px"
+    onclick="event.stopPropagation()"
+    onblur="qSaveQty(${id}, this)"
+    onkeydown="if(event.key==='Enter')this.blur(); if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}">`;
+  const input = td.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+function qSaveQty(id, input) {
+  if (input.dataset.cancel) { queueRender(); return; }
+  const qty = Math.max(1, parseInt(input.value) || 1);
+  const item = queueData.find(q => q.id === id);
+  if (!item || qty === item.quantity) { queueRender(); return; }
+  fetch('/api/queue/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity: qty })
+  }).then(r => r.json()).then(res => {
+    if (res.ok) item.quantity = qty;
+    queueRender();
+  }).catch(() => queueRender());
+}
+
+// ── 결과 테이블 수량 저장 ──
+function qSaveResultQty(id, val) {
+  const qty = Math.max(1, parseInt(val) || 1);
+  const item = queueData.find(q => q.id === id);
+  if (!item) return;
+  item.quantity = qty;
+  fetch('/api/queue/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity: qty })
+  });
+}
+
+function queueDelete(id) {
+  fetch('/api/queue/' + id, { method: 'DELETE' }).then(r => r.json()).then(res => {
+    if (res.ok) { queueData = queueData.filter(q => q.id !== id); queueRender(); }
+  });
+}
+
+function queueCopy(id) {
+  const src = queueData.find(q => q.id === id);
+  if (!src) return;
+
+  // 복사할 데이터 구성 (같은 품번·원가·카테고리, 상태는 대기 초기화)
+  const payload = {
+    model: src.model,
+    cny: src.cny,
+    category: src.category || '',
+    size: src.size || '',
+    shipping: src.shipping,
+    quantity: src.quantity,
+    bid_days: src.bid_days || 30,
+    sizes: src.sizes ? JSON.parse(JSON.stringify(src.sizes)) : [],
+    sizeSystem: src.sizeSystem || '',
+  };
+
+  // 결과가 있는 항목 복사: KREAM 재검색 없이 결과 테이블에 바로 추가
+  const hasResult = src.result && src.status === '완료';
+  if (hasResult) {
+    payload.status = '완료';
+    payload.result = JSON.parse(JSON.stringify(src.result));
+    payload.gosi = src.gosi ? JSON.parse(JSON.stringify(src.gosi)) : null;
+  }
+
+  fetch('/api/queue/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res.ok) {
+        queueData.push(res.item);
+        queueRender();
+        if (hasResult) {
+          // 결과 테이블에 즉시 반영
+          queueBuildResults();
+          document.getElementById('q-result-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          document.getElementById('q-tbody').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        triggerAutoExecIfEnabled();
+      } else {
+        alert('복사 실패: ' + (res.error || ''));
+      }
+    });
+}
+
+function queueClear() {
+  if (queueData.length === 0) return;
+  if (!confirm(`${queueData.length}건의 큐를 모두 삭제하시겠습니까?`)) return;
+  fetch('/api/queue/clear', { method: 'DELETE' }).then(r => r.json()).then(res => {
+    if (res.ok) { queueData = []; queueRender(); document.getElementById('q-result-card').style.display = 'none'; }
+  });
+}
+
+// ── 일괄 실행 ──
+function queueExecute() {
+  const pending = queueData.filter(q => q.status === '대기' || q.status === '실패');
+  if (pending.length === 0) { alert('실행할 대기 항목이 없습니다'); return; }
+
+  // 미분류 경고 (카테고리를 사용자가 직접 입력한 경우는 무관, 비어있는 것만)
+  // 일괄 실행 후 자동 판별 실패 시 "미분류"가 되므로, 여기서는 pass
+
+  const btn = document.getElementById('q-exec-btn');
+  btn.disabled = true; btn.textContent = '실행 중...';
+
+  const logArea = document.getElementById('q-log');
+  logArea.style.display = 'block';
+  logArea.innerHTML = '<div class="text-muted">일괄 실행 시작...</div>';
+
+  fetch('/api/queue/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.taskId) { btn.disabled = false; btn.textContent = '일괄 실행 (KREAM 검색 + 마진 계산)'; alert(res.error || 'API 오류'); return; }
+
+    const poll = setInterval(() => {
+      fetch('/api/queue/list').then(r => r.json()).then(qr => { queueData = qr.queue || []; queueRender(); });
+      fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+        if (task.logs) {
+          logArea.innerHTML = task.logs.map(l => {
+            const c = l.level === 'error' ? 'var(--danger)' : l.level === 'success' ? 'var(--accent)' : 'var(--text2)';
+            return `<div style="color:${c}"><span style="color:var(--text3);font-size:11px">${l.time}</span> ${l.msg}</div>`;
+          }).join('');
+          logArea.scrollTop = logArea.scrollHeight;
+        }
+        if (task.status === 'done' || task.status === 'error') {
+          clearInterval(poll); btn.disabled = false; btn.textContent = '일괄 실행 (KREAM 검색 + 마진 계산)';
+          fetch('/api/queue/list').then(r => r.json()).then(qr => { queueData = qr.queue || []; queueRender(); queueBuildResults(); });
+          loadBatchHistory();
+        }
+      }).catch(() => { clearInterval(poll); btn.disabled = false; btn.textContent = '일괄 실행 (KREAM 검색 + 마진 계산)'; });
+    }, 2000);
+  });
+}
+
+// ── 결과 테이블 ──
+// 입찰 예정가 저장소: { itemId: price } 또는 { itemId_size: price }
+let bidPrices = {};
+
+function roundUp1000(n) { return Math.ceil(n / 1000) * 1000; }
+
+function getBidPrice(item, sz) {
+  const defMargin = document.getElementById('q-default-margin').value;
+  const selMg = item.selectedMargin || defMargin;
+  if (sz) {
+    const key = `${item.id}_${sz.size}`;
+    if (bidPrices[key] != null) return bidPrices[key];
+    const mg = (sz.margins || {})[`margin_${selMg}`];
+    return mg ? roundUp1000(mg.sell_price) : 0;
+  }
+  if (bidPrices[item.id] != null) return bidPrices[item.id];
+  const r = item.result;
+  const mg = (r.margins || {})[`margin_${selMg}`];
+  return mg ? roundUp1000(mg.sell_price) : 0;
+}
+
+function calcProfitForPrice(sellPrice, totalCost) {
+  const s = calcSettlement(sellPrice);
+  return { profit: s.settlement - totalCost, marginRate: totalCost > 0 ? Math.round((s.settlement - totalCost) / totalCost * 1000) / 10 : 0, settlement: s.settlement, totalFee: s.totalFee };
+}
+
+function queueBuildResults() {
+  const completed = queueData.filter(q => q.status === '완료' && q.result);
+  if (completed.length === 0) return;
+
+  document.getElementById('q-result-card').style.display = 'block';
+  const tbody = document.getElementById('q-result-tbody');
+  const defMargin = document.getElementById('q-default-margin').value;
+
+  let html = '';
+  completed.forEach(item => {
+    const r = item.result;
+    const hasSizes = r.sizeMargins && r.sizeMargins.length > 0;
+    const kp = r.instantBuyPrice || 0;
+    const gosiLabel = item.gosi ? '<span style="color:var(--accent)">자동채움</span>' : '<span class="text-muted">미확인</span>';
+    const isMisc = item.category === '미분류';
+    const catDd = `<select class="form-select" style="height:24px;font-size:11px;width:90px;${isMisc?'border-color:var(--danger);color:var(--danger)':''}" onchange="queueChangeCategory(${item.id},this.value);queueBuildResults()">
+      <option value="가방" ${item.category==='가방'?'selected':''}>가방</option>
+      <option value="신발" ${item.category==='신발'?'selected':''}>신발</option>
+      <option value="의류" ${item.category==='의류'?'selected':''}>의류</option>
+      <option value="미분류" ${isMisc?'selected':''} style="color:var(--danger)">미분류</option>
+    </select>`;
+
+    if (!hasSizes) {
+      const bp = getBidPrice(item);
+      const pi = calcProfitForPrice(bp, r.totalCost || 0);
+      const profitOk = pi.profit > 0;
+      const profitColor = profitOk ? 'var(--accent)' : 'var(--danger)';
+      const myBidKey0 = `${r.productId}_${item.size || 'ONE SIZE'}`;
+      const myBidEntry0 = myBidsMap[myBidKey0];
+      const myBidCell0 = myBidEntry0
+        ? `<span style="color:var(--blue);font-weight:700">${myBidEntry0.price.toLocaleString()}원</span>`
+        : '<span class="text-muted">-</span>';
+
+      html += `<tr>
+        <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitOk ? 'checked' : ''}></td>
+        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a></td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
+        <td>${catDd}</td>
+        <td style="font-size:12px">${(r.totalCost||0).toLocaleString()}</td>
+        <td style="font-size:12px">${kp ? kp.toLocaleString() : '-'}</td>
+        <td style="font-size:12px">${myBidCell0}</td>
+        <td style="background:var(--accent-light)">
+          <input type="number" class="form-input" value="${bp}" step="1000"
+            style="width:80px;height:26px;font-size:12px;font-weight:700;text-align:right"
+            onchange="qSetBidPrice(${item.id},null,this.value)">
+        </td>
+        <td>
+          <input type="number" min="1" value="${item.quantity||1}"
+            style="width:48px;height:26px;font-size:12px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:0 4px"
+            onchange="qSaveResultQty(${item.id}, this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </td>
+        <td style="color:${profitColor};font-weight:600;font-size:12px">${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)</td>
+        <td style="font-size:11px">${gosiLabel}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" onclick="qShowDetail(${item.id})" style="padding:1px 5px;font-size:11px" title="상세 분석">&#x1f4ca;</button>
+          <button class="btn btn-outline btn-sm" onclick="queueCopy(${item.id})" style="padding:1px 5px;font-size:11px;margin-left:2px" title="동일 품번으로 새 항목 추가">복사</button>
+        </td>
+      </tr>`;
+    } else {
+      // 신발 헤더
+      const szCount = r.sizeMargins.length;
+      let profitSizes = 0;
+      r.sizeMargins.forEach(sz => { if (calcProfitForPrice(getBidPrice(item, sz), sz.totalCost).profit > 0) profitSizes++; });
+
+      html += `<tr style="background:var(--bg)">
+        <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitSizes > 0 ? 'checked' : ''}></td>
+        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a></td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
+        <td>${catDd}</td>
+        <td colspan="4" style="font-size:12px;color:var(--text2)">${szCount}사이즈 (마진OK: ${profitSizes})
+          <button onclick="qToggleSizes(${item.id})" class="btn btn-outline btn-sm" style="padding:1px 6px;font-size:10px;margin-left:4px" id="q-sz-toggle-${item.id}">펼치기</button></td>
+        <td>
+          <input type="number" min="1" value="${item.quantity||1}"
+            style="width:48px;height:26px;font-size:12px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:0 4px"
+            onchange="qSaveResultQty(${item.id}, this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </td>
+        <td style="font-size:11px">${gosiLabel}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" onclick="qShowDetail(${item.id})" style="padding:1px 5px;font-size:11px">&#x1f4ca;</button>
+          <button class="btn btn-outline btn-sm" onclick="queueCopy(${item.id})" style="padding:1px 5px;font-size:11px;margin-left:2px" title="동일 품번으로 새 항목 추가">복사</button>
+        </td>
+      </tr>`;
+      // 사이즈별 행
+      r.sizeMargins.forEach(sz => {
+        const bp = getBidPrice(item, sz);
+        const pi = calcProfitForPrice(bp, sz.totalCost);
+        const ok = pi.profit > 0;
+        const pc = ok ? 'var(--accent)' : 'var(--danger)';
+        const myBidKeySz = `${r.productId}_${sz.size}`;
+        const myBidEntrySz = myBidsMap[myBidKeySz];
+        const myBidCellSz = myBidEntrySz
+          ? `<span style="color:var(--blue);font-weight:700">${myBidEntrySz.price.toLocaleString()}원</span>`
+          : '<span class="text-muted">-</span>';
+        html += `<tr class="q-sz-row-${item.id}" style="display:none;font-size:12px">
+          <td><input type="checkbox" class="q-sz-chk" data-id="${item.id}" data-size="${sz.size}" ${ok ? 'checked' : ''}></td>
+          <td style="padding-left:24px;color:var(--text2)">${sz.size}</td>
+          <td></td><td></td>
+          <td>${sz.totalCost.toLocaleString()}</td>
+          <td>${kp ? kp.toLocaleString() : '-'}</td>
+          <td style="font-size:11px">${myBidCellSz}</td>
+          <td style="background:var(--accent-light)">
+            <input type="number" class="form-input" value="${bp}" step="1000"
+              style="width:76px;height:24px;font-size:11px;font-weight:700;text-align:right"
+              onchange="qSetBidPrice(${item.id},'${sz.size}',this.value)">
+          </td>
+          <td></td>
+          <td style="color:${pc};font-weight:600">${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)</td>
+          <td></td><td></td>
+        </tr>`;
+      });
+    }
+  });
+  tbody.innerHTML = html;
+
+  const failed = queueData.filter(q => q.status === '실패').length;
+  const unclassified = completed.filter(q => q.category === '미분류').length;
+  let summary = `완료 ${completed.length}건 | 실패 ${failed}건`;
+  if (unclassified > 0) summary += ` | <span style="color:var(--danger);font-weight:600">미분류 ${unclassified}건</span>`;
+  document.getElementById('q-result-summary').innerHTML = summary;
+}
+
+function qSetBidPrice(id, size, val) {
+  const price = parseInt(val) || 0;
+  const key = size ? `${id}_${size}` : id;
+  if (price <= 0) {
+    delete bidPrices[key]; // 0 또는 미입력 시 자동 계산으로 복귀
+  } else {
+    bidPrices[key] = price;
+  }
+  queueBuildResults(); // 마진 실시간 재계산
+}
+
+function qToggleSizes(id) {
+  const rows = document.querySelectorAll(`.q-sz-row-${id}`);
+  const btn = document.getElementById(`q-sz-toggle-${id}`);
+  const show = rows[0] && rows[0].style.display === 'none';
+  rows.forEach(r => r.style.display = show ? '' : 'none');
+  if (btn) btn.textContent = show ? '접기' : '펼치기';
+}
+
+function queueToggleAll(master) {
+  document.querySelectorAll('.q-res-chk, .q-sz-chk').forEach(c => c.checked = master.checked);
+}
+
+// ── 📊 상세 분석 패널 ──
+function _bidGroupHtml(bids, color, sortAsc) {
+  if (!bids || bids.length === 0) return '<span class="text-muted">데이터 없음 (로그인 필요)</span>';
+  const g = {};
+  bids.forEach(b => { g[b.price] = (g[b.price]||0) + (b.quantity||1); });
+  return Object.entries(g).sort((a,b) => sortAsc ? a[0]-b[0] : b[0]-a[0])
+    .map(([p,c]) => `<span style="color:${color}">${parseInt(p).toLocaleString()}</span>(${c})`).join(' / ');
+}
+
+function _getDeliveryTarget(sdp, sizeFilter) {
+  if (!sdp || sdp.length === 0) return null;
+  return sizeFilter ? sdp.find(s => s.size === sizeFilter) : (sdp.length === 1 ? sdp[0] : sdp.find(s => s.size === 'ONE SIZE') || sdp[0]);
+}
+
+function _deliveryOneLine(sdp, sizeFilter) {
+  const t = _getDeliveryTarget(sdp, sizeFilter);
+  if (!t) return '';
+  const parts = [];
+  if (t.sellFast != null) parts.push(`<span style="color:var(--warning)">빠른</span> ${t.sellFast.toLocaleString()}`);
+  if (t.sellNormal != null) parts.push(`<span style="color:var(--text2)">일반</span> ${t.sellNormal.toLocaleString()}`);
+  if (t.sellOverseas != null) parts.push(`<span style="color:var(--blue)">해외</span> ${t.sellOverseas.toLocaleString()}`);
+  if (parts.length === 0) return '';
+  return `<div style="margin-top:4px;padding:4px 8px;background:#f0f7ff;border-radius:4px;font-size:11px"><strong>배송별:</strong> ${parts.join(' <span style="color:var(--border)">|</span> ')}</div>`;
+}
+
+function _simTable(tc, instantBuy, currentBid, itemId, sizeKey) {
+  const prices = [];
+  const base = Math.floor(tc / 1000) * 1000;
+  for (let p = base - 5000; p <= base + 40000; p += 5000) { if (p > 0) prices.push(p); }
+  if (instantBuy && !prices.includes(instantBuy)) prices.push(instantBuy);
+  if (currentBid && !prices.includes(currentBid)) prices.push(currentBid);
+  prices.sort((a,b) => a - b);
+
+  let h = `<table style="font-size:12px;width:100%"><thead><tr><th>판매가</th><th>수수료</th><th>정산금</th><th>순이익</th><th>마진율</th><th></th></tr></thead><tbody>`;
+  prices.forEach(sp => {
+    const pi = calcProfitForPrice(sp, tc);
+    const isK = sp === instantBuy, isC = sp === currentBid;
+    let rs, label;
+    if (isC && isK) {
+      rs = 'background:linear-gradient(90deg,var(--accent-light),#fff8e1);font-weight:700;border-left:3px solid var(--warning)';
+      label = ' &#8592; <span style="color:var(--accent)">현재 입찰가</span> / <span style="color:var(--warning)">즉시구매가</span>';
+    } else if (isC) {
+      rs = 'background:var(--accent-light);font-weight:700;border-left:3px solid var(--accent)';
+      label = ' &#8592; <span style="color:var(--accent)">현재 입찰가</span>';
+    } else if (isK) {
+      rs = 'background:#fff8e1;border-left:3px solid var(--warning)';
+      label = ' &#8592; <span style="color:var(--warning)">즉시구매가</span>';
+    } else {
+      rs = ''; label = '';
+    }
+    const pc = pi.profit > 0 ? 'var(--accent)' : 'var(--danger)';
+    h += `<tr style="${rs}"><td>${sp.toLocaleString()}</td><td style="color:var(--text2)">-${pi.totalFee.toLocaleString()}</td><td>${pi.settlement.toLocaleString()}</td><td style="color:${pc};font-weight:600">${pi.profit>0?'+':''}${pi.profit.toLocaleString()}</td><td style="color:${pc}">${pi.marginRate}%</td><td style="font-size:10px">${label}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  return h;
+}
+
+function qShowDetail(id) {
+  const item = queueData.find(q => q.id === id);
+  if (!item || !item.result) return;
+  const r = item.result;
+  const panel = document.getElementById('q-detail-panel');
+
+  // 토글: 같은 상품 클릭하면 닫기
+  if (panel.style.display !== 'none' && panel.dataset.itemId == id) {
+    panel.style.display = 'none'; return;
+  }
+  panel.dataset.itemId = id;
+
+  const g = item.gosi || r.gosi || {};
+  const tc = r.totalCost || 0;
+  const hasSizes = r.sizeMargins && r.sizeMargins.length > 0;
+
+  let h = `<div class="card" style="margin-top:12px;border:2px solid var(--accent)">
+    <div class="card-title" style="justify-content:space-between">
+      <span>&#x1f4ca; ${item.model} — ${r.nameKr || r.nameEn || ''}</span>
+      <button onclick="document.getElementById('q-detail-panel').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text3)">&times;</button>
+    </div>`;
+
+  // ── 1. 상품 기본 정보 ──
+  h += `<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="flex:1;min-width:260px">
+      <div style="font-weight:600;margin-bottom:6px;font-size:13px">상품 기본 정보</div>
+      <div style="font-size:12px;line-height:2;background:var(--bg);border-radius:8px;padding:10px">
+        <div>상품명: <strong>${r.nameKr || '-'}</strong></div>
+        <div>영문명: ${r.nameEn || '-'}</div>
+        <div>브랜드: <strong>${r.brand || g.manufacturer || '-'}</strong></div>
+        <div>KREAM 상품번호: <strong>${r.productId || '-'}</strong></div>
+        <div>카테고리: <strong>${item.category || '-'}</strong>${item.categoryAuto ? ' (자동)' : ''}</div>
+        <div style="display:flex;align-items:center;gap:6px">수량:
+          <input type="number" class="form-input" value="${item.quantity||1}" min="1"
+            style="width:50px;height:24px;font-size:12px;font-weight:700"
+            onchange="qDetailQtyUpdate(${id},this.value)">
+        </div>
+      </div>
+    </div>`;
+
+  // ── 2. 고시정보 확인/수정 ──
+  h += `<div style="flex:1;min-width:260px">
+      <div style="font-weight:600;margin-bottom:6px;font-size:13px">고시정보 <span style="font-size:11px;color:var(--text3)">(수정 후 Enter)</span></div>
+      <div style="font-size:12px;background:var(--bg);border-radius:8px;padding:10px">
+        <div style="display:grid;grid-template-columns:60px 1fr;gap:4px 8px;align-items:center">
+          <span style="color:var(--text2)">종류</span>
+          <input class="form-input" value="${g.type||''}" style="height:24px;font-size:11px" onchange="qDetailGosiUpdate(${id},'type',this.value)">
+          <span style="color:var(--text2)">소재</span>
+          <input class="form-input" value="${g.material||''}" style="height:24px;font-size:11px" onchange="qDetailGosiUpdate(${id},'material',this.value)">
+          <span style="color:var(--text2)">색상</span>
+          <input class="form-input" value="${g.color||''}" style="height:24px;font-size:11px" onchange="qDetailGosiUpdate(${id},'color',this.value)">
+          <span style="color:var(--text2)">크기</span>
+          <input class="form-input" value="${g.size||'상품별 상이'}" style="height:24px;font-size:11px" onchange="qDetailGosiUpdate(${id},'size',this.value)">
+          <span style="color:var(--text2)">제조자</span>
+          <input class="form-input" value="${g.manufacturer||''}" style="height:24px;font-size:11px" onchange="qDetailGosiUpdate(${id},'manufacturer',this.value)">
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  if (!hasSizes) {
+    // ── 단일 상품 (가방/의류) ──
+    h += _detailSingleBlock(item, r, tc, null);
+  } else {
+    // ── 신발: 사이즈별 패널 ──
+    r.sizeMargins.forEach((sz, i) => {
+      const szTc = sz.totalCost;
+      const bp = getBidPrice(item, sz);
+      const pi = calcProfitForPrice(bp, szTc);
+      const pc = pi.profit > 0 ? 'var(--accent)' : 'var(--danger)';
+      const open = i === 0 ? '' : 'display:none';
+
+      h += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+        <div style="padding:8px 12px;background:var(--bg);border-radius:8px 8px 0 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center"
+             onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <span style="font-weight:700;font-size:13px">${sz.size}mm</span>
+          <span style="font-size:12px">
+            원가 ${szTc.toLocaleString()} |
+            입찰가 <input type="number" class="form-input" value="${bp}" step="1000"
+              style="width:80px;height:24px;font-size:12px;font-weight:700;text-align:right;display:inline"
+              onclick="event.stopPropagation()"
+              onchange="event.stopPropagation();qSetBidPrice(${item.id},'${sz.size}',this.value)"> |
+            <span style="color:${pc};font-weight:600">마진 ${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)</span>
+          </span>
+        </div>
+        <div style="${open};padding:12px">`;
+      h += _detailSingleBlock(item, r, szTc, sz);
+      h += `</div></div>`;
+    });
+  }
+
+  h += '</div>';
+  panel.innerHTML = h;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function _detailSingleBlock(item, r, tc, sz) {
+  const cny = sz ? sz.cny : item.cny;
+  const kp = r.instantBuyPrice || 0;
+  const bp = sz ? getBidPrice(item, sz) : getBidPrice(item);
+
+  let h = `<div style="display:flex;gap:16px;flex-wrap:wrap">`;
+
+  // ── 3. 원가 분해 ──
+  h += `<div style="flex:1;min-width:200px">
+    <div style="font-weight:600;margin-bottom:4px;font-size:12px">원가 분해</div>
+    <div style="font-size:11px;line-height:1.9;background:var(--bg);border-radius:6px;padding:8px">
+      <div>CNY ¥${cny||'?'} × ${SETTINGS.cnyRate} × ${SETTINGS.cnyMargin} = ${r.krwPrice ? r.krwPrice.toLocaleString() : '?'}원</div>
+      <div>관세: +${(r.customs||0).toLocaleString()}원</div>
+      <div>부가세: +${(r.importVat||0).toLocaleString()}원</div>
+      <div>배송비: +${(item.shipping||0).toLocaleString()}원</div>
+      <div style="font-weight:700;border-top:1px solid var(--border);padding-top:2px">총 원가: ${tc.toLocaleString()}원</div>
+    </div>
+  </div>`;
+
+  // ── 4~7. KREAM 시장 현황 ──
+  h += `<div style="flex:1;min-width:240px">
+    <div style="font-weight:600;margin-bottom:4px;font-size:12px">KREAM 시장 현황</div>
+    <div style="font-size:11px;line-height:1.8;background:var(--bg);border-radius:6px;padding:8px">
+      <div>즉시구매가 (판매입찰 최저): <strong style="color:var(--danger)">${r.instantBuyPrice ? r.instantBuyPrice.toLocaleString()+'원' : '-'}</strong></div>
+      <div>즉시판매가 (구매입찰 최고): <strong>${r.instantSellPrice ? r.instantSellPrice.toLocaleString()+'원' : '-'}</strong></div>
+      <div>최근 체결가: ${r.recentTradePrice ? r.recentTradePrice.toLocaleString()+'원' : '-'} | 총거래: ${r.totalTrades || '-'}건</div>
+      <div style="margin-top:4px"><strong>판매입찰:</strong> ${_bidGroupHtml(r.sellBids, 'var(--danger)', true)}</div>
+      <div><strong>구매입찰:</strong> ${_bidGroupHtml(r.buyBids, 'var(--blue)', false)}</div>
+      ${_deliveryOneLine(r.sizeDeliveryPrices, sz ? sz.size : null)}
+    </div>
+  </div>
+  </div>`;
+
+  // ── 내 입찰 이력 ──
+  const myBidLookupKey = sz ? `${r.productId}_${sz.size}` : `${r.productId}_${item.size || 'ONE SIZE'}`;
+  const myBidRecord = myBidsMap[myBidLookupKey];
+  if (myBidRecord) {
+    const myBidSrc = myBidRecord.source === 'sync' ? '판매자센터 동기화' : '대시보드 입찰';
+    h += `<div style="margin-top:8px;padding:8px 14px;background:var(--blue-light);border-radius:6px;font-size:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span style="font-weight:700;color:var(--blue)">내 입찰가</span>
+      <span style="font-weight:800;color:var(--blue);font-size:14px">${myBidRecord.price.toLocaleString()}원</span>
+      <span style="color:var(--text3)">${myBidRecord.date}</span>
+      <span style="background:var(--blue);color:#fff;border-radius:10px;padding:1px 8px;font-size:10px">${myBidSrc}</span>
+    </div>`;
+  }
+
+  // ── 8. 마진 시뮬레이션 ──
+  h += `<div style="margin-top:12px">
+    <div style="font-weight:600;margin-bottom:4px;font-size:12px">마진 시뮬레이션</div>
+    <div class="table-wrap">${_simTable(tc, kp, bp, item.id, sz ? sz.size : null)}</div>
+  </div>`;
+
+  // ── 9. 입찰가 수정 ──
+  if (!sz) {
+    const pi = calcProfitForPrice(bp, tc);
+    const pc = pi.profit > 0 ? 'var(--accent)' : 'var(--danger)';
+    h += `<div style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:13px">
+      <strong>입찰 예정가:</strong>
+      <input type="number" class="form-input" value="${bp}" step="1000" id="qd-bid-${item.id}"
+        style="width:100px;height:32px;font-size:14px;font-weight:700;text-align:right"
+        onchange="qSetBidPrice(${item.id},null,this.value)">
+      <span>원</span>
+      <span style="color:${pc};font-weight:600;margin-left:8px">→ 순이익 ${pi.profit>0?'+':''}${pi.profit.toLocaleString()}원 (${pi.marginRate}%)</span>
+    </div>`;
+  }
+
+  return h;
+}
+
+function qDetailGosiUpdate(id, field, value) {
+  const item = queueData.find(q => q.id === id);
+  if (!item) return;
+  if (!item.gosi) item.gosi = {};
+  item.gosi[field] = value;
+  fetch('/api/queue/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gosi: item.gosi })
+  });
+}
+
+function qDetailQtyUpdate(id, value) {
+  const qty = parseInt(value) || 1;
+  const item = queueData.find(q => q.id === id);
+  if (item) item.quantity = qty;
+  fetch('/api/queue/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity: qty })
+  });
+  queueRender();
+}
+
+// ── 상세 편집 모달 ──
+function qModalOpen(id) {
+  const item = queueData.find(q => q.id === id);
+  if (!item || !item.result) return;
+  qModalItemId = id;
+  const r = item.result;
+  const g = item.gosi || r.gosi || {};
+  const currentBid = getBidPrice(item);
+
+  document.getElementById('q-modal-title').textContent = `${item.model} — ${r.nameKr || r.nameEn || ''}`;
+
+  let body = `
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;margin-bottom:8px">기본 정보</div>
+    <div style="display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px">
+      <span style="color:var(--text2)">카테고리</span>
+      <select class="form-select" id="qm-category" style="height:30px;font-size:12px;width:120px">
+        <option value="가방" ${item.category==='가방'?'selected':''}>가방 (8%)</option>
+        <option value="신발" ${item.category==='신발'?'selected':''}>신발 (13%)</option>
+        <option value="의류" ${item.category==='의류'?'selected':''}>의류 (13%)</option>
+      </select>
+      <span style="color:var(--text2)">중국 구매가</span>
+      <span>${item.cny != null ? '¥'+item.cny : (item.sizes||[]).map(s=>s.size+': ¥'+s.cny_price).join(', ')}</span>
+      <span style="color:var(--text2)">해외배송비</span>
+      <input type="number" class="form-input" id="qm-ship" value="${item.shipping}" style="width:100px;height:28px;font-size:12px">
+      <span style="color:var(--text2)">수량</span>
+      <input type="number" class="form-input" id="qm-qty" value="${item.quantity}" min="1" style="width:60px;height:28px;font-size:12px">
+    </div>
+  </div>
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;margin-bottom:8px">고시정보 <span style="font-size:11px;color:var(--text3)">(자동 채움)</span></div>
+    <div style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
+      <span style="color:var(--text2)">종류</span>
+      <input type="text" class="form-input" id="qm-gosi-type" value="${g.type||''}" style="height:28px;font-size:12px">
+      <span style="color:var(--text2)">소재</span>
+      <input type="text" class="form-input" id="qm-gosi-material" value="${g.material||''}" style="height:28px;font-size:12px">
+      <span style="color:var(--text2)">색상</span>
+      <input type="text" class="form-input" id="qm-gosi-color" value="${g.color||''}" style="height:28px;font-size:12px">
+      <span style="color:var(--text2)">크기</span>
+      <input type="text" class="form-input" id="qm-gosi-size" value="${g.size||'상품별 상이'}" style="height:28px;font-size:12px">
+      <span style="color:var(--text2)">제조자</span>
+      <input type="text" class="form-input" id="qm-gosi-mfr" value="${g.manufacturer||''}" style="height:28px;font-size:12px">
+    </div>
+  </div>
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;margin-bottom:8px">입찰가 설정</div>
+    <div style="display:flex;gap:12px;align-items:center;font-size:13px;margin-bottom:8px">
+      <label><input type="radio" name="qm-margin" value="10" ${(item.selectedMargin||'15')==='10'?'checked':''}> 마진10%</label>
+      <label><input type="radio" name="qm-margin" value="15" ${(item.selectedMargin||'15')==='15'?'checked':''}> 마진15%</label>
+      <label><input type="radio" name="qm-margin" value="20" ${(item.selectedMargin||'15')==='20'?'checked':''}> 마진20%</label>
+      <label><input type="radio" name="qm-margin" value="custom" ${bidPrices[item.id]!=null?'checked':''}> 직접 입력</label>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;font-size:13px">
+      <span>입찰가:</span>
+      <input type="number" class="form-input" id="qm-bid-price" value="${currentBid}" step="1000" style="width:120px;height:32px;font-size:14px;font-weight:700" oninput="qModalCalcPreview()">
+      <span id="qm-bid-preview" style="font-size:12px"></span>
+    </div>
+  </div>`;
+
+  document.getElementById('q-modal-body').innerHTML = body;
+  // 라디오 변경 시 입찰가 자동 업데이트
+  document.querySelectorAll('input[name="qm-margin"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.value !== 'custom') {
+        const mg = (r.margins || {})[`margin_${radio.value}`];
+        if (mg) document.getElementById('qm-bid-price').value = mg.sell_price;
+      }
+      qModalCalcPreview();
+    });
+  });
+  qModalCalcPreview();
+  document.getElementById('q-modal-overlay').style.display = 'flex';
+}
+
+function qModalCalcPreview() {
+  const item = queueData.find(q => q.id === qModalItemId);
+  if (!item) return;
+  const price = parseInt(document.getElementById('qm-bid-price').value) || 0;
+  const tc = item.result?.totalCost || 0;
+  const pi = calcProfitForPrice(price, tc);
+  const color = pi.profit > 0 ? 'var(--accent)' : 'var(--danger)';
+  document.getElementById('qm-bid-preview').innerHTML =
+    `→ 수수료 ${pi.totalFee.toLocaleString()} | 정산 ${pi.settlement.toLocaleString()} | <span style="color:${color};font-weight:700">순이익 ${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)</span>`;
+}
+
+function qModalClose() {
+  document.getElementById('q-modal-overlay').style.display = 'none';
+  qModalItemId = null;
+}
+
+function qModalSave() {
+  if (!qModalItemId) return;
+  const bidPrice = parseInt(document.getElementById('qm-bid-price').value) || 0;
+  const marginRadio = document.querySelector('input[name="qm-margin"]:checked')?.value || '15';
+
+  // 직접 입력이면 bidPrices에 저장
+  if (marginRadio === 'custom' || bidPrice) {
+    bidPrices[qModalItemId] = bidPrice;
+  } else {
+    delete bidPrices[qModalItemId];
+  }
+
+  const updates = {
+    category: document.getElementById('qm-category').value,
+    shipping: parseInt(document.getElementById('qm-ship').value) || 8000,
+    quantity: parseInt(document.getElementById('qm-qty').value) || 1,
+    selectedMargin: marginRadio === 'custom' ? '15' : marginRadio,
+    gosi: {
+      type: document.getElementById('qm-gosi-type').value,
+      material: document.getElementById('qm-gosi-material').value,
+      color: document.getElementById('qm-gosi-color').value,
+      size: document.getElementById('qm-gosi-size').value,
+      manufacturer: document.getElementById('qm-gosi-mfr').value,
+    }
+  };
+
+  fetch('/api/queue/' + qModalItemId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates)
+  }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      const idx = queueData.findIndex(q => q.id === qModalItemId);
+      if (idx >= 0) Object.assign(queueData[idx], updates);
+      queueRender();
+      queueBuildResults();
+    }
+    qModalClose();
+  });
+}
+
+// ── 등록 전 최종 확인 ──
+// 공통: 선택된 상품에서 입찰 목록 빌드
+function _buildBidList() {
+  const checked = Array.from(document.querySelectorAll('.q-res-chk:checked'));
+  if (checked.length === 0) { alert('등록할 상품을 선택하세요'); return null; }
+
+  const ids = checked.map(c => parseInt(c.dataset.id));
+  const items = queueData.filter(q => ids.includes(q.id) && q.result);
+
+  const unclassified = items.filter(q => q.category === '미분류');
+  if (unclassified.length > 0) {
+    alert(`미분류 상품: ${unclassified.map(q=>q.model).join(', ')}\n카테고리를 선택한 후 다시 시도하세요.`);
+    return null;
+  }
+
+  const bidList = [];
+  items.forEach(item => {
+    const r = item.result;
+    const g = item.gosi || r.gosi || {};
+    const hasSizes = r.sizeMargins && r.sizeMargins.length > 0;
+    if (hasSizes) {
+      const checkedSizes = new Set();
+      document.querySelectorAll(`.q-sz-chk[data-id="${item.id}"]:checked`).forEach(c => checkedSizes.add(c.dataset.size));
+      const useSizes = checkedSizes.size > 0 ? checkedSizes : new Set(r.sizeMargins.map(s=>s.size));
+      r.sizeMargins.forEach(sz => {
+        if (!useSizes.has(sz.size)) return;
+        const bp = getBidPrice(item, sz);
+        if (!bp) return;
+        bidList.push({ model: item.model, size: sz.size, price: bp, cost: sz.totalCost,
+          productId: r.productId, nameEn: r.nameEn||'', qty: item.quantity,
+          gosi: g, category: item.category, gosiAlready: false, bid_days: item.bid_days || 30 });
+      });
+    } else {
+      const bp = getBidPrice(item);
+      if (!bp) return;
+      bidList.push({ model: item.model, size: item.size || 'ONE SIZE', price: bp, cost: r.totalCost||0,
+        productId: r.productId, nameEn: r.nameEn||'', qty: item.quantity,
+        gosi: g, category: item.category, gosiAlready: false, bid_days: item.bid_days || 30 });
+    }
+  });
+
+  if (bidList.length === 0) { alert('등록 가능한 상품이 없습니다'); return null; }
+  return bidList;
+}
+
+function _bidListSummary(bidList) {
+  let msg = `=== 최종 입찰 확인 (${bidList.length}건) ===\n\n`;
+  bidList.forEach(b => {
+    const pi = calcProfitForPrice(b.price, b.cost);
+    msg += `${b.model} ${b.size}: ${b.price.toLocaleString()}원 (마진 ${pi.profit>0?'+':''}${pi.profit.toLocaleString()}원)\n`;
+  });
+  return msg;
+}
+
+// 옵션 1: 엑셀 생성 + 자동 다운로드
+function queueConfirmExcel() {
+  const bidList = _buildBidList();
+  if (!bidList) return;
+
+  let msg = _bidListSummary(bidList);
+  msg += '\n대량입찰 엑셀을 생성하시겠습니까?';
+  if (!confirm(msg)) return;
+
+  const bulkItems = bidList.map(b => ({
+    productId: b.productId, model: b.model, nameEn: b.nameEn,
+    size: b.size, price: b.price, quantity: b.qty,
+  }));
+
+  fetch('/api/bulk/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: bulkItems })
+  }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      // 자동 다운로드
+      const a = document.createElement('a');
+      a.href = '/api/bulk/download';
+      a.download = 'kream_bulk_bid.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      alert(`대량입찰 엑셀 생성 완료 (${res.count}건)\n파일이 자동 다운로드됩니다.`);
+    } else {
+      alert(res.error || '생성 실패');
+    }
+  });
+}
+
+// 옵션 2: 자동 입찰 (Playwright)
+function queueConfirmAutoBid() {
+  const bidList = _buildBidList();
+  if (!bidList) return;
+
+  let msg = _bidListSummary(bidList);
+  msg += '\n⚠️ Playwright로 판매자센터에 자동 로그인하여\n고시정보 등록 + 판매 입찰을 자동 실행합니다.\n\n진행하시겠습니까?';
+  if (!confirm(msg)) return;
+
+  const btn = document.getElementById('q-auto-bid-btn');
+  btn.disabled = true;
+  btn.textContent = '자동 입찰 진행 중...';
+  showAutoBidControls(true);
+
+  const logArea = document.getElementById('q-auto-log');
+  logArea.style.display = 'block';
+  logArea.innerHTML = '<div class="text-muted">자동 입찰 시작...</div>';
+
+  const items = bidList.map(b => ({
+    productId: b.productId, model: b.model,
+    size: b.size, price: b.price, quantity: b.qty,
+    gosi: b.gosi, category: b.category, gosiAlready: b.gosiAlready,
+    bid_days: b.bid_days || 30,
+    cost: b.cost || 0, nameEn: b.nameEn || '',
+  }));
+
+  fetch('/api/queue/auto-register', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items })
+  }).then(r => r.json()).then(res => {
+    if (res.error) {
+      btn.disabled = false; btn.textContent = '자동 입찰 (Playwright)';
+      showAutoBidControls(false);
+      logArea.innerHTML = `<div style="color:var(--danger)">${res.error}</div>`;
+      alert(res.error);
+      return;
+    }
+
+    const poll = setInterval(() => {
+      fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+        if (task.logs) {
+          logArea.innerHTML = task.logs.map(l => {
+            const c = l.level === 'error' ? 'var(--danger)' : l.level === 'success' ? 'var(--accent)' : 'var(--text2)';
+            return `<div style="color:${c}"><span style="color:var(--text3);font-size:11px">${l.time}</span> ${l.msg}</div>`;
+          }).join('');
+          logArea.scrollTop = logArea.scrollHeight;
+        }
+        if (task.status === 'done' || task.status === 'error') {
+          clearInterval(poll);
+          btn.disabled = false; btn.textContent = '자동 입찰 (Playwright)';
+          showAutoBidControls(false);
+          if (task.result) {
+            const r = task.result;
+            // 성공한 입찰 로컬 기록
+            if (r.results) {
+              r.results.forEach(res => {
+                if (res.success) {
+                  const key = `${res.productId}_${res.size}`;
+                  const entry = { productId: res.productId, model: res.model||'', size: res.size,
+                    price: res.price, date: new Date().toLocaleString('ko-KR'), source: 'placed' };
+                  myBidsMap[key] = entry;
+                  myBidsLocal.bids = (myBidsLocal.bids||[]).filter(
+                    b => !(b.productId === res.productId && b.size === res.size));
+                  myBidsLocal.bids.push(entry);
+                }
+              });
+              updateSyncStatus();
+              queueBuildResults();
+            }
+            alert(`자동 입찰 완료!\n성공: ${r.success}건 / 전체: ${r.total}건`);
+            // batch 히스토리 새로고침
+            loadBatchHistory();
+          }
+        }
+      }).catch(() => { clearInterval(poll); btn.disabled = false; btn.textContent = '자동 입찰 (Playwright)'; showAutoBidControls(false); });
+    }, 2000);
+  }).catch(err => {
+    btn.disabled = false; btn.textContent = '자동 입찰 (Playwright)';
+    showAutoBidControls(false);
+    alert('서버 연결 실패: ' + err.message);
+  });
+}
+
+// ── CSV 내보내기 ──
+function queueExportExcel() {
+  const completed = queueData.filter(q => q.status === '완료' && q.result);
+  if (completed.length === 0) { alert('결과가 없습니다'); return; }
+
+  let csv = '\uFEFF모델번호,상품명,카테고리,사이즈,CNY,원가(KRW),KREAM최저가,마진10%판매가,마진10%이익,마진15%판매가,마진15%이익,마진20%판매가,마진20%이익\n';
+  completed.forEach(item => {
+    const r = item.result;
+    const hasSizes = r.sizeMargins && r.sizeMargins.length > 0;
+    if (hasSizes) {
+      r.sizeMargins.forEach(sz => {
+        const m = sz.margins || {};
+        csv += [item.model,(r.nameKr||'').replace(/,/g,' '),item.category,sz.size,sz.cny,sz.totalCost,r.instantBuyPrice||0,
+          (m.margin_10||{}).sell_price||'',(m.margin_10||{}).profit||'',
+          (m.margin_15||{}).sell_price||'',(m.margin_15||{}).profit||'',
+          (m.margin_20||{}).sell_price||'',(m.margin_20||{}).profit||''].join(',') + '\n';
+      });
+    } else {
+      const m = r.margins || {};
+      csv += [item.model,(r.nameKr||'').replace(/,/g,' '),item.category,'ONE SIZE',item.cny||0,r.totalCost||0,r.instantBuyPrice||0,
+        (m.margin_10||{}).sell_price||'',(m.margin_10||{}).profit||'',
+        (m.margin_15||{}).sell_price||'',(m.margin_15||{}).profit||'',
+        (m.margin_20||{}).sell_price||'',(m.margin_20||{}).profit||''].join(',') + '\n';
+    }
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'queue_result_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+// ═══ 엑셀 백업 다운로드 (선택 없이 완료된 전체 결과) ═══
+function queueDownloadBackupExcel() {
+  const completed = queueData.filter(q => q.status === '완료' && q.result);
+  if (completed.length === 0) { alert('다운로드할 결과가 없습니다'); return; }
+
+  let csv = '\uFEFF모델번호,상품명,카테고리,사이즈,CNY,원가(KRW),KREAM즉시구매가,마진15%판매가,마진15%이익,입찰예정가\n';
+  completed.forEach(item => {
+    const r = item.result;
+    const hasSizes = r.sizeMargins && r.sizeMargins.length > 0;
+    if (hasSizes) {
+      r.sizeMargins.forEach(sz => {
+        const m = sz.margins || {};
+        const bp = getBidPrice(item, sz);
+        csv += [item.model,(r.nameKr||'').replace(/,/g,' '),item.category,sz.size,sz.cny,sz.totalCost,r.instantBuyPrice||0,
+          (m.margin_15||{}).sell_price||'',(m.margin_15||{}).profit||'',bp||''].join(',') + '\n';
+      });
+    } else {
+      const m = r.margins || {};
+      const bp = getBidPrice(item);
+      csv += [item.model,(r.nameKr||'').replace(/,/g,' '),item.category,'ONE SIZE',item.cny||0,r.totalCost||0,r.instantBuyPrice||0,
+        (m.margin_15||{}).sell_price||'',(m.margin_15||{}).profit||'',bp||''].join(',') + '\n';
+    }
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'kream_backup_' + new Date().toISOString().slice(0,16).replace(/[T:]/g,'-') + '.csv';
+  a.click();
+}
+
+// ═══ 엑셀 백업 업로드 → 결과 테이블 복원 ═══
+function queueUploadBackupExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) { alert('데이터가 없습니다'); return; }
+
+    let header = lines[0].replace(/^\uFEFF/, '');
+    const cols = header.split(',').map(c => c.trim());
+    const find = (keywords) => cols.findIndex(c => keywords.some(k => c.includes(k)));
+    const iModel = find(['모델번호', 'model']);
+    const iName = find(['상품명', 'name']);
+    const iCat = find(['카테고리', 'category']);
+    const iSize = find(['사이즈', 'size']);
+    const iCny = find(['CNY', 'cny']);
+    const iCost = find(['원가', 'totalCost', 'KRW']);
+    const iKream = find(['즉시구매', 'instantBuy', 'KREAM']);
+    const iSell = find(['판매가', 'sell_price', '마진15%판매가']);
+    const iProfit = find(['이익', 'profit', '마진15%이익']);
+    const iBid = find(['입찰예정', 'bidPrice', '입찰예정가']);
+
+    if (iModel === -1) { alert('모델번호 컬럼을 찾을 수 없습니다'); return; }
+
+    const modelMap = {};
+    for (let i = 1; i < lines.length; i++) {
+      const vals = parseCSVLine(lines[i]);
+      if (vals.length <= iModel) continue;
+      const model = (vals[iModel] || '').trim();
+      if (!model) continue;
+
+      const name = iName >= 0 ? (vals[iName] || '').trim() : '';
+      const cat = iCat >= 0 ? (vals[iCat] || '').trim() : '';
+      const size = iSize >= 0 ? (vals[iSize] || '').trim() : '';
+      const cny = iCny >= 0 ? parseFloat(vals[iCny]) || 0 : 0;
+      const cost = iCost >= 0 ? parseFloat(vals[iCost]) || 0 : 0;
+      const kreamPrice = iKream >= 0 ? parseInt(vals[iKream]) || 0 : 0;
+      const sellPrice = iSell >= 0 ? parseInt(vals[iSell]) || 0 : 0;
+      const profit = iProfit >= 0 ? parseInt(vals[iProfit]) || 0 : 0;
+      const bidPrice = iBid >= 0 ? parseInt(vals[iBid]) || 0 : 0;
+
+      if (!modelMap[model]) {
+        modelMap[model] = { model, name, category: cat, kreamPrice, sizes: [], singleCost: 0, singleCny: 0, bidPrice: 0 };
+      }
+
+      if (size && size !== 'ONE SIZE') {
+        modelMap[model].sizes.push({
+          size, cny, totalCost: cost,
+          margins: { margin_15: { sell_price: sellPrice, profit } },
+          bidPrice
+        });
+      } else {
+        modelMap[model].singleCost = cost;
+        modelMap[model].singleCny = cny;
+        modelMap[model].bidPrice = bidPrice;
+        modelMap[model].singleMargins = { margin_15: { sell_price: sellPrice, profit } };
+      }
+    }
+
+    const restored = [];
+    let nextId = queueData.length > 0 ? Math.max(...queueData.map(q => q.id)) + 1 : 1;
+    Object.values(modelMap).forEach(m => {
+      const hasSizes = m.sizes.length > 0;
+      const item = {
+        id: nextId++,
+        model: m.model,
+        category: m.category || '미분류',
+        shipping: 8000,
+        quantity: 1,
+        bid_days: 30,
+        status: '완료',
+        result: {
+          nameKr: m.name,
+          nameEn: '',
+          productId: 0,
+          instantBuyPrice: m.kreamPrice,
+        }
+      };
+
+      if (hasSizes) {
+        item.size = '전사이즈';
+        item.sizes = m.sizes.map(sz => ({ size: sz.size, cny_price: sz.cny }));
+        item.result.sizeMargins = m.sizes.map(sz => ({
+          size: sz.size, cny: sz.cny, totalCost: sz.totalCost, margins: sz.margins
+        }));
+        item.bidPrice = { sizes: {} };
+        m.sizes.forEach(sz => { if (sz.bidPrice) item.bidPrice.sizes[sz.size] = sz.bidPrice; });
+      } else {
+        item.size = 'ONE SIZE';
+        item.cny = m.singleCny;
+        item.result.totalCost = m.singleCost;
+        item.result.margins = m.singleMargins || {};
+        if (m.bidPrice) item.bidPrice = m.bidPrice;
+      }
+
+      restored.push(item);
+    });
+
+    if (restored.length === 0) { alert('복원할 데이터가 없습니다'); return; }
+
+    restored.forEach(it => queueData.push(it));
+    queueRender();
+    queueBuildResults();
+    alert(`${file.name}에서 ${restored.length}건 결과 복원 완료`);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ═══ 엑셀/CSV 업로드로 큐 복원 ═══
+function queueUploadExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = ''; // 같은 파일 재선택 허용
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const text = e.target.result;
+      const items = parseCSVToQueueItems(text);
+      if (items.length === 0) { alert('파싱 가능한 데이터가 없습니다'); return; }
+      bulkAddToQueue(items, file.name);
+    };
+    reader.readAsText(file, 'UTF-8');
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    // xlsx는 서버에서 파싱
+    const formData = new FormData();
+    formData.append('file', file);
+    fetch('/api/queue/upload-excel', { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(res => {
+        if (res.error) { alert(res.error); return; }
+        const items = res.items || [];
+        if (items.length === 0) { alert('파싱 가능한 데이터가 없습니다'); return; }
+        // 서버에서 이미 큐에 추가됨
+        queueData = res.queue || queueData;
+        items.forEach(it => {
+          if (!queueData.find(q => q.id === it.id)) queueData.push(it);
+        });
+        queueRender();
+        alert(`${file.name}에서 ${items.length}건 추가됨`);
+        triggerAutoExecIfEnabled();
+      })
+      .catch(err => alert('업로드 실패: ' + err.message));
+  } else {
+    alert('CSV 또는 XLSX 파일만 지원합니다');
+  }
+}
+
+function parseCSVToQueueItems(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+
+  // BOM 제거
+  let header = lines[0].replace(/^\uFEFF/, '');
+  const cols = header.split(',').map(c => c.trim());
+
+  // 컬럼 인덱스 매핑 (유연하게)
+  const find = (keywords) => cols.findIndex(c => keywords.some(k => c.includes(k)));
+  const iModel = find(['모델', 'model', 'Model']);
+  const iCategory = find(['카테고리', 'category', 'Category']);
+  const iSize = find(['사이즈', 'size', 'Size']);
+  const iCny = find(['CNY', 'cny', '중국가']);
+  const iQty = find(['수량', 'qty', 'quantity', 'Quantity']);
+  const iShipping = find(['배송비', 'shipping', 'Shipping']);
+  const iBidDays = find(['만료', 'bid_days', '입찰기한']);
+
+  if (iModel === -1) {
+    alert('모델번호 컬럼을 찾을 수 없습니다.\n첫 행에 "모델번호" 또는 "model" 컬럼이 필요합니다.');
+    return [];
+  }
+
+  // 모델번호별로 그룹핑 (같은 모델의 여러 사이즈 → sizes 배열)
+  const modelMap = {};
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseCSVLine(lines[i]);
+    if (vals.length <= iModel) continue;
+
+    const model = (vals[iModel] || '').trim();
+    if (!model) continue;
+
+    const category = iCategory >= 0 ? (vals[iCategory] || '').trim() : '';
+    const size = iSize >= 0 ? (vals[iSize] || '').trim() : '';
+    const cny = iCny >= 0 ? parseFloat(vals[iCny]) || 0 : 0;
+    const qty = iQty >= 0 ? parseInt(vals[iQty]) || 1 : 1;
+    const shipping = iShipping >= 0 ? parseInt(vals[iShipping]) || 8000 : 8000;
+    const bidDays = iBidDays >= 0 ? parseInt(vals[iBidDays]) || 30 : 30;
+
+    if (!modelMap[model]) {
+      modelMap[model] = { model, category, sizes: [], cny: 0, quantity: qty, shipping, bid_days: bidDays };
+    }
+
+    if (size && size !== 'ONE SIZE') {
+      modelMap[model].sizes.push({ size, cny_price: cny });
+    } else {
+      modelMap[model].cny = cny;
+    }
+  }
+
+  // items 배열로 변환
+  return Object.values(modelMap).map(m => {
+    const item = { model: m.model, category: m.category, quantity: m.quantity, shipping: m.shipping, bid_days: m.bid_days };
+    if (m.sizes.length > 0) {
+      item.sizes = m.sizes;
+      item.size = '전사이즈';
+    } else {
+      item.cny = m.cny;
+    }
+    return item;
+  });
+}
+
+function parseCSVLine(line) {
+  // 간단한 CSV 파서 (쉼표 구분, 따옴표 처리)
+  const result = [];
+  let current = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuote) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuote = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuote = true; }
+      else if (ch === ',') { result.push(current); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function bulkAddToQueue(items, fileName) {
+  fetch('/api/queue/bulk-add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res.ok) {
+        (res.items || []).forEach(it => queueData.push(it));
+        queueRender();
+        alert(`${fileName}에서 ${res.count}건 큐에 추가됨`);
+        triggerAutoExecIfEnabled();
+      } else {
+        alert(res.error || '추가 실패');
+      }
+    })
+    .catch(err => alert('서버 연결 실패: ' + err.message));
+}
+
+// ═══ 자동 입찰 제어 (일시정지/이어서/중단) ═══
+let autoBidRunning = false;
+
+function showAutoBidControls(show) {
+  const el = document.getElementById('q-auto-controls');
+  el.style.display = show ? 'flex' : 'none';
+  if (show) {
+    document.getElementById('q-pause-btn').style.display = '';
+    document.getElementById('q-resume-btn').style.display = 'none';
+    document.getElementById('q-stop-btn').style.display = 'none';
+    document.getElementById('q-auto-status').textContent = '입찰 진행 중...';
+  }
+  autoBidRunning = show;
+}
+
+function autoBidPause() {
+  fetch('/api/auto-bid/pause', { method: 'POST' }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      document.getElementById('q-pause-btn').style.display = 'none';
+      document.getElementById('q-resume-btn').style.display = '';
+      document.getElementById('q-stop-btn').style.display = '';
+      document.getElementById('q-auto-status').textContent = '일시정지 — 현재 상품 완료 후 대기 중';
+    }
+  });
+}
+
+function autoBidResume() {
+  fetch('/api/auto-bid/resume', { method: 'POST' }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      document.getElementById('q-pause-btn').style.display = '';
+      document.getElementById('q-resume-btn').style.display = 'none';
+      document.getElementById('q-stop-btn').style.display = 'none';
+      document.getElementById('q-auto-status').textContent = '입찰 진행 중...';
+    }
+  });
+}
+
+function autoBidStop() {
+  if (!confirm('자동 입찰을 중단하시겠습니까?\n현재 진행 중인 상품 완료 후 중단됩니다.')) return;
+  fetch('/api/auto-bid/stop', { method: 'POST' }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      document.getElementById('q-auto-status').textContent = '중단 요청됨 — 현재 상품 완료 후 중단';
+      document.getElementById('q-resume-btn').style.display = 'none';
+      document.getElementById('q-stop-btn').style.display = 'none';
+    }
+  });
+}
+
+// ═══ 자동 실행 모드 ═══
+let autoExecEnabled = false;
+
+function toggleAutoExec() {
+  autoExecEnabled = document.getElementById('q-auto-exec-toggle').checked;
+  if (autoExecEnabled) {
+    // 미실행 항목이 있으면 즉시 실행
+    const pending = queueData.filter(q => q.status === '대기' || q.status === '실패');
+    if (pending.length > 0) {
+      queueExecute();
+    }
+  }
+}
+
+// 큐 추가 후 자동 실행 트리거
+function triggerAutoExecIfEnabled() {
+  if (!autoExecEnabled) return;
+  const btn = document.getElementById('q-exec-btn');
+  if (btn.disabled) return; // 이미 실행 중
+  const pending = queueData.filter(q => q.status === '대기' || q.status === '실패');
+  if (pending.length > 0) {
+    setTimeout(() => queueExecute(), 500);
+  }
+}
+
+// 페이지 로드 시 큐 동기화
+fetch('/api/queue/list').then(r => r.json()).then(res => {
+  queueData = res.queue || [];
+  queueRender();
+}).catch(() => {});
+loadMyBidsLocal();
+
+// ═══ 6단계: 대량 입찰 ═══
+let bulkItems = [];
+
+function bulkAdd() {
+  const item = {
+    productId: document.getElementById('bulk-pid').value.trim(),
+    model: document.getElementById('bulk-model').value.trim(),
+    nameEn: document.getElementById('bulk-name').value.trim(),
+    size: document.getElementById('bulk-size').value.trim() || 'ONE SIZE',
+    price: parseInt(document.getElementById('bulk-price').value) || 0,
+    quantity: parseInt(document.getElementById('bulk-qty').value) || 1,
+  };
+  if (!item.productId) { alert('상품번호를 입력하세요'); return; }
+  bulkItems.push(item);
+  bulkRender();
+  document.getElementById('bulk-pid').value = '';
+  document.getElementById('bulk-model').value = '';
+  document.getElementById('bulk-name').value = '';
+  document.getElementById('bulk-price').value = '';
+}
+
+function bulkRemove(idx) { bulkItems.splice(idx, 1); bulkRender(); }
+
+function bulkRender() {
+  const tbody = document.getElementById('bulk-tbody');
+  if (bulkItems.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-muted">상품을 추가하세요</td></tr>'; return; }
+  tbody.innerHTML = bulkItems.map((x, i) => `<tr>
+    <td>${x.productId}</td><td>${x.model}</td>
+    <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${x.nameEn}</td>
+    <td>${x.size}</td><td>${x.price ? x.price.toLocaleString()+'원' : '-'}</td><td>${x.quantity}</td>
+    <td><button class="btn" onclick="bulkRemove(${i})" style="font-size:11px; padding:2px 8px; color:var(--danger)">✕</button></td>
+  </tr>`).join('');
+}
+
+function bulkGenerate() {
+  if (bulkItems.length === 0) { alert('상품을 추가하세요'); return; }
+  document.getElementById('bulk-status').textContent = '엑셀 생성 중...';
+  fetch('/api/bulk/generate', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({items: bulkItems})
+  }).then(r => r.json()).then(res => {
+    document.getElementById('bulk-status').textContent = res.ok ? `생성 완료 (${res.count}건)` : '오류';
+  });
+}
+
+function bulkDownload() { window.open('/api/bulk/download', '_blank'); }
+
+function bulkUpload() {
+  if (!confirm('KREAM에 대량입찰 엑셀을 업로드합니다. 진행?')) return;
+  document.getElementById('bulk-status').textContent = '업로드 중...';
+  fetch('/api/bulk/upload', {method: 'POST'}).then(r => r.json()).then(res => {
+    if (res.taskId) {
+      pollTask(res.taskId, task => {
+        document.getElementById('bulk-status').textContent =
+          task.status === 'done' ? '업로드 완료!' : '업로드 실패';
+      }, null);
+    }
+  });
+}
+
+// ═══ 7단계: 입찰 관리 ═══
+let mybidsData = [];
+
+function mybidsLog(level, msg) {
+  const log = document.getElementById('mybids-log');
+  if (log.innerText === '대기 중...') log.innerHTML = '';
+  const color = level === 'success' ? '#4CAF50' : level === 'error' ? '#f44' : '#aaa';
+  log.innerHTML += `<div style="color:${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function mybidsLoad() {
+  const btn = document.getElementById('mybids-load-btn');
+  btn.disabled = true; btn.textContent = '조회 중...';
+  document.getElementById('mybids-status').textContent = '판매자센터에서 수집 중 (10~15초)';
+
+  fetch('/api/my-bids').then(r => r.json()).then(res => {
+    if (!res.taskId) { btn.disabled = false; btn.textContent = '입찰 목록 조회'; return; }
+    pollTask(res.taskId, task => {
+      btn.disabled = false; btn.textContent = '입찰 목록 조회';
+      if (task.status === 'done' && task.result) {
+        mybidsData = task.result.bids || [];
+        mybidsRender();
+        document.getElementById('mybids-status').textContent = `${mybidsData.length}건 조회 완료`;
+      } else {
+        document.getElementById('mybids-status').textContent = '조회 실패';
+      }
+    }, null);
+  });
+}
+
+function mybidsRender() {
+  const tbody = document.getElementById('mybids-tbody');
+  if (mybidsData.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="text-muted">입찰 내역 없음</td></tr>'; return; }
+  tbody.innerHTML = mybidsData.map(b => `<tr>
+    <td><input type="checkbox" class="mybid-cb" data-oid="${b.orderId}"></td>
+    <td style="font-size:11px">${b.orderId}</td>
+    <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${b.nameKr || b.nameEn || '-'}</td>
+    <td style="font-size:12px">${b.model || '-'}</td>
+    <td>${b.size || '-'}</td>
+    <td style="font-weight:600">${(b.bidPrice||0).toLocaleString()}원</td>
+    <td>${b.bidRank || '-'}위</td>
+    <td><span class="badge" style="background:var(--blue-light); color:var(--blue); font-size:11px">${b.saleType || '-'}</span></td>
+    <td style="white-space:nowrap">
+      <button class="btn" onclick="mybidsModify('${b.orderId}', ${b.bidPrice})" style="font-size:11px; padding:3px 8px">수정</button>
+      <button class="btn" onclick="mybidsDelete('${b.orderId}')" style="font-size:11px; padding:3px 8px; color:var(--danger)">삭제</button>
+    </td>
+  </tr>`).join('');
+}
+
+function mybidsModify(orderId, currentPrice) {
+  const newPrice = prompt(`새 입찰가 입력 (현재: ${currentPrice.toLocaleString()}원)\n\n기존 가격 이상만 입력 가능:`, currentPrice);
+  if (!newPrice) return;
+  const p = parseInt(newPrice);
+  if (p < currentPrice) { alert('기존 입찰가보다 낮출 수 없습니다!'); return; }
+  if (p === currentPrice) { alert('동일한 가격입니다'); return; }
+
+  mybidsLog('info', `${orderId} → ${p.toLocaleString()}원 수정 중...`);
+  fetch('/api/my-bids/modify', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({orderId, newPrice: p})
+  }).then(r => r.json()).then(res => {
+    if (res.taskId) pollTask(res.taskId, task => {
+      mybidsLog(task.status === 'done' ? 'success' : 'error',
+        task.status === 'done' ? '수정 완료' : '수정 실패');
+    }, null);
+  });
+}
+
+function mybidsDelete(orderId) {
+  if (!confirm(`${orderId} 입찰을 삭제하시겠습니까?`)) return;
+  mybidsLog('info', `${orderId} 삭제 중...`);
+  fetch('/api/my-bids/delete', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({orderIds: [orderId]})
+  }).then(r => r.json()).then(res => {
+    if (res.taskId) pollTask(res.taskId, task => {
+      mybidsLog(task.status === 'done' ? 'success' : 'error',
+        task.status === 'done' ? '삭제 완료' : '삭제 실패');
+      if (task.status === 'done') mybidsLoad();
+    }, null);
+  });
+}
+
+function mybidsDeleteSelected() {
+  const checked = Array.from(document.querySelectorAll('.mybid-cb:checked'));
+  if (checked.length === 0) { alert('삭제할 입찰을 선택하세요'); return; }
+  const ids = checked.map(c => c.dataset.oid);
+  if (!confirm(`${ids.length}건의 입찰을 삭제하시겠습니까?`)) return;
+
+  mybidsLog('info', `${ids.length}건 삭제 시작...`);
+  fetch('/api/my-bids/delete', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({orderIds: ids})
+  }).then(r => r.json()).then(res => {
+    if (res.taskId) pollTask(res.taskId, task => {
+      mybidsLog(task.status === 'done' ? 'success' : 'error',
+        task.status === 'done' ? `삭제 완료 (${task.result?.success || 0}건)` : '삭제 실패');
+      if (task.status === 'done') mybidsLoad();
+    }, null);
+  });
+}
+
+// ═══ 8단계: 마진 계산기 KREAM 연동 ═══
+function quickChinaPrice() {
+  const model = document.getElementById('quick-model').value.trim();
+  if (!model) { alert('먼저 모델번호를 입력하세요'); return; }
+
+  document.getElementById('quick-cny-krw').textContent = '识货 앱 검색 중...';
+
+  fetch('/api/china-price', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({model, app: '识货'})
+  }).then(r => r.json()).then(res => {
+    if (!res.taskId) return;
+    pollTask(res.taskId, task => {
+      if (task.status === 'done' && task.result) {
+        const r = task.result;
+        if (r.price_cny) {
+          document.getElementById('quick-cny').value = r.price_cny;
+          quickCalc();
+          document.getElementById('quick-cny-krw').textContent = `识货 ${r.price_cny} CNY`;
+        } else {
+          document.getElementById('quick-cny-krw').innerHTML =
+            '<span style="color:var(--warning)">识货 앱에서 가격을 확인 후 수동 입력하세요</span>';
+        }
+      }
+    }, null);
+  });
+}
+
+function quickSearchByModel() {
+  const model = document.getElementById('quick-model').value.trim();
+  if (!model) { alert('모델번호를 입력하세요'); return; }
+  document.getElementById('quick-search-status').textContent = `"${model}" KREAM 검색 중...`;
+
+  fetch('/api/search', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({model})
+  }).then(r => r.json()).then(res => {
+    if (!res.taskId) return;
+    pollTask(res.taskId, task => {
+      if (task.status === 'done' && task.result && task.result.kream) {
+        const k = task.result.kream;
+        document.getElementById('quick-pid').value = k.product_id || '';
+        document.getElementById('quick-search-status').textContent = '검색 완료!';
+        showQuickProductInfo(k);
+      } else {
+        document.getElementById('quick-search-status').textContent = '검색 실패 - 상품번호를 직접 입력하세요';
+      }
+    }, null);
+  });
+}
+
+function quickSearch() {
+  const pid = document.getElementById('quick-pid').value.trim();
+  if (!pid) { alert('상품번호를 입력하세요'); return; }
+  document.getElementById('quick-search-status').textContent = '가격 수집 중... (20~30초)';
+
+  fetch('/api/search', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({productId: pid})
+  }).then(r => r.json()).then(res => {
+    if (!res.taskId) return;
+    pollTask(res.taskId, task => {
+      if (task.status === 'done' && task.result && task.result.kream) {
+        const k = task.result.kream;
+        if (k.session_expired) {
+          document.getElementById('quick-search-status').innerHTML =
+            `<span style="color:var(--danger); font-weight:600">세션 만료! 재로그인 필요</span>`;
+          return;
+        }
+        showQuickProductInfo(k);
+      } else {
+        document.getElementById('quick-search-status').textContent = '수집 실패';
+      }
+    }, null);
+  });
+}
+
+function showQuickProductInfo(k) {
+  const info = document.getElementById('quick-product-info');
+  info.style.display = 'block';
+
+  if (k.model_number) document.getElementById('quick-model').value = k.model_number;
+
+  const bidListHtml = (k.sell_bids || []).map(b =>
+    `${b.price.toLocaleString()}원(${b.quantity || 1})`
+  ).join(' / ');
+
+  const sp = k.size_prices || [];
+  let sizeHtml = '';
+  if (sp.length > 1) {
+    sizeHtml = '<div style="margin-top:6px; font-size:12px"><strong>사이즈별 즉시구매가:</strong><div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:3px">' +
+      sp.map(s => `<span style="background:${s.buyNowPrice ? '#e8f7ef' : '#f5f5f5'}; border-radius:4px; padding:2px 8px; font-size:11px">${s.size} <strong>${s.buyNowPrice ? s.buyNowPrice.toLocaleString() : '-'}</strong></span>`).join('') +
+      '</div></div>';
+  }
+
+  info.innerHTML = `
+    <div style="font-weight:600; margin-bottom:4px">${k.product_name || k.product_name_en}</div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:12px">
+      <span>즉시구매가: <strong style="color:var(--danger)">${k.instant_buy_price ? k.instant_buy_price.toLocaleString()+'원' : '-'}</strong></span>
+      <span>즉시판매가: <strong style="color:var(--accent)">${k.instant_sell_price ? k.instant_sell_price.toLocaleString()+'원' : '-'}</strong></span>
+      <span>최근거래가: <strong>${(k.recent_trade_price || k.display_price || 0).toLocaleString()}원</strong></span>
+      <span>총거래: <strong>${k.total_trades || '-'}</strong></span>
+    </div>
+    ${bidListHtml ? '<div style="margin-top:4px; font-size:12px"><strong>판매입찰:</strong> ' + bidListHtml + '</div>' : ''}
+    ${sizeHtml}
+  `;
+
+  // 배송타입 비교 테이블
+  const sdp = k.size_delivery_prices || [];
+  if (sdp.length > 0) {
+    const hasData = sdp.some(s => s.buyFast || s.buyNormal || s.buyOverseas);
+    if (hasData) {
+      let tableHtml = '<div style="margin-top:10px; font-size:12px"><strong>사이즈별 배송타입 비교:</strong>';
+      tableHtml += '<table style="margin-top:4px; font-size:11px; width:100%"><thead><tr><th>사이즈</th><th>빠른배송</th><th>일반배송</th><th>해외배송</th><th>해외 vs 일반</th></tr></thead><tbody>';
+      for (const s of sdp) {
+        if (!s.buyFast && !s.buyNormal && !s.buyOverseas) continue;
+        const fmtP = v => v ? v.toLocaleString()+'원' : '-';
+        let cmp = '-';
+        if (s.buyOverseas && s.buyNormal) {
+          const diff = s.buyOverseas - s.buyNormal;
+          const pct = Math.round(diff / s.buyNormal * 100);
+          if (diff < 0) cmp = `<span style="color:var(--accent); font-weight:600">${pct}%</span>`;
+          else if (diff === 0) cmp = '<span style="color:var(--warning)">동일</span>';
+          else cmp = `<span style="color:var(--danger)">+${pct}%</span>`;
+        }
+        tableHtml += `<tr><td style="font-weight:600">${s.size}</td><td>${fmtP(s.buyFast)}</td><td>${fmtP(s.buyNormal)}</td><td>${fmtP(s.buyOverseas)}</td><td>${cmp}</td></tr>`;
+      }
+      tableHtml += '</tbody></table></div>';
+      info.innerHTML += tableHtml;
+    }
+  }
+
+  // 즉시구매가 → 판매가에 자동 입력
+  if (k.instant_buy_price) {
+    document.getElementById('quick-sell').value = k.instant_buy_price;
+  }
+  quickCalc();
+  document.getElementById('quick-search-status').textContent = '수집 완료!';
+}
+
+loadSettings();
+loadHistory();
+
+// ── 사이즈 입력 영역 초기화 (항상 표시, 빈 행 1개) ──
+qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
+qRenderSizeRows();
+</script>
+</body>
+</html>
