@@ -2628,6 +2628,189 @@ async def place_bids_batch(page, product_id, bids, bid_days=30, delay=3.0):
 
 
 # ═══════════════════════════════════════════
+# 발송관리 수집 (판매 이력)
+# ═══════════════════════════════════════════
+
+async def collect_shipments(page, max_pages=10):
+    """판매자센터 /business/shipments 페이지에서 발송완료 내역 수집"""
+    print("📦 발송관리 내역 수집 시작...")
+    shipments = []
+
+    try:
+        await page.goto(f"{PARTNER_URL}/business/shipments", wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle", timeout=15000)
+        await page.wait_for_timeout(2000)
+
+        # '발송완료' 탭 클릭
+        tabs = page.locator('button, a, [role="tab"]')
+        tab_count = await tabs.count()
+        for i in range(tab_count):
+            tab = tabs.nth(i)
+            text = (await tab.inner_text()).strip()
+            if '발송완료' in text or '완료' in text:
+                await tab.click()
+                await page.wait_for_timeout(2000)
+                print(f"  → '{text}' 탭 클릭")
+                break
+
+        # 100개씩 보기 설정 시도
+        try:
+            page_size_selectors = [
+                'select[class*="page-size"]',
+                'select[class*="pageSize"]',
+                'select[class*="per-page"]',
+                'select[class*="perPage"]',
+                'select[class*="count"]',
+            ]
+            for sel in page_size_selectors:
+                select_el = page.locator(sel)
+                if await select_el.count() > 0:
+                    await select_el.select_option(value="100")
+                    await page.wait_for_timeout(2000)
+                    print("  → 100개씩 보기 설정")
+                    break
+        except Exception:
+            pass
+
+        for page_num in range(1, max_pages + 1):
+            print(f"  📄 {page_num}페이지 수집 중...")
+
+            # 테이블 행 파싱
+            rows = page.locator('table tbody tr, [class*="table"] [class*="row"]:not([class*="header"])')
+            row_count = await rows.count()
+
+            if row_count == 0:
+                print(f"  → 데이터 없음, 수집 종료")
+                break
+
+            for i in range(row_count):
+                try:
+                    row = rows.nth(i)
+                    cells = row.locator('td, [class*="cell"]')
+                    cell_count = await cells.count()
+
+                    if cell_count < 3:
+                        continue
+
+                    # 셀 텍스트 추출
+                    cell_texts = []
+                    for j in range(cell_count):
+                        text = (await cells.nth(j).inner_text()).strip()
+                        cell_texts.append(text)
+
+                    # 주문번호, 상품정보, 사이즈, 거래금액 등 파싱
+                    shipment = _parse_shipment_row(cell_texts)
+                    if shipment:
+                        shipments.append(shipment)
+                except Exception as e:
+                    print(f"  ⚠ 행 파싱 오류: {e}")
+                    continue
+
+            # 다음 페이지 이동
+            next_btn = page.locator('button:has-text("다음"), [class*="next"], a:has-text(">")')
+            if await next_btn.count() > 0:
+                is_disabled = await next_btn.first.get_attribute("disabled")
+                if is_disabled:
+                    print(f"  → 마지막 페이지, 수집 종료")
+                    break
+                await next_btn.first.click()
+                await page.wait_for_timeout(2000)
+            else:
+                break
+
+    except Exception as e:
+        print(f"❌ 발송관리 수집 오류: {e}")
+        traceback.print_exc()
+
+    print(f"📦 발송관리 수집 완료: {len(shipments)}건")
+    return shipments
+
+
+def _parse_shipment_row(cells):
+    """발송관리 테이블 행 파싱 — 셀 텍스트 리스트에서 주문 정보 추출"""
+    if not cells or len(cells) < 3:
+        return None
+
+    # 주문번호: 숫자로 된 긴 문자열 찾기
+    order_id = ""
+    product_info = ""
+    size = ""
+    sale_price = 0
+    trade_date = ""
+    ship_date = ""
+    ship_status = ""
+
+    for text in cells:
+        # 주문번호 (숫자 10자리 이상)
+        if not order_id and re.match(r'^\d{10,}$', text.replace("-", "")):
+            order_id = text.strip()
+        # 가격 (숫자+원 또는 콤마가 있는 숫자)
+        elif not sale_price:
+            price_match = re.search(r'([\d,]+)\s*원?', text)
+            if price_match:
+                try:
+                    val = int(price_match.group(1).replace(",", ""))
+                    if 10000 <= val <= 99999999:
+                        sale_price = val
+                except ValueError:
+                    pass
+        # 날짜 (YYYY-MM-DD 또는 YYYY.MM.DD)
+        date_match = re.search(r'(\d{4}[-./]\d{2}[-./]\d{2})', text)
+        if date_match:
+            if not trade_date:
+                trade_date = date_match.group(1)
+            elif not ship_date:
+                ship_date = date_match.group(1)
+        # 사이즈 (숫자 3자리 또는 S/M/L 등)
+        if not size:
+            size_match = re.search(r'\b(\d{2,3}(?:\.\d)?)\b', text)
+            if size_match and 200 <= float(size_match.group(1)) <= 350:
+                size = size_match.group(1)
+            elif re.match(r'^(XXS|XS|S|M|L|XL|XXL|XXXL|OS|ONE SIZE)$', text, re.IGNORECASE):
+                size = text.upper()
+
+    # 상품 정보: 가장 긴 텍스트 중 영문+한글 혼합
+    for text in cells:
+        if len(text) > len(product_info) and len(text) > 5:
+            if re.search(r'[가-힣]', text) or re.search(r'[A-Za-z]', text):
+                product_info = text
+
+    # 발송 상태
+    for text in cells:
+        if text in ("발송완료", "배송중", "배송완료", "거래완료", "검수중", "검수완료"):
+            ship_status = text
+            break
+
+    if not order_id and not sale_price:
+        return None
+
+    # product_info에서 모델번호 추출 시도
+    model = ""
+    model_match = re.search(r'([A-Z]{1,3}\d{3,6}[A-Z]?\d*)', product_info)
+    if model_match:
+        model = model_match.group(1)
+
+    # productId 추출 시도 (숫자만 있는 짧은 텍스트)
+    product_id = ""
+    for text in cells:
+        if re.match(r'^\d{5,9}$', text.strip()):
+            product_id = text.strip()
+            break
+
+    return {
+        "order_id": order_id,
+        "product_id": product_id,
+        "model": model,
+        "product_info": product_info,
+        "size": size,
+        "sale_price": sale_price,
+        "trade_date": trade_date,
+        "ship_date": ship_date,
+        "ship_status": ship_status,
+    }
+
+
+# ═══════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════
 

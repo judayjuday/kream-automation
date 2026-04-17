@@ -32,7 +32,7 @@ from kream_adjuster import full_adjust_flow, modify_bid_price
 from kream_bot import (
     create_browser, create_context, apply_stealth,
     ensure_logged_in, fill_product_info, place_bid, place_bids_batch, dismiss_popups,
-    save_state_with_localstorage,
+    save_state_with_localstorage, collect_shipments,
     STATE_FILE, PARTNER_URL, KREAM_URL,
 )
 from playwright.async_api import async_playwright
@@ -133,6 +133,44 @@ def _init_adjustments_table():
 
 
 _init_adjustments_table()
+
+
+# ── 판매 이력 (sales_history) DB ──
+def _init_sales_history_table():
+    """sales_history 테이블 생성"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS sales_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT UNIQUE,
+        product_id TEXT,
+        model TEXT,
+        product_info TEXT,
+        size TEXT,
+        sale_price INTEGER,
+        trade_date TEXT,
+        ship_date TEXT,
+        ship_status TEXT,
+        collected_at TEXT NOT NULL
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sh_order ON sales_history(order_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sh_model ON sales_history(model)")
+    conn.commit()
+    conn.close()
+
+
+_init_sales_history_table()
+
+# 판매 수집 스케줄러 상태
+sales_scheduler_state = {
+    "running": False,
+    "last_run": None,
+    "next_run": None,
+    "total_syncs": 0,
+    "last_new_count": 0,
+}
+_sales_timer = None
+_sales_lock = threading.Lock()
 
 
 # ── 得物 가격 & 사이즈 변환 DB ──
@@ -3733,6 +3771,215 @@ def api_email_test():
 
 
 # ═══════════════════════════════════════════
+# 판매 이력 수집 API + 스케줄러
+# ═══════════════════════════════════════════
+
+def _save_shipments_to_db(shipments):
+    """발송관리 수집 결과를 DB에 저장, 새로 추가된 건수 반환"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    new_count = 0
+    for s in shipments:
+        try:
+            c.execute(
+                """INSERT OR IGNORE INTO sales_history
+                (order_id, product_id, model, product_info, size,
+                 sale_price, trade_date, ship_date, ship_status, collected_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (s.get("order_id", ""), s.get("product_id", ""),
+                 s.get("model", ""), s.get("product_info", ""),
+                 s.get("size", ""), s.get("sale_price", 0),
+                 s.get("trade_date", ""), s.get("ship_date", ""),
+                 s.get("ship_status", ""), now)
+            )
+            if c.rowcount > 0:
+                new_count += 1
+        except Exception:
+            pass
+    conn.commit()
+    conn.close()
+    return new_count
+
+
+def _run_sales_sync():
+    """비동기 발송관리 수집 실행"""
+    async def _do():
+        try:
+            settings = {}
+            if SETTINGS_FILE.exists():
+                settings = json.loads(SETTINGS_FILE.read_text())
+            headless = settings.get("headless", True)
+
+            async with async_playwright() as p:
+                browser = await create_browser(p, headless=headless)
+                context = await create_context(browser, STATE_FILE)
+                page = await context.new_page()
+                await apply_stealth(page)
+
+                if not await ensure_logged_in(page, context):
+                    await browser.close()
+                    return {"ok": False, "error": "로그인 필요"}
+
+                shipments = await collect_shipments(page, max_pages=10)
+                await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+                await browser.close()
+
+                new_count = _save_shipments_to_db(shipments)
+                with _sales_lock:
+                    sales_scheduler_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    sales_scheduler_state["total_syncs"] += 1
+                    sales_scheduler_state["last_new_count"] = new_count
+
+                print(f"[판매수집] 완료: 총 {len(shipments)}건 수집, 신규 {new_count}건")
+                return {"ok": True, "total": len(shipments), "new_count": new_count}
+        except Exception as e:
+            print(f"[판매수집] 오류: {e}")
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_do())
+    finally:
+        loop.close()
+
+
+def _schedule_next_sales_sync():
+    """1시간 후 다음 판매 수집 예약"""
+    global _sales_timer
+    with _sales_lock:
+        if not sales_scheduler_state["running"]:
+            return
+    _sales_timer = threading.Timer(3600, _sales_sync_tick)
+    _sales_timer.daemon = True
+    _sales_timer.start()
+    with _sales_lock:
+        next_time = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+        sales_scheduler_state["next_run"] = next_time
+
+
+def _sales_sync_tick():
+    """스케줄러 틱 — 수집 실행 후 다음 예약"""
+    _run_sales_sync()
+    _schedule_next_sales_sync()
+
+
+@app.route("/api/sales/recent")
+def api_sales_recent():
+    """최근 판매 내역"""
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute(
+        "SELECT * FROM sales_history ORDER BY trade_date DESC, id DESC LIMIT ? OFFSET ?",
+        (limit, offset)
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    c.execute("SELECT COUNT(*) FROM sales_history")
+    total = c.fetchone()[0]
+    conn.close()
+    return jsonify({"ok": True, "sales": rows, "total": total})
+
+
+@app.route("/api/sales/sync", methods=["POST"])
+def api_sales_sync():
+    """수동 판매 동기화"""
+    def _bg():
+        return _run_sales_sync()
+    result = [None]
+    def _run():
+        result[0] = _bg()
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join(timeout=120)
+    if result[0]:
+        return jsonify(result[0])
+    return jsonify({"ok": False, "error": "타임아웃 (120초)"})
+
+
+@app.route("/api/sales/stats")
+def api_sales_stats():
+    """판매 통계"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    # 총 판매 건수 & 금액
+    c.execute("SELECT COUNT(*) as cnt, COALESCE(SUM(sale_price),0) as total_amount FROM sales_history")
+    row = dict(c.fetchone())
+
+    # 최근 7일 판매
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    c.execute(
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(sale_price),0) as total_amount FROM sales_history WHERE trade_date >= ?",
+        (week_ago,)
+    )
+    weekly = dict(c.fetchone())
+
+    # 모델별 판매 순위
+    c.execute("""
+        SELECT model, COUNT(*) as cnt, SUM(sale_price) as total_amount
+        FROM sales_history WHERE model != ''
+        GROUP BY model ORDER BY cnt DESC LIMIT 10
+    """)
+    top_models = [dict(r) for r in c.fetchall()]
+
+    # 일별 판매 추이 (최근 30일)
+    month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    c.execute("""
+        SELECT trade_date, COUNT(*) as cnt, SUM(sale_price) as total_amount
+        FROM sales_history WHERE trade_date >= ?
+        GROUP BY trade_date ORDER BY trade_date
+    """, (month_ago,))
+    daily = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+    return jsonify({
+        "ok": True,
+        "total_sales": row["cnt"],
+        "total_amount": row["total_amount"],
+        "weekly_sales": weekly["cnt"],
+        "weekly_amount": weekly["total_amount"],
+        "top_models": top_models,
+        "daily_trend": daily,
+    })
+
+
+@app.route("/api/sales/scheduler/status")
+def api_sales_scheduler_status():
+    """판매 수집 스케줄러 상태"""
+    with _sales_lock:
+        return jsonify({"ok": True, **sales_scheduler_state})
+
+
+@app.route("/api/sales/scheduler/start", methods=["POST"])
+def api_sales_scheduler_start():
+    """판매 수집 스케줄러 시작"""
+    with _sales_lock:
+        if sales_scheduler_state["running"]:
+            return jsonify({"ok": True, "msg": "이미 실행 중"})
+        sales_scheduler_state["running"] = True
+    _schedule_next_sales_sync()
+    return jsonify({"ok": True, "msg": "스케줄러 시작됨 (1시간 간격)"})
+
+
+@app.route("/api/sales/scheduler/stop", methods=["POST"])
+def api_sales_scheduler_stop():
+    """판매 수집 스케줄러 중지"""
+    global _sales_timer
+    with _sales_lock:
+        sales_scheduler_state["running"] = False
+        sales_scheduler_state["next_run"] = None
+    if _sales_timer:
+        _sales_timer.cancel()
+        _sales_timer = None
+    return jsonify({"ok": True, "msg": "스케줄러 중지됨"})
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
@@ -3741,10 +3988,14 @@ if __name__ == "__main__":
     print("  KREAM 판매자 대시보드 서버")
     print("  http://localhost:5001")
     print(f"  모니터링 스케줄: 매일 {MONITOR_HOURS}시")
+    print(f"  판매 수집: 1시간 간격")
     print("=" * 50)
     # 서버 시작 시 환율 자동 조회 (백그라운드)
     threading.Thread(target=fetch_exchange_rates, daemon=True).start()
     # 모니터링 자동 시작
     monitor_state["running"] = True
     _schedule_next_monitor()
+    # 판매 수집 스케줄러 자동 시작
+    sales_scheduler_state["running"] = True
+    _schedule_next_sales_sync()
     app.run(host="0.0.0.0", port=5001, debug=False)

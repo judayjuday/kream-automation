@@ -302,7 +302,7 @@ function _loadTab(id, tabEl) {
 
 function _onTabShown(id) {
   if (id === 'margin') { try { quickCalc(); } catch(e) {} }
-  if (id === 'history') { try { loadBatchHistory(); } catch(e) {} }
+  if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); } catch(e) {} }
   if (id === 'register' && typeof queueRender === 'function') {
     try {
       qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
@@ -779,6 +779,106 @@ function addLog(el, type, msg) {
 function toggleGosiFields() {
   const already = document.getElementById('gosi-already').checked;
   document.getElementById('gosi-section').style.display = already ? 'none' : 'block';
+}
+
+// ═══ 판매 이력 ═══
+let salesCurrentPage = 0;
+const SALES_PAGE_SIZE = 20;
+
+function loadSalesRecent() {
+  const offset = salesCurrentPage * SALES_PAGE_SIZE;
+  fetch(`/api/sales/recent?limit=${SALES_PAGE_SIZE}&offset=${offset}`).then(r => r.json()).then(data => {
+    if (!data.ok) return;
+    const tbody = document.getElementById('sales-tbody');
+    if (!data.sales || data.sales.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-muted">판매 데이터가 없습니다. 수동 동기화를 실행해주세요.</td></tr>';
+      return;
+    }
+    let html = '';
+    data.sales.forEach((s, i) => {
+      html += `<tr>
+        <td>${offset + i + 1}</td>
+        <td style="font-size:11px">${s.order_id || '-'}</td>
+        <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(s.product_info||'').replace(/"/g,'&quot;')}">${s.product_info || '-'}</td>
+        <td><strong>${s.model || '-'}</strong></td>
+        <td>${s.size || '-'}</td>
+        <td style="font-weight:600">${s.sale_price ? s.sale_price.toLocaleString() + '원' : '-'}</td>
+        <td style="font-size:12px">${s.trade_date || '-'}</td>
+        <td style="font-size:12px">${s.ship_date || '-'}</td>
+        <td><span style="color:var(--accent)">${s.ship_status || '-'}</span></td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+    // 페이지 정보
+    const totalPages = Math.ceil((data.total || 0) / SALES_PAGE_SIZE);
+    document.getElementById('sales-page-info').textContent = `${salesCurrentPage+1}/${totalPages || 1} 페이지 (총 ${data.total}건)`;
+    document.getElementById('sales-prev-btn').disabled = salesCurrentPage <= 0;
+    document.getElementById('sales-next-btn').disabled = salesCurrentPage >= totalPages - 1;
+  }).catch(() => {
+    document.getElementById('sales-tbody').innerHTML = '<tr><td colspan="9" class="text-muted">판매 데이터를 불러올 수 없습니다</td></tr>';
+  });
+}
+
+function salesPage(dir) {
+  salesCurrentPage = Math.max(0, salesCurrentPage + dir);
+  loadSalesRecent();
+}
+
+function loadSalesStats() {
+  fetch('/api/sales/stats').then(r => r.json()).then(data => {
+    if (!data.ok) return;
+    document.getElementById('sales-total-cnt').textContent = (data.total_sales || 0).toLocaleString();
+    document.getElementById('sales-total-amt').textContent = (data.total_amount || 0).toLocaleString() + '원';
+    document.getElementById('sales-weekly-cnt').textContent = (data.weekly_sales || 0).toLocaleString();
+    document.getElementById('sales-weekly-amt').textContent = (data.weekly_amount || 0).toLocaleString() + '원';
+  }).catch(() => {});
+}
+
+function salesSync() {
+  const btn = document.querySelector('[onclick="salesSync()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '동기화 중...'; }
+  fetch('/api/sales/sync', {method:'POST'}).then(r => r.json()).then(data => {
+    if (btn) { btn.disabled = false; btn.textContent = '수동 동기화'; }
+    if (data.ok) {
+      alert(`동기화 완료: 총 ${data.total}건 수집, 신규 ${data.new_count}건`);
+      loadSalesRecent();
+      loadSalesStats();
+      loadSalesSchedulerStatus();
+    } else {
+      alert('동기화 실패: ' + (data.error || '알 수 없는 오류'));
+    }
+  }).catch(e => {
+    if (btn) { btn.disabled = false; btn.textContent = '수동 동기화'; }
+    alert('동기화 요청 실패: ' + e);
+  });
+}
+
+function loadSalesSchedulerStatus() {
+  fetch('/api/sales/scheduler/status').then(r => r.json()).then(data => {
+    if (!data.ok) return;
+    const el = document.getElementById('sales-scheduler-status');
+    const btn = document.getElementById('sales-sched-toggle');
+    if (data.running) {
+      el.textContent = `실행 중 | 마지막: ${data.last_run || '-'} | 다음: ${data.next_run || '-'} | 총 ${data.total_syncs}회`;
+      btn.textContent = '스케줄러 중지';
+      btn.style.borderColor = 'var(--danger)';
+      btn.style.color = 'var(--danger)';
+    } else {
+      el.textContent = '스케줄러 중지됨';
+      btn.textContent = '스케줄러 시작';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
+  }).catch(() => {});
+}
+
+function salesSchedulerToggle() {
+  const btn = document.getElementById('sales-sched-toggle');
+  const isRunning = btn.textContent.includes('중지');
+  const url = isRunning ? '/api/sales/scheduler/stop' : '/api/sales/scheduler/start';
+  fetch(url, {method:'POST'}).then(r => r.json()).then(data => {
+    loadSalesSchedulerStatus();
+  }).catch(() => {});
 }
 
 // ═══ 실행 이력 (batch 단위) ═══

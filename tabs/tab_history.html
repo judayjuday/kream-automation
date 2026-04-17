@@ -1,4 +1,47 @@
       <div id="tab-history" class="tab-view">
+        <!-- 최근 판매 -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">💰</span> 최근 판매 <span id="sales-badge" style="display:none;background:var(--danger);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px"></span></span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <span id="sales-scheduler-status" class="text-muted" style="font-size:11px"></span>
+              <button class="btn btn-outline btn-sm" onclick="salesSync()">수동 동기화</button>
+              <button class="btn btn-outline btn-sm" id="sales-sched-toggle" onclick="salesSchedulerToggle()">스케줄러 시작</button>
+            </div>
+          </div>
+          <!-- 판매 통계 요약 -->
+          <div id="sales-stats" style="display:flex; gap:24px; margin-bottom:12px; font-size:13px">
+            <div>전체: <strong id="sales-total-cnt">-</strong>건 / <strong id="sales-total-amt">-</strong></div>
+            <div>최근 7일: <strong id="sales-weekly-cnt">-</strong>건 / <strong id="sales-weekly-amt">-</strong></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px">#</th>
+                  <th>주문번호</th>
+                  <th>상품</th>
+                  <th>모델</th>
+                  <th>사이즈</th>
+                  <th>거래금액</th>
+                  <th>거래일</th>
+                  <th>발송일</th>
+                  <th>상태</th>
+                </tr>
+              </thead>
+              <tbody id="sales-tbody">
+                <tr><td colspan="9" class="text-muted">판매 데이터를 불러오는 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:8px; align-items:center">
+            <button class="btn btn-outline btn-sm" id="sales-prev-btn" onclick="salesPage(-1)" disabled>이전</button>
+            <span id="sales-page-info" class="text-muted" style="font-size:12px">1페이지</span>
+            <button class="btn btn-outline btn-sm" id="sales-next-btn" onclick="salesPage(1)">다음</button>
+          </div>
+        </div>
+
+        <!-- 실행 이력 -->
         <div class="card">
           <div class="card-title" style="justify-content:space-between">
             <span><span class="icon">📝</span> 실행 이력</span>
