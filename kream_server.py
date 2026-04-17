@@ -1829,6 +1829,124 @@ def api_discovery_upload():
     return jsonify({"ok": True, "filename": f.filename})
 
 
+# ── 상품 자동 발굴 ──
+AUTO_SCAN_KEYWORDS = {
+    "sneakers": [
+        "오니츠카 타이거", "뉴발란스 1906", "미즈노", "아식스",
+        "나이키 덩크", "아디다스 삼바", "뉴발란스 530",
+    ],
+    "bag": [
+        "마르니 트렁크", "메종키츠네", "르메르",
+    ],
+    "apparel": [
+        "스투시", "칼하트", "그라미치",
+    ],
+}
+
+
+@app.route("/api/discovery/auto-scan", methods=["POST"])
+def api_discovery_auto_scan():
+    """자동 상품 발굴 — 인기 키워드 검색 → 점수 계산"""
+    data = request.json or {}
+    category = data.get("category", "sneakers")
+
+    if category == "all":
+        keywords = []
+        for kws in AUTO_SCAN_KEYWORDS.values():
+            keywords.extend(kws)
+    else:
+        keywords = AUTO_SCAN_KEYWORDS.get(category, AUTO_SCAN_KEYWORDS["sneakers"])
+
+    tid = new_task()
+    add_log(tid, "info", f"자동 스캔 시작: {category} ({len(keywords)}개 키워드)")
+
+    def run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            all_products = []
+
+            for i, kw in enumerate(keywords):
+                add_log(tid, "info", f"[{i+1}/{len(keywords)}] '{kw}' 검색 중...")
+                try:
+                    result = loop.run_until_complete(
+                        kream_keyword_search(kw, max_scroll=2, tid=tid)
+                    )
+                    products = result.get("products", [])
+                    for p in products:
+                        p["search_keyword"] = kw
+                    all_products.extend(products)
+                except Exception as e:
+                    add_log(tid, "warning", f"'{kw}' 검색 실패: {e}")
+
+            loop.close()
+
+            # 중복 제거 (productId 기준)
+            seen = set()
+            unique = []
+            for p in all_products:
+                pid = p.get("productId", "")
+                if pid and pid not in seen:
+                    seen.add(pid)
+                    unique.append(p)
+
+            # 점수 계산
+            for p in unique:
+                score = 0
+                trades = p.get("trades", 0)
+                price = p.get("price", 0)
+
+                # 거래량 점수 (0~40)
+                if trades >= 10000:
+                    score += 40
+                elif trades >= 5000:
+                    score += 30
+                elif trades >= 1000:
+                    score += 20
+                elif trades >= 100:
+                    score += 10
+
+                # 가격대 점수 (5만~30만 사이가 마진 잡기 좋은 구간) (0~30)
+                if 50000 <= price <= 300000:
+                    score += 30
+                elif 30000 <= price <= 500000:
+                    score += 20
+                elif price > 0:
+                    score += 10
+
+                # 관심수 점수 (0~20)
+                interest = p.get("interest", 0)
+                if interest >= 10000:
+                    score += 20
+                elif interest >= 1000:
+                    score += 15
+                elif interest >= 100:
+                    score += 10
+
+                # 모델번호 있으면 보너스 (분석 가능)
+                if p.get("model"):
+                    score += 10
+
+                p["score"] = score
+
+            # 점수 순 정렬
+            unique.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+            add_log(tid, "success", f"자동 스캔 완료: {len(unique)}건 발굴 (상위 50건 표시)")
+            finish_task(tid, result={
+                "products": unique[:50],
+                "total_scanned": len(unique),
+                "keywords_used": keywords,
+            })
+
+        except Exception as e:
+            traceback.print_exc()
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
+
+
 # ═══════════════════════════════════════════
 # API: 설정
 # ═══════════════════════════════════════════

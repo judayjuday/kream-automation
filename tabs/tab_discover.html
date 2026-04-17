@@ -75,4 +75,49 @@
         </div>
       </div>
 
+        <!-- 자동 스캔 결과 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🤖</span> 상품 자동 발굴</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <select class="form-select" id="autoscan-category" style="height:30px; font-size:12px; width:140px">
+                <option value="all">전체 카테고리</option>
+                <option value="sneakers" selected>스니커즈</option>
+                <option value="bag">가방</option>
+                <option value="apparel">의류</option>
+              </select>
+              <button class="btn btn-primary btn-sm" id="autoscan-btn" onclick="autoScan()">자동 스캔 시작</button>
+            </div>
+          </div>
+          <div style="font-size:12px; color:var(--text3); margin-bottom:8px">
+            KREAM 인기 키워드 검색 → 거래량/경쟁자/가격차이 분석 → 점수 순 정렬
+          </div>
+          <div id="autoscan-status" style="font-size:12px; color:var(--text2); margin-bottom:8px; display:none"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="autoscan-all" onchange="document.querySelectorAll('.autoscan-cb').forEach(c=>c.checked=this.checked)"></th>
+                  <th>점수</th>
+                  <th>브랜드</th>
+                  <th>상품명</th>
+                  <th>모델번호</th>
+                  <th>표시가</th>
+                  <th>거래수</th>
+                  <th>해외배송</th>
+                  <th>분석</th>
+                  <th style="width:80px">액션</th>
+                </tr>
+              </thead>
+              <tbody id="autoscan-tbody">
+                <tr><td colspan="10" class="text-muted">자동 ���캔을 실행하세요</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:8px">
+            <button class="btn btn-outline btn-sm" onclick="autoscanAddToQueue()">선택 항목 큐에 추가</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══ 탭: 가격 자동 조정 ═══ -->

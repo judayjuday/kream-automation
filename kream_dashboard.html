@@ -1982,6 +1982,111 @@ function kwDownloadExcel() {
   });
 }
 
+// ═══ 자동 상품 발굴 ═══
+let autoscanData = [];
+
+function autoScan() {
+  const category = document.getElementById('autoscan-category').value;
+  const btn = document.getElementById('autoscan-btn');
+  const statusEl = document.getElementById('autoscan-status');
+  btn.disabled = true;
+  btn.textContent = '스캔 중...';
+  statusEl.style.display = 'block';
+  statusEl.textContent = '키워드 검색 시작...';
+
+  fetch('/api/discovery/auto-scan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({category})
+  }).then(r => r.json()).then(data => {
+    if (!data.taskId) {
+      btn.disabled = false; btn.textContent = '자동 스캔 시작';
+      statusEl.textContent = '오류: ' + (data.error || '');
+      return;
+    }
+    // 폴링
+    const poll = setInterval(() => {
+      fetch(`/api/task/${data.taskId}`).then(r => r.json()).then(t => {
+        if (t.logs && t.logs.length > 0) {
+          statusEl.textContent = t.logs[t.logs.length - 1].msg || '';
+        }
+        if (t.status === 'done' || t.status === 'error') {
+          clearInterval(poll);
+          btn.disabled = false; btn.textContent = '자동 스캔 시작';
+          if (t.status === 'error') {
+            statusEl.textContent = '오류: ' + (t.error || '');
+            return;
+          }
+          const result = t.result || {};
+          autoscanData = result.products || [];
+          statusEl.textContent = `스캔 완료: 총 ${result.total_scanned || 0}건 발견, 상위 ${autoscanData.length}건 표시`;
+          renderAutoscan();
+        }
+      });
+    }, 2000);
+  }).catch(e => {
+    btn.disabled = false; btn.textContent = '자동 스캔 시작';
+    statusEl.textContent = '요청 실패: ' + e;
+  });
+}
+
+function renderAutoscan() {
+  const tbody = document.getElementById('autoscan-tbody');
+  if (!autoscanData.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-muted">결과 없음</td></tr>';
+    return;
+  }
+  let html = '';
+  autoscanData.forEach((p, i) => {
+    const scoreColor = p.score >= 70 ? 'var(--accent)' : p.score >= 40 ? 'var(--warning)' : 'var(--text3)';
+    html += `<tr>
+      <td><input type="checkbox" class="autoscan-cb" data-idx="${i}"></td>
+      <td style="font-weight:700;color:${scoreColor}">${p.score || 0}</td>
+      <td style="font-size:12px">${p.brand || '-'}</td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(p.nameKr||'').replace(/"/g,'&quot;')}">${p.nameKr || p.nameEn || '-'}</td>
+      <td><strong>${p.model || '-'}</strong></td>
+      <td>${p.price ? p.price.toLocaleString() + '원' : '-'}</td>
+      <td>${p.trades ? p.trades.toLocaleString() : '-'}</td>
+      <td style="font-size:11px">${p.search_keyword || '-'}</td>
+      <td style="font-size:11px">${p.score >= 70 ? '추천' : p.score >= 40 ? '보통' : '낮음'}</td>
+      <td>${p.model ? `<button class="btn btn-outline btn-sm" onclick="autoscanAddOne(${i})">큐추가</button>` : '-'}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function autoscanAddOne(idx) {
+  const p = autoscanData[idx];
+  if (!p || !p.model) return;
+  fetch('/api/queue', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ model: p.model, sizes: [], bid_strategy: 'undercut', quantity: 1 })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) alert(`${p.model} 큐에 추가 완료`);
+    else alert('추가 실패: ' + (d.error || ''));
+  });
+}
+
+function autoscanAddToQueue() {
+  const checked = document.querySelectorAll('.autoscan-cb:checked');
+  if (!checked.length) { alert('선택된 항목이 없습니다'); return; }
+  let added = 0;
+  const promises = [];
+  checked.forEach(cb => {
+    const p = autoscanData[parseInt(cb.dataset.idx)];
+    if (!p || !p.model) return;
+    promises.push(
+      fetch('/api/queue', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ model: p.model, sizes: [], bid_strategy: 'undercut', quantity: 1 })
+      }).then(r => r.json()).then(d => { if (d.ok) added++; })
+    );
+  });
+  Promise.all(promises).then(() => alert(`${added}건 큐에 추가 완료`));
+}
+
 // ═══ 상품 발굴 ═══
 let discData = null;
 let discTab = 'overseas';
