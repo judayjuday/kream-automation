@@ -2819,19 +2819,17 @@ def api_market_check():
     if not model:
         return jsonify({"error": "모델번호를 입력해주세요"}), 400
 
-    # 1) 得物 가격 DB 조회
+    # 1) 得物 가격 DB 조회 (없어도 계속 진행)
     dewu = get_dewu_prices(model)
-    if not dewu:
-        return jsonify({"error": f"得物 가격 데이터가 없습니다: {model}",
-                        "hint": "DB에 해당 모델의 得物 가격이 등록되어 있지 않습니다."}), 404
+    has_dewu = bool(dewu)
 
     # 2) KREAM 즉시구매가 조회 (큐에 완료 항목이 있으면 재사용)
     kream_prices = {}  # kr_size → sell_price
-    # 큐에서 해당 모델의 완료된 결과 찾기
+    kream_result = None
     for q in product_queue:
         if q.get("model", "").upper() == model and q.get("status") == "완료":
-            r = q.get("result", {})
-            sdp = r.get("sizeDeliveryPrices", [])
+            kream_result = q.get("result", {})
+            sdp = kream_result.get("sizeDeliveryPrices", [])
             for s in sdp:
                 sz = str(s.get("size", "")).strip()
                 bp = s.get("buyPrice") or s.get("buyNormal") or 0
@@ -2839,10 +2837,16 @@ def api_market_check():
                     digits = re.sub(r'[^0-9.]', '', sz)
                     kream_prices[digits] = bp
                     kream_prices[sz] = bp
-            # 단일 즉시구매가
-            if not kream_prices and r.get("instantBuyPrice"):
-                kream_prices["ALL"] = r["instantBuyPrice"]
+            if not kream_prices and kream_result.get("instantBuyPrice"):
+                kream_prices["ALL"] = kream_result["instantBuyPrice"]
             break
+
+    # 得物 데이터도 KREAM 데이터��� 없으면 에러
+    if not has_dewu and not kream_prices:
+        return jsonify({
+            "error": f"분석 데이터가 없습니다: {model}",
+            "hint": "큐에서 먼저 일괄 실행하여 KREAM 가격을 수집하거나, 得物 가격을 등록해주세요."
+        }), 404
 
     # 3) 사이즈별 마진 계산
     settings = {}
@@ -2853,37 +2857,59 @@ def api_market_check():
             pass
     cny_rate = float(settings.get("cnyRate", 218.12))
     cny_margin = float(settings.get("cnyMargin", 1.03))
-    usd_rate = float(settings.get("usdRate", 1495.76))
-    usd_limit = float(settings.get("usdLimit", 150))
-    tariff_rate = 0.13  # 신발 기본
 
     size_data = []
-    for key, info in dewu["sizes"].items():
-        cny = info["cny"]
-        kr_size = info["kr_size"] or info["eu_size"]
-        # 원가 계산 (관부가세는 고객 부담 → 제외)
-        krw_buy = round(cny * cny_rate * cny_margin)
-        total_cost = krw_buy + 8000
 
-        # KREAM 가격 매칭
-        kream_sell = kream_prices.get(kr_size) or kream_prices.get(info["eu_size"]) or kream_prices.get("ALL") or 0
-
-        size_data.append({
-            "size": kr_size,
-            "eu_size": info["eu_size"],
-            "cny": cny,
-            "totalCost": total_cost,
-            "instantBuyPrice": kream_sell,
-        })
+    if has_dewu:
+        # 得物 가격 기반 분석
+        for key, info in dewu["sizes"].items():
+            cny = info["cny"]
+            kr_size = info["kr_size"] or info["eu_size"]
+            krw_buy = round(cny * cny_rate * cny_margin)
+            total_cost = krw_buy + 8000
+            kream_sell = kream_prices.get(kr_size) or kream_prices.get(info["eu_size"]) or kream_prices.get("ALL") or 0
+            size_data.append({
+                "size": kr_size,
+                "eu_size": info["eu_size"],
+                "cny": cny,
+                "totalCost": total_cost,
+                "instantBuyPrice": kream_sell,
+            })
+    elif kream_result:
+        # KREAM 데이터만으로 분석 (큐 결과 활용)
+        sm = kream_result.get("sizeMargins", [])
+        if sm:
+            for s in sm:
+                size_data.append({
+                    "size": s.get("size", ""),
+                    "eu_size": "",
+                    "cny": 0,
+                    "totalCost": s.get("totalCost", 0),
+                    "instantBuyPrice": s.get("instantBuyPrice", 0),
+                })
+        elif kream_result.get("totalCost") and kream_result.get("instantBuyPrice"):
+            size_data.append({
+                "size": "ALL",
+                "eu_size": "",
+                "cny": 0,
+                "totalCost": kream_result["totalCost"],
+                "instantBuyPrice": kream_result["instantBuyPrice"],
+            })
 
     # 4) 시장 분류
-    market = classify_market(size_data)
+    market = classify_market(size_data) if size_data else {
+        "market_type": "데이터 부족", "market_color": "gray",
+        "avg_margin_rate": None, "profitable_count": 0,
+        "total_count": 0, "details": []
+    }
 
     # 5) 마진 양호 사이즈 목록
     good_sizes = [d["size"] for d in market["details"] if d.get("margin_rate") is not None and d["margin_rate"] >= 10]
     ok_sizes = [d["size"] for d in market["details"] if d.get("margin_rate") is not None and 0 <= d["margin_rate"] < 10]
 
-    message = f"이 상품은 {market['market_type']}입니다."
+    # 메시지 생성
+    data_source = "得物+KREAM" if has_dewu else "KREAM"
+    message = f"[{data_source} 기준] 이 상품은 {market['market_type']}입니다."
     if market["market_type"] == "혼합 시장" and good_sizes:
         message += f" {', '.join(good_sizes)} 사이즈만 마진이 충분합니다."
     elif market["market_type"] == "혼합 시장" and ok_sizes:
@@ -2892,10 +2918,12 @@ def api_market_check():
         message += " 평균 마진율이 마이너스입니다. 입찰 비추천."
     elif market["market_type"] == "정상 시장":
         message += " 입찰 추천."
+    if not has_dewu:
+        message += " (得物 가격 미등록 — KREAM 시세로만 분석)"
 
     return jsonify({
         "model": model,
-        "brand": dewu["brand"],
+        "brand": dewu["brand"] if has_dewu else (kream_result or {}).get("brand", ""),
         "market_type": market["market_type"],
         "market_color": market["market_color"],
         "avg_margin_rate": market["avg_margin_rate"],
@@ -2906,6 +2934,7 @@ def api_market_check():
         "message": message,
         "details": market["details"],
         "has_kream_prices": bool(kream_prices),
+        "has_dewu_prices": has_dewu,
     })
 
 
