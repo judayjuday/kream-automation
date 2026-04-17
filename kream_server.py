@@ -135,6 +135,218 @@ def _init_adjustments_table():
 _init_adjustments_table()
 
 
+# ── 得物 가격 & 사이즈 변환 DB ──
+def _init_dewu_tables():
+    """dewu_prices, size_conversion 테이블 생성 + 초기 데이터"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS dewu_prices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model TEXT NOT NULL,
+        brand TEXT,
+        eu_size TEXT,
+        kr_size TEXT,
+        cny_price REAL,
+        updated_at TEXT NOT NULL
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_dewu_model ON dewu_prices(model)")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS size_conversion (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand TEXT NOT NULL,
+        eu_size TEXT NOT NULL,
+        kr_size TEXT NOT NULL
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sc_brand ON size_conversion(brand)")
+
+    # 초기 데이터 삽입 (테이블이 비어있을 때만)
+    c.execute("SELECT COUNT(*) FROM size_conversion")
+    if c.fetchone()[0] == 0:
+        _SIZE_MAP = {
+            "onitsuka": {
+                "EU36": "225", "EU37": "230", "EU37.5": "235", "EU38": "240",
+                "EU39": "245", "EU39.5": "250", "EU40": "252.5", "EU40.5": "255",
+                "EU41.5": "260", "EU42": "265", "EU42.5": "270", "EU43.5": "275",
+                "EU44": "280", "EU44.5": "282.5", "EU45": "285", "EU46": "290",
+            },
+            "newbalance": {
+                "EU35.5": "215", "EU36": "220", "EU37": "225", "EU37.5": "230",
+                "EU38": "235", "EU38.5": "240", "EU39.5": "245", "EU40": "250",
+                "EU40.5": "255", "EU41.5": "260", "EU42": "265", "EU42.5": "270",
+                "EU43": "275", "EU44": "280", "EU44.5": "285", "EU45": "290",
+            },
+            "mizuno": {
+                "EU36": "225", "EU36.5": "230", "EU37": "235", "EU38": "240",
+                "EU38.5": "245", "EU39": "250", "EU40": "255", "EU40.5": "260",
+                "EU41": "265", "EU42": "270", "EU42.5": "275", "EU43": "280",
+                "EU44": "285", "EU44.5": "290", "EU45": "295",
+            },
+        }
+        rows = []
+        for brand, sizes in _SIZE_MAP.items():
+            for eu, kr in sizes.items():
+                rows.append((brand, eu, kr))
+        c.executemany("INSERT INTO size_conversion (brand, eu_size, kr_size) VALUES (?, ?, ?)", rows)
+        print(f"[DB] size_conversion 초기 데이터 {len(rows)}건 삽입")
+
+    c.execute("SELECT COUNT(*) FROM dewu_prices")
+    if c.fetchone()[0] == 0:
+        _PRODUCTS = [
+            {"model": "1183B480-250", "brand": "onitsuka", "dewu_prices": {
+                "EU36": 532, "EU37": 544, "EU37.5": 565, "EU38": 565,
+                "EU39": 499, "EU39.5": 502, "EU40": 484, "EU40.5": 480,
+                "EU41.5": 479, "EU42": 498, "EU42.5": 491, "EU43.5": 516,
+                "EU44": 505, "EU44.5": 514, "EU45": 561, "EU46": 574,
+            }},
+            {"model": "M1906AD", "brand": "newbalance", "dewu_prices": {
+                "EU36": 768, "EU37": 768, "EU37.5": 838, "EU38": 843,
+                "EU38.5": 886, "EU39.5": 820, "EU40": 847, "EU40.5": 860,
+                "EU41.5": 834, "EU42": 829, "EU42.5": 847, "EU43": 894,
+                "EU44": 805, "EU44.5": 918, "EU45": 997,
+            }},
+            {"model": "M1906AG", "brand": "newbalance", "dewu_prices": {
+                "EU36": 1018, "EU37": 959, "EU37.5": 1014, "EU38": 1022,
+                "EU38.5": 1048, "EU39.5": 931, "EU40": 919, "EU40.5": 949,
+                "EU41.5": 857, "EU42": 838, "EU42.5": 879, "EU43": 853,
+                "EU44": 857, "EU44.5": 1141, "EU45": 1029,
+            }},
+            {"model": "1183B799-101", "brand": "onitsuka", "dewu_prices": {
+                "EU36": 485, "EU37": 422, "EU37.5": 434, "EU38": 437,
+                "EU39": 423, "EU39.5": 438, "EU40": 441, "EU40.5": 438,
+                "EU41.5": 429, "EU42": 497, "EU42.5": 599, "EU43.5": 494,
+                "EU44": 482, "EU44.5": 476, "EU45": 548, "EU46": 534,
+            }},
+            {"model": "1203A714-020", "brand": "onitsuka", "dewu_prices": {
+                "EU37": 1067, "EU39": 1058, "EU39.5": 940, "EU40": 538,
+                "EU40.5": 529, "EU41.5": 530, "EU42": 530, "EU42.5": 1422,
+                "EU43.5": 538, "EU44": 699,
+            }},
+            {"model": "D1GH241906", "brand": "mizuno", "dewu_prices": {
+                "EU36": 798, "EU36.5": 760, "EU37": 649, "EU38": 649,
+                "EU38.5": 680, "EU39": 666, "EU40": 488, "EU40.5": 488,
+                "EU41": 488, "EU42": 488, "EU42.5": 488, "EU43": 488,
+                "EU44": 488, "EU44.5": 488,
+            }},
+        ]
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rows = []
+        # 사이즈 변환표 로드
+        sc_map = {}
+        c.execute("SELECT brand, eu_size, kr_size FROM size_conversion")
+        for b, eu, kr in c.fetchall():
+            sc_map[(b, eu)] = kr
+        for p in _PRODUCTS:
+            for eu, cny in p["dewu_prices"].items():
+                kr = sc_map.get((p["brand"], eu), "")
+                rows.append((p["model"], p["brand"], eu, kr, cny, now))
+        c.executemany(
+            "INSERT INTO dewu_prices (model, brand, eu_size, kr_size, cny_price, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            rows
+        )
+        print(f"[DB] dewu_prices 초기 데이터 {len(rows)}건 삽입")
+
+    conn.commit()
+    conn.close()
+
+
+_init_dewu_tables()
+
+
+def get_dewu_prices(model):
+    """DB에서 모델별 得物 가격 조회 → {kr_size: cny_price, ...}"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("SELECT kr_size, cny_price, eu_size, brand FROM dewu_prices WHERE model = ?", (model,))
+    rows = c.fetchall()
+    conn.close()
+    if not rows:
+        return None
+    result = {"sizes": {}, "brand": rows[0][3]}
+    for kr, cny, eu, brand in rows:
+        key = kr if kr else eu
+        result["sizes"][key] = {"cny": cny, "eu_size": eu, "kr_size": kr}
+    return result
+
+
+def classify_market(size_margins_with_dewu):
+    """
+    시장 경쟁 상태 분류
+    - size_margins_with_dewu: [{size, totalCost, instantBuyPrice, ...}, ...]
+    - 각 사이즈별로 마진율 계산 → 평균 마진율로 분류
+    반환: {market_type, market_color, avg_margin_rate, profitable_count, total_count, details}
+    """
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    fee_rate = float(settings.get("feeRate", 0.06))
+    fixed_fee = int(settings.get("fixedFee", 2500))
+    vat_rate = float(settings.get("vatRate", 0.10))
+
+    margin_rates = []
+    profitable = 0
+    details = []
+
+    for sz in size_margins_with_dewu:
+        sell_price = sz.get("instantBuyPrice") or 0
+        total_cost = sz.get("totalCost", 0)
+        if not sell_price or not total_cost:
+            details.append({"size": sz.get("size", "?"), "margin_rate": None, "profitable": False})
+            continue
+
+        # 정산액 계산
+        commission = round(sell_price * fee_rate)
+        comm_vat = round(commission * vat_rate)
+        total_fee = commission + comm_vat + fixed_fee
+        settlement = sell_price - total_fee
+        margin = settlement - total_cost
+        margin_rate = round(margin / total_cost * 100, 1) if total_cost > 0 else 0
+
+        margin_rates.append(margin_rate)
+        is_profit = margin_rate >= 0
+        if margin_rate >= 10:
+            profitable += 1
+        details.append({
+            "size": sz.get("size", "?"),
+            "margin_rate": margin_rate,
+            "margin": margin,
+            "sell_price": sell_price,
+            "total_cost": total_cost,
+            "profitable": is_profit,
+        })
+
+    if not margin_rates:
+        return {
+            "market_type": "데이터 부족",
+            "market_color": "gray",
+            "avg_margin_rate": None,
+            "profitable_count": 0,
+            "total_count": len(size_margins_with_dewu),
+            "details": details,
+        }
+
+    avg_rate = round(sum(margin_rates) / len(margin_rates), 1)
+    ok_count = sum(1 for r in margin_rates if r >= 0)
+
+    if avg_rate >= 10:
+        mtype, mcolor = "정상 시장", "green"
+    elif avg_rate >= 0:
+        mtype, mcolor = "혼합 시장", "yellow"
+    else:
+        mtype, mcolor = "비정상 시장", "red"
+
+    return {
+        "market_type": mtype,
+        "market_color": mcolor,
+        "avg_margin_rate": avg_rate,
+        "profitable_count": ok_count,
+        "total_count": len(margin_rates),
+        "details": details,
+    }
+
+
 # ── 환율 캐시 ──
 def _load_initial_rates():
     """settings.json에서 마지막으로 저장된 환율 읽기"""
@@ -2328,6 +2540,19 @@ def api_queue_execute():
                             item["cny"], item["category"], item["shipping"]
                         )
 
+                    # 시장 분류 계산
+                    market_info = {"market_type": "데이터 부족", "market_color": "gray",
+                                   "avg_margin_rate": None, "profitable_count": 0,
+                                   "total_count": 0, "details": []}
+                    if size_margins:
+                        market_info = classify_market(size_margins)
+                    elif instant_buy and margin_info["total_cost"]:
+                        market_info = classify_market([{
+                            "size": item.get("size", "ONE SIZE"),
+                            "totalCost": margin_info["total_cost"],
+                            "instantBuyPrice": instant_buy,
+                        }])
+
                     item["result"] = {
                         "productId": product_id,
                         "nameKr": name_kr,
@@ -2349,6 +2574,13 @@ def api_queue_execute():
                         "sellBids": kream.get("sell_bids", []),
                         "buyBids": kream.get("buy_bids", []),
                         "sizeDeliveryPrices": kream.get("size_delivery_prices", []),
+                        # 시장 분류
+                        "marketType": market_info["market_type"],
+                        "marketColor": market_info["market_color"],
+                        "avgMarginRate": market_info["avg_margin_rate"],
+                        "profitableCount": market_info["profitable_count"],
+                        "marketTotalCount": market_info["total_count"],
+                        "marketDetails": market_info["details"],
                     }
                     item["status"] = "완료"
                     cost_str = f"원가 {margin_info['total_cost']:,}원"
@@ -2397,6 +2629,110 @@ def api_queue_execute():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"taskId": tid})
+
+
+@app.route("/api/market-check", methods=["POST"])
+def api_market_check():
+    """모델번호 입력 → KREAM 시세 수집 → 得物 원가 비교 → 시장 분류 반환"""
+    data = request.json or {}
+    model = (data.get("model") or "").strip().upper()
+    if not model:
+        return jsonify({"error": "모델번호를 입력해주세요"}), 400
+
+    # 1) 得物 가격 DB 조회
+    dewu = get_dewu_prices(model)
+    if not dewu:
+        return jsonify({"error": f"得物 가격 데이터가 없습니다: {model}",
+                        "hint": "DB에 해당 모델의 得物 가격이 등록되어 있지 않습니다."}), 404
+
+    # 2) KREAM 즉시구매가 조회 (큐에 완료 항목이 있으면 재사용)
+    kream_prices = {}  # kr_size → sell_price
+    # 큐에서 해당 모델의 완료된 결과 찾기
+    for q in product_queue:
+        if q.get("model", "").upper() == model and q.get("status") == "완료":
+            r = q.get("result", {})
+            sdp = r.get("sizeDeliveryPrices", [])
+            for s in sdp:
+                sz = str(s.get("size", "")).strip()
+                bp = s.get("buyPrice") or s.get("buyNormal") or 0
+                if sz and bp:
+                    digits = re.sub(r'[^0-9.]', '', sz)
+                    kream_prices[digits] = bp
+                    kream_prices[sz] = bp
+            # 단일 즉시구매가
+            if not kream_prices and r.get("instantBuyPrice"):
+                kream_prices["ALL"] = r["instantBuyPrice"]
+            break
+
+    # 3) 사이즈별 마진 계산
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    cny_rate = float(settings.get("cnyRate", 218.12))
+    cny_margin = float(settings.get("cnyMargin", 1.03))
+    usd_rate = float(settings.get("usdRate", 1495.76))
+    usd_limit = float(settings.get("usdLimit", 150))
+    tariff_rate = 0.13  # 신발 기본
+
+    size_data = []
+    for key, info in dewu["sizes"].items():
+        cny = info["cny"]
+        kr_size = info["kr_size"] or info["eu_size"]
+        # 원가 계산
+        krw_buy = round(cny * cny_rate * cny_margin)
+        usd_equiv = cny * cny_rate / usd_rate
+        customs = 0
+        import_vat = 0
+        if usd_equiv > usd_limit:
+            customs = round(cny * cny_rate * tariff_rate)
+            import_vat = round((cny * cny_rate + customs) * 0.10)
+        total_cost = krw_buy + customs + import_vat + 8000
+
+        # KREAM 가격 매칭
+        kream_sell = kream_prices.get(kr_size) or kream_prices.get(info["eu_size"]) or kream_prices.get("ALL") or 0
+
+        size_data.append({
+            "size": kr_size,
+            "eu_size": info["eu_size"],
+            "cny": cny,
+            "totalCost": total_cost,
+            "instantBuyPrice": kream_sell,
+        })
+
+    # 4) 시장 분류
+    market = classify_market(size_data)
+
+    # 5) 마진 양호 사이즈 목록
+    good_sizes = [d["size"] for d in market["details"] if d.get("margin_rate") is not None and d["margin_rate"] >= 10]
+    ok_sizes = [d["size"] for d in market["details"] if d.get("margin_rate") is not None and 0 <= d["margin_rate"] < 10]
+
+    message = f"이 상품은 {market['market_type']}입니다."
+    if market["market_type"] == "혼합 시장" and good_sizes:
+        message += f" {', '.join(good_sizes)} 사이즈만 마진이 충분합니다."
+    elif market["market_type"] == "혼합 시장" and ok_sizes:
+        message += f" {', '.join(ok_sizes)} 사이즈는 소량 마진이 남습니다."
+    elif market["market_type"] == "비정상 시장":
+        message += " 평균 마진율이 마이너스입니다. 입찰 비추천."
+    elif market["market_type"] == "정상 시장":
+        message += " 입찰 추천."
+
+    return jsonify({
+        "model": model,
+        "brand": dewu["brand"],
+        "market_type": market["market_type"],
+        "market_color": market["market_color"],
+        "avg_margin_rate": market["avg_margin_rate"],
+        "profitable_count": market["profitable_count"],
+        "total_count": market["total_count"],
+        "good_sizes": good_sizes,
+        "ok_sizes": ok_sizes,
+        "message": message,
+        "details": market["details"],
+        "has_kream_prices": bool(kream_prices),
+    })
 
 
 @app.route("/api/queue/auto-register", methods=["POST"])

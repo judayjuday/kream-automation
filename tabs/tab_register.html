@@ -55,7 +55,11 @@
               </select>
             </div>
             <button class="btn btn-primary" id="q-add-btn" onclick="queueAdd()" style="height:38px">+ 큐에 추가</button>
+            <button class="btn btn-outline" onclick="marketCheck()" style="height:38px;border-color:#6366f1;color:#6366f1" title="得物 원가 기준 시장 분류 사전 체크">시장 체크</button>
           </div>
+
+          <!-- 시장 체크 결과 -->
+          <div id="market-check-result" style="display:none; margin-top:12px; padding:12px 16px; border-radius:8px; border:1px solid var(--border); font-size:13px"></div>
 
           <!-- 사이즈별 가격 입력 (항상 표시) -->
           <div id="q-shoe-area" style="margin-top:16px; padding:16px; background:var(--bg); border-radius:8px; border:1px solid var(--border)">

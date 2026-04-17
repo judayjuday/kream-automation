@@ -2195,6 +2195,41 @@ function qBuildSizesFromInput() {
   return result;
 }
 
+// ── 시장 체크 ──
+function marketCheck() {
+  const model = document.getElementById('q-model').value.trim();
+  if (!model) { alert('모델번호를 입력하세요'); document.getElementById('q-model').focus(); return; }
+  const box = document.getElementById('market-check-result');
+  box.style.display = 'block';
+  box.innerHTML = '<span class="text-muted">시장 체크 중...</span>';
+  fetch('/api/market-check', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model})})
+    .then(r => r.json()).then(data => {
+      if (data.error) { box.innerHTML = `<span style="color:var(--danger)">${data.error}</span>${data.hint ? '<br><span class="text-muted" style="font-size:11px">'+data.hint+'</span>' : ''}`; return; }
+      const bgMap = {green:'#e6f9e6;border-color:#1a7a1a', yellow:'#fff8e0;border-color:#8a6d00', red:'#ffe6e6;border-color:#cc0000', gray:'#f0f0f0;border-color:#888'};
+      const colorMap = {green:'#1a7a1a', yellow:'#8a6d00', red:'#cc0000', gray:'#888'};
+      box.style.background = (bgMap[data.market_color]||bgMap.gray).split(';')[0];
+      box.style.borderColor = colorMap[data.market_color] || '#888';
+      let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">`;
+      html += `<span style="font-weight:700;font-size:15px;color:${colorMap[data.market_color]||'#888'}">${data.market_type}</span>`;
+      html += `<span style="font-size:12px;color:var(--text2)">평균 마진율: ${data.avg_margin_rate != null ? data.avg_margin_rate + '%' : 'N/A'}</span>`;
+      html += `<span style="font-size:12px;color:var(--text2)">마진OK: ${data.profitable_count}/${data.total_count}</span>`;
+      if (!data.has_kream_prices) html += `<span style="font-size:11px;color:var(--danger)">KREAM 가격 미수집 (큐 실행 후 재시도)</span>`;
+      html += `</div>`;
+      html += `<div style="font-size:12px;margin-bottom:6px">${data.message}</div>`;
+      if (data.details && data.details.length > 0) {
+        html += `<div style="display:flex;gap:4px;flex-wrap:wrap">`;
+        data.details.forEach(d => {
+          const mr = d.margin_rate;
+          let c = '#888';
+          if (mr != null) c = mr >= 10 ? '#1a7a1a' : mr >= 0 ? '#8a6d00' : '#cc0000';
+          html += `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;border:1px solid ${c};color:${c}">${d.size} ${mr != null ? mr+'%' : '-'}</span>`;
+        });
+        html += `</div>`;
+      }
+      box.innerHTML = html;
+    }).catch(e => { box.innerHTML = `<span style="color:var(--danger)">오류: ${e.message}</span>`; });
+}
+
 // ── 큐 추가 ──
 function queueAdd() {
   const model = document.getElementById('q-model').value.trim();
@@ -2620,6 +2655,17 @@ function queueBuildResults() {
       <option value="미분류" ${isMisc?'selected':''} style="color:var(--danger)">미분류</option>
     </select>`;
 
+    // 시장 분류 배지
+    const mType = r.marketType || '';
+    const mColor = r.marketColor || '';
+    const mAvg = r.avgMarginRate != null ? r.avgMarginRate : '';
+    let marketBadge = '';
+    if (mType) {
+      const bgMap = {green:'#e6f9e6;color:#1a7a1a', yellow:'#fff8e0;color:#8a6d00', red:'#ffe6e6;color:#cc0000', gray:'#f0f0f0;color:#888'};
+      const bg = bgMap[mColor] || bgMap.gray;
+      marketBadge = `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${bg};white-space:nowrap" title="평균 마진율: ${mAvg != '' ? mAvg + '%' : 'N/A'}">${mType}</span>`;
+    }
+
     if (!hasSizes) {
       const bp = getBidPrice(item);
       const pi = calcProfitForPrice(bp, r.totalCost || 0);
@@ -2638,7 +2684,7 @@ function queueBuildResults() {
 
       html += `<tr>
         <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitOk ? 'checked' : ''}></td>
-        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a></td>
+        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a> ${marketBadge}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
         <td>${catDd}</td>
         <td style="font-size:12px">${(r.totalCost||0).toLocaleString()}</td>
@@ -2672,7 +2718,7 @@ function queueBuildResults() {
 
       html += `<tr style="background:var(--bg)">
         <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitSizes > 0 ? 'checked' : ''}></td>
-        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a></td>
+        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a> ${marketBadge}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
         <td>${catDd}</td>
         <td colspan="4" style="font-size:12px;color:var(--text2)">${szCount}사이즈 (마진OK: ${profitSizes})
@@ -3500,6 +3546,19 @@ function queueConfirmExcel() {
 function queueConfirmAutoBid() {
   const bidList = _buildBidList();
   if (!bidList) return;
+
+  // 비정상 시장 상품 경고
+  const abnormalModels = [];
+  bidList.forEach(bi => {
+    const item = queueData.find(q => q.id === bi._queueId || q.model === bi.model);
+    if (item && item.result && item.result.marketType === '비정상 시장') {
+      if (!abnormalModels.includes(item.model)) abnormalModels.push(item.model);
+    }
+  });
+  if (abnormalModels.length > 0) {
+    const warnMsg = `다음 상품은 비정상 시장입니다:\n${abnormalModels.join(', ')}\n\n평균 마진율이 마이너스입니다. 그래도 입찰하시겠습니까?`;
+    if (!confirm(warnMsg)) return;
+  }
 
   let msg = _bidListSummary(bidList);
   msg += '\n⚠️ Playwright로 판매자센터에 자동 로그인하여\n고시정보 등록 + 판매 입찰을 자동 실행합니다.\n\n먼저 내 입찰 현황을 확인하고 중복을 필터링합니다.\n진행하시겠습니까?';
