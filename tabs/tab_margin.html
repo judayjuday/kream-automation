@@ -1,0 +1,58 @@
+      <div id="tab-margin" class="tab-view">
+        <!-- 상품 검색 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🔍</span> 상품 조회</div>
+          <div class="form-row">
+            <span class="form-label">모델번호(품번)</span>
+            <input type="text" class="form-input form-input-lg" id="quick-model" placeholder="1183C431-020, IX7693 등" onkeydown="if(event.key==='Enter')quickSearchByModel()">
+            <button class="btn btn-primary" onclick="quickSearchByModel()" style="margin-left:8px">KREAM 검색</button>
+          </div>
+          <div class="form-row">
+            <span class="form-label">상품번호</span>
+            <input type="text" class="form-input form-input-sm" id="quick-pid" placeholder="299954 (직접 입력 가능)">
+            <button class="btn" onclick="quickSearch()" style="margin-left:8px">가격 조회</button>
+            <span id="quick-search-status" style="color:var(--text2); font-size:12px; margin-left:8px"></span>
+          </div>
+          <div id="quick-product-info" style="display:none; background:var(--accent-light); border-radius:8px; padding:12px; margin-bottom:8px; font-size:13px"></div>
+        </div>
+
+        <!-- 마진 계산 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">💰</span> 마진 계산</div>
+          <div style="display:flex; gap:24px; flex-wrap:wrap">
+            <div style="flex:1; min-width:280px">
+              <div class="form-row">
+                <span class="form-label">중국 구매가 (CNY)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-cny" value="200" oninput="quickCalc()">
+                <button class="btn" onclick="quickChinaPrice()" style="margin-left:4px; font-size:11px; padding:4px 10px" title="识货/得物 앱에서 가격 조회">🇨🇳 조회</button>
+                <span style="font-size:11px; color:var(--text3); margin-left:4px" id="quick-cny-krw"></span>
+              </div>
+              <div class="form-row">
+                <span class="form-label">카테고리</span>
+                <select class="form-select" id="quick-cat" onchange="quickCalc()">
+                  <option value="0.08">가방 (8%)</option>
+                  <option value="0.13">신발/의류 (13%)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <span class="form-label">해외 배송비 (원)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-ship" value="8000" oninput="quickCalc()">
+              </div>
+              <div class="form-row">
+                <span class="form-label">KREAM 판매가 (원)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-sell" value="76000" oninput="quickCalc()">
+              </div>
+            </div>
+            <!-- 최소 판매가 역계산 -->
+            <div style="flex:1; min-width:280px; background:var(--bg); border-radius:8px; padding:16px">
+              <div style="font-weight:600; margin-bottom:8px">최소 판매가 역계산</div>
+              <div id="quick-reverse" style="font-size:13px; line-height:2">
+                <div>CNY 가격을 입력하면 자동 계산됩니다.</div>
+              </div>
+            </div>
+          </div>
+          <div class="metrics mt-16" id="quick-metrics"></div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭3: 대량 입찰 ═══ -->

@@ -1,0 +1,88 @@
+      <div id="tab-settings" class="tab-view">
+        <div class="card">
+          <div class="card-title"><span class="icon">⚙️</span> 환율 / 수수료 설정</div>
+          <div class="form-row">
+            <span class="form-label">CNY→KRW 환율</span>
+            <input type="number" class="form-input form-input-sm" id="set-cny-rate" value="218.12" step="0.01" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">USD→KRW 환율</span>
+            <input type="number" class="form-input form-input-sm" id="set-usd-rate" value="1495.76" step="0.01" onchange="saveSettings()">
+          </div>
+          <div class="form-row" style="align-items:center; gap:10px">
+            <span class="form-label"></span>
+            <button class="btn btn-outline btn-sm" onclick="refreshExchangeRate()" id="btn-fetch-rate" style="font-size:12px; padding:4px 12px">환율 가져오기</button>
+            <span id="rate-fetch-status" style="font-size:11px; color:var(--text3)"></span>
+          </div>
+          <div class="form-row">
+            <span class="form-label">KREAM 수수료율</span>
+            <select class="form-select" id="set-fee" onchange="saveSettings()">
+              <option value="0.06">6% (기본)</option>
+              <option value="0.055">5.5%</option>
+              <option value="0.035">3.5% (이벤트)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <span class="form-label">고정수수료 (부가세포함)</span>
+            <input type="number" class="form-input form-input-sm" id="set-fixed" value="2500" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">기본 해외배송비</span>
+            <input type="number" class="form-input form-input-sm" id="set-ship" value="8000" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">목표 마진율</span>
+            <input type="number" class="form-input form-input-sm" id="set-target" value="15" step="1" onchange="saveSettings()"> %
+          </div>
+          <div class="form-row">
+            <span class="form-label">언더컷 금액</span>
+            <input type="number" class="form-input form-input-sm" id="set-undercut" value="1000" step="1000" onchange="saveSettings()"> 원
+            <span style="font-size:11px; color:var(--text3); margin-left:4px">즉시구매가에서 차감</span>
+          </div>
+          <div class="form-row">
+            <span class="form-label">Headless 모드</span>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" id="set-headless" checked onchange="saveSettings()">
+              <span id="headless-label" style="font-size:13px">ON (백그라운드 실행)</span>
+            </label>
+            <span style="font-size:11px; color:var(--text3); margin-left:8px">OFF = 브라우저 표시 (디버깅용)</span>
+          </div>
+          <div class="divider"></div>
+          <div class="card-title"><span class="icon">📝</span> 고시정보 기본값</div>
+          <div class="form-row">
+            <span class="form-label">제조국</span>
+            <input type="text" class="form-input form-input-lg" id="set-country" value="상품별 상이 (케어라벨 참고)" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">품질보증기준</span>
+            <input type="text" class="form-input form-input-lg" id="set-warranty" value="관련 법 및 소비자 분쟁 해결 기준에 따름" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">AS 전화번호</span>
+            <input type="text" class="form-input form-input-md" id="set-phone" value="01075446127" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">원산지 (가방)</span>
+            <input type="text" class="form-input form-input-lg" id="set-origin-bag" value="China (중국) (CN)" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">HS코드 (가방)</span>
+            <input type="text" class="form-input form-input-md" id="set-hs-bag" value="4202.92" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">원산지 (신발)</span>
+            <input type="text" class="form-input form-input-lg" id="set-origin-shoe" value="China (중국) (CN)" onchange="saveSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">HS코드 (신발)</span>
+            <input type="text" class="form-input form-input-md" id="set-hs-shoe" value="6404.11" onchange="saveSettings()">
+          </div>
+          <div class="mt-16">
+            <button class="btn btn-primary" onclick="saveSettings(); alert('저장 완료!')">설정 저장</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

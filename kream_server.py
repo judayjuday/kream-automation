@@ -12,11 +12,15 @@ import asyncio
 import json
 import math
 import re
+import sqlite3
+import smtplib
 import threading
 import traceback
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 from flask import Flask, request, jsonify, send_file
@@ -27,8 +31,9 @@ from kream_collector import collect_prices
 from kream_adjuster import full_adjust_flow, modify_bid_price
 from kream_bot import (
     create_browser, create_context, apply_stealth,
-    ensure_logged_in, fill_product_info, place_bid, dismiss_popups,
-    STATE_FILE, PARTNER_URL,
+    ensure_logged_in, fill_product_info, place_bid, place_bids_batch, dismiss_popups,
+    save_state_with_localstorage,
+    STATE_FILE, PARTNER_URL, KREAM_URL,
 )
 from playwright.async_api import async_playwright
 
@@ -85,6 +90,49 @@ def load_queue():
 
 
 load_queue()
+
+# ── 입찰 순위 모니터링 ──
+PRICE_DB = BASE_DIR / "price_history.db"
+MONITOR_HOURS = [8, 10, 12, 14, 16, 18, 20, 22]
+EMAIL_SENDER = "judaykream@gmail.com"
+EMAIL_RECEIVER = "judaykream@gmail.com"
+
+monitor_state = {
+    "running": False,
+    "last_run": None,
+    "next_run": None,
+    "total_checks": 0,
+    "total_adjustments": 0,
+}
+_monitor_timer = None
+_monitor_lock = threading.Lock()
+
+
+def _init_adjustments_table():
+    """price_adjustments 테이블 생성"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS price_adjustments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT,
+        product_id TEXT,
+        model TEXT,
+        name_kr TEXT,
+        size TEXT,
+        old_price INTEGER,
+        competitor_price INTEGER,
+        new_price INTEGER,
+        expected_profit INTEGER,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        executed_at TEXT
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_pa_status ON price_adjustments(status)")
+    conn.commit()
+    conn.close()
+
+
+_init_adjustments_table()
 
 
 # ── 환율 캐시 ──
@@ -219,6 +267,15 @@ def index():
     return send_file(BASE_DIR / "kream_dashboard.html")
 
 
+@app.route("/tabs/<path:filename>")
+def serve_tab(filename):
+    """탭 HTML 파일 서빙"""
+    tab_path = BASE_DIR / "tabs" / filename
+    if not tab_path.exists():
+        return "Not Found", 404
+    return send_file(str(tab_path))
+
+
 # ═══════════════════════════════════════════
 # API: 상품 검색 (가격 수집)
 # ═══════════════════════════════════════════
@@ -327,7 +384,7 @@ async def search_by_model(model: str):
         kream_brand = search_info.get("brand", "") if search_info else ""
 
         if kream_session:
-            await context.storage_state(path=STATE_FILE_KREAM)
+            await save_state_with_localstorage(page, context, STATE_FILE_KREAM, "https://kream.co.kr")
         await browser.close()
 
     if product_id:
@@ -386,7 +443,7 @@ async def run_bid(product_id, price, size, qty, tid):
         page = await context.new_page()
         await apply_stealth(page)
 
-        if not await ensure_logged_in(page):
+        if not await ensure_logged_in(page, context):
             add_log(tid, "error", "판매자센터 로그인 필요 (python3 kream_bot.py --mode login)")
             await browser.close()
             return {"success": False, "error": "로그인 필요"}
@@ -401,7 +458,9 @@ async def run_bid(product_id, price, size, qty, tid):
         add_log(tid, "info", f"판매 입찰 등록 중... #{product_id} {price:,}원 × {qty}개")
         success = await place_bid(page, bid_data, delay=2.0)
 
-        await context.storage_state(path=STATE_FILE)
+        # 성공 시에만 세션 저장 (실패 시 빈 세션으로 덮어쓰기 방지)
+        if success:
+            await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
         await browser.close()
 
         if success:
@@ -455,7 +514,7 @@ async def run_product_info(product_id, data, tid):
         page = await context.new_page()
         await apply_stealth(page)
 
-        if not await ensure_logged_in(page):
+        if not await ensure_logged_in(page, context):
             add_log(tid, "error", "판매자센터 로그인 필요")
             await browser.close()
             return {"success": False, "error": "로그인 필요"}
@@ -467,7 +526,7 @@ async def run_product_info(product_id, data, tid):
         add_log(tid, "info", f"고시정보 입력 중... #{product_id}")
         await fill_product_info(page, product_data, delay=2.0)
 
-        await context.storage_state(path=STATE_FILE)
+        await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
         await browser.close()
 
         add_log(tid, "success", f"고시정보 등록 완료: #{product_id}")
@@ -515,37 +574,78 @@ def api_register():
 
 
 GOSI_DEFAULTS = {
+    "type": "가방",
+    "material": "상품별 상이",
+    "color": "상품별 상이",
+    "size_info": "상품별 상이",
+    "maker": "상품별 상이",
     "country": "상품별 상이 (케어라벨 참고)",
     "caution": "제품 라벨 참조",
     "warranty": "관련 법 및 소비자 분쟁 해결 기준에 따름",
-    "phone": "01075446127",
+    "phone": "010-7544-6127",
     "origin_bag": "China (중국) (CN)",
     "origin_shoe": "China (중국) (CN)",
     "hs_bag": "4202.92",
     "hs_shoe": "6404.11",
+    # 신발 전용 필수 필드
+    "foot_length": "사이즈별 상이",
+    "heel_height": "사이즈별 상이",
+    "manufacture_date": "상품별 상이",
+    # 고시카테고리명
+    "gosi_category_bag": "가방",
+    "gosi_category_shoe": "구두/신발",
+    "gosi_category_clothing": "의류",
 }
 
 
 def build_gosi_data(product_id, gosi, category="가방"):
-    """고시정보 dict 조립 (기본값 적용)"""
+    """고시정보 dict 조립 (기본값 적용, 카테고리별 필드 자동 처리)"""
     is_shoe = "신발" in category or "sneaker" in category.lower()
-    return {
+    is_clothing = "의류" in category
+
+    def _val(key, default_key):
+        """gosi에서 값 꺼내되, 빈 문자열이면 GOSI_DEFAULTS 사용"""
+        v = gosi.get(key, "")
+        return v if v and str(v).strip() else GOSI_DEFAULTS[default_key]
+
+    # 고시카테고리 자동 설정 (KREAM 드롭다운에 맞는 정확한 이름 사용)
+    # "신발" → "구두/신발", "가방" → "가방", "의류" → "의류"
+    if is_shoe:
+        gosi_cat = GOSI_DEFAULTS["gosi_category_shoe"]  # "구두/신발"
+    elif is_clothing:
+        gosi_cat = GOSI_DEFAULTS["gosi_category_clothing"]  # "의류"
+    else:
+        gosi_cat = GOSI_DEFAULTS["gosi_category_bag"]  # "가방"
+
+    result = {
         "product_id": product_id,
-        "고시카테고리": gosi.get("category", "의류"),
-        "종류": gosi.get("type", ""),
-        "소재": gosi.get("material", ""),
-        "색상": gosi.get("color", ""),
-        "크기": gosi.get("size", ""),
-        "제조자_수입자": gosi.get("maker", ""),
-        "제조국": gosi.get("country", GOSI_DEFAULTS["country"]),
-        "취급시_주의사항": gosi.get("caution", GOSI_DEFAULTS["caution"]),
-        "품질보증기준": gosi.get("warranty", GOSI_DEFAULTS["warranty"]),
-        "AS_전화번호": gosi.get("phone", GOSI_DEFAULTS["phone"]),
-        "원산지": gosi.get("origin",
-                        GOSI_DEFAULTS["origin_shoe"] if is_shoe else GOSI_DEFAULTS["origin_bag"]),
-        "HS코드": gosi.get("hsCode",
-                        GOSI_DEFAULTS["hs_shoe"] if is_shoe else GOSI_DEFAULTS["hs_bag"]),
+        "고시카테고리": gosi_cat,
+        "소재": _val("material", "material"),
+        "색상": _val("color", "color"),
+        "제조자_수입자": _val("maker", "maker") if gosi.get("maker") else
+                        _val("manufacturer", "maker"),
+        "제조국": _val("country", "country"),
+        "취급시_주의사항": _val("caution", "caution"),
+        "품질보증기준": _val("warranty", "warranty"),
+        "AS_전화번호": _val("phone", "phone"),
+        "제조년월": _val("manufacture_date", "manufacture_date"),
+        "원산지": gosi.get("origin", "") or
+                 (GOSI_DEFAULTS["origin_shoe"] if is_shoe else GOSI_DEFAULTS["origin_bag"]),
+        "HS코드": gosi.get("hsCode", "") or
+                 (GOSI_DEFAULTS["hs_shoe"] if is_shoe else GOSI_DEFAULTS["hs_bag"]),
     }
+
+    # 카테고리별 필수 필드 추가
+    if is_shoe:
+        # 구두/신발: 발길이, 굽높이 필수
+        result["발길이"] = _val("foot_length", "foot_length")
+        result["굽높이"] = _val("heel_height", "heel_height")
+    else:
+        # 가방/의류: 종류, 크기
+        result["종류"] = _val("type", "type")
+        result["크기"] = _val("size", "size_info")
+
+    return result
 
 
 async def run_full_register(product_id, price, size, qty, gosi_already, gosi, tid, model="", bid_days=30):
@@ -555,7 +655,7 @@ async def run_full_register(product_id, price, size, qty, gosi_already, gosi, ti
         page = await context.new_page()
         await apply_stealth(page)
 
-        if not await ensure_logged_in(page):
+        if not await ensure_logged_in(page, context):
             add_log(tid, "error", "판매자센터 로그인 필요 (python3 kream_bot.py --mode login)")
             await browser.close()
             return {"success": False, "error": "로그인 필요"}
@@ -592,7 +692,9 @@ async def run_full_register(product_id, price, size, qty, gosi_already, gosi, ti
             await browser.close()
             return {"success": False, "error": f"입찰 실패: {e}"}
 
-        await context.storage_state(path=STATE_FILE)
+        # 성공 시에만 세션 저장 (실패 시 빈 세션으로 덮어쓰기 방지)
+        if success:
+            await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
         await browser.close()
 
         if success:
@@ -605,6 +707,71 @@ async def run_full_register(product_id, price, size, qty, gosi_already, gosi, ti
             save_history("입찰실패", product_id, price, qty, False)
 
         return {"success": success}
+
+
+async def _run_gosi_only(product_id, gosi, category, tid):
+    """고시정보만 등록 (입찰 없이)"""
+    async with async_playwright() as p:
+        browser = await create_browser(p, headless=get_headless())
+        context = await create_context(browser, STATE_FILE)
+        page = await context.new_page()
+        await apply_stealth(page)
+        if not await ensure_logged_in(page, context):
+            await browser.close()
+            return False
+        product_data = build_gosi_data(product_id, gosi, category)
+        try:
+            await fill_product_info(page, product_data, delay=2.0)
+            await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+        except Exception as e:
+            add_log(tid, "error", f"고시정보 실패: {e}")
+            await browser.close()
+            return False
+        await browser.close()
+    return True
+
+
+async def _run_bid_only(product_id, price, size, qty, bid_days, tid, model=""):
+    """입찰만 실행 (고시정보 없이)"""
+    async with async_playwright() as p:
+        browser = await create_browser(p, headless=get_headless())
+        context = await create_context(browser, STATE_FILE)
+        page = await context.new_page()
+        await apply_stealth(page)
+        if not await ensure_logged_in(page, context):
+            await browser.close()
+            return {"success": False}
+        bid_data = {
+            "product_id": product_id, "사이즈": size,
+            "입찰가격": price, "수량": qty, "bid_days": bid_days,
+        }
+        success = await place_bid(page, bid_data, delay=2.0)
+        if success:
+            await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+            save_history("입찰", product_id, price, qty, True)
+        await browser.close()
+    return {"success": success}
+
+
+async def _run_batch_bid(product_id, bids, bid_days, tid):
+    """같은 상품의 여러 사이즈 일괄 입찰"""
+    async with async_playwright() as p:
+        browser = await create_browser(p, headless=get_headless())
+        context = await create_context(browser, STATE_FILE)
+        page = await context.new_page()
+        await apply_stealth(page)
+        if not await ensure_logged_in(page, context):
+            await browser.close()
+            return {"success": 0, "fail": len(bids), "results": []}
+        result = await place_bids_batch(page, product_id, bids,
+                                        bid_days=bid_days, delay=2.0)
+        if result.get("success", 0) > 0:
+            await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+            for r in result.get("results", []):
+                if r.get("ok"):
+                    save_history("입찰", product_id, r["price"], 1, True)
+        await browser.close()
+    return result
 
 
 # ═══════════════════════════════════════════
@@ -780,7 +947,7 @@ async def upload_bulk_excel(tid):
         page = await context.new_page()
         await apply_stealth(page)
 
-        if not await ensure_logged_in(page):
+        if not await ensure_logged_in(page, context):
             add_log(tid, "error", "판매자센터 로그인 필요")
             await browser.close()
             return {"success": False}
@@ -823,7 +990,7 @@ async def upload_bulk_excel(tid):
             await browser.close()
             return {"success": False}
 
-        await context.storage_state(path=STATE_FILE)
+        await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
         await browser.close()
 
     return {"success": True}
@@ -846,6 +1013,12 @@ def api_my_bids():
             from kream_adjuster import collect_my_bids
             bids = loop.run_until_complete(collect_my_bids(headless=get_headless()))
             loop.close()
+            # DB에 내 입찰 이력 저장
+            try:
+                from kream_collector import save_my_bids_to_db
+                save_my_bids_to_db(bids)
+            except Exception:
+                pass
             add_log(tid, "success", f"입찰 {len(bids)}건 수집")
             finish_task(tid, result={"bids": bids})
         except Exception as e:
@@ -890,7 +1063,7 @@ async def delete_bids(order_ids, tid):
         page = await context.new_page()
         await apply_stealth(page)
 
-        url = f"{PARTNER_URL}/business/asks?page=1&perPage=50&startDate=&endDate="
+        url = f"{PARTNER_URL}/business/asks?page=1&perPage=100&startDate=&endDate="
         await page.goto(url, wait_until="domcontentloaded")
         await page.wait_for_timeout(2500)
 
@@ -941,7 +1114,7 @@ async def delete_bids(order_ids, tid):
             else:
                 add_log(tid, "error", f"{oid} 삭제 버튼 못 찾음")
 
-        await context.storage_state(path=STATE_FILE)
+        await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
         await browser.close()
 
     return {"success": success, "total": len(order_ids)}
@@ -1171,7 +1344,7 @@ async def kream_keyword_search(keyword, max_scroll, tid):
                 pass
 
         if kream_session:
-            await context.storage_state(path=STATE_FILE_KREAM)
+            await save_state_with_localstorage(page, context, STATE_FILE_KREAM, "https://kream.co.kr")
         await browser.close()
 
     collected = sum(1 for p in products if p.get("model"))
@@ -1329,6 +1502,59 @@ def api_refresh_exchange_rate():
 
 
 # ═══════════════════════════════════════════
+# API: 가격 이력 조회
+# ═══════════════════════════════════════════
+
+@app.route("/api/price-history/<product_id>")
+def api_price_history(product_id):
+    """상품의 가격 수집 이력 조회"""
+    import sqlite3
+    from kream_collector import DB_PATH
+    if not DB_PATH.exists():
+        return jsonify({"records": [], "summary": {}})
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        # 최근 수집 이력 (최근 7일, 최대 500건)
+        c.execute(
+            "SELECT size, delivery_type, buy_price, sell_price, "
+            "recent_trade_price, collected_at FROM price_history "
+            "WHERE product_id=? ORDER BY collected_at DESC LIMIT 500",
+            (product_id,)
+        )
+        rows = [dict(r) for r in c.fetchall()]
+
+        # 최신 수집 시간 기준 요약 (사이즈×배송타입 매트릭스)
+        summary = {}
+        if rows:
+            latest_time = rows[0]["collected_at"][:19]  # 초 단위
+            latest = [r for r in rows if r["collected_at"][:19] == latest_time]
+            for r in latest:
+                sz = r["size"]
+                if sz not in summary:
+                    summary[sz] = {"size": sz}
+                dt = r["delivery_type"]
+                summary[sz][dt] = {
+                    "buy": r["buy_price"],
+                    "sell": r["sell_price"],
+                }
+            summary = list(summary.values())
+        else:
+            summary = []
+
+        conn.close()
+        return jsonify({
+            "records": rows[:100],  # 최근 100건만 전달
+            "summary": summary,
+            "total": len(rows),
+            "latestAt": rows[0]["collected_at"] if rows else None,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "records": [], "summary": []})
+
+
+# ═══════════════════════════════════════════
 # API: 상품 큐 + 일괄 실행
 # ═══════════════════════════════════════════
 
@@ -1395,89 +1621,158 @@ def detect_category_kr(korean_name):
 
 
 def auto_fill_gosi(kream_data):
-    """KREAM 상품명에서 고시정보 자동 추출"""
-    eng_name_raw = kream_data.get("product_name_en") or kream_data.get("english_name") or kream_data.get("nameEn") or ""
+    """KREAM 상품명/영문명에서 고시정보 자동 추출.
+    반환 dict 키: type, color, manufacturer, material, size, hs_code, tariff
+    build_gosi_data()에서 빈 문자열이면 GOSI_DEFAULTS로 대체됨.
+    """
+    eng_name_raw = (kream_data.get("product_name_en")
+                    or kream_data.get("english_name")
+                    or kream_data.get("nameEn") or "")
     eng_name = eng_name_raw.lower()
     kor_name = kream_data.get("product_name") or kream_data.get("nameKr") or ""
-    brand = kream_data.get("brand") or ""
+    brand_raw = kream_data.get("brand") or ""
 
-    # 브랜드가 없으면 영문명 첫 단어에서 추출
-    if not brand and eng_name_raw:
-        first_word = eng_name_raw.split()[0] if eng_name_raw.split() else ""
-        known_brands = ["Adidas", "Nike", "New Balance", "Asics", "Puma",
-                        "Converse", "Vans", "Reebok", "Fila", "Skechers",
-                        "Balenciaga", "Gucci", "Prada", "Loewe", "Moncler"]
-        for b in known_brands:
-            if b.lower() == first_word.lower():
-                brand = b
-                break
-        if not brand:
-            brand = first_word  # 첫 단어를 브랜드로 사용
-
-    info = {"manufacturer": brand}
-
-    # 종류
-    type_map = {
-        "shoulder bag": "숄더백", "tote bag": "토트백", "tote": "토트백",
-        "crossbody": "크로스백", "backpack": "백팩", "rucksack": "백팩",
-        "pouch": "파우치", "wallet": "지갑", "clutch": "클러치",
-        "duffle": "더플백", "messenger": "메신저백", "waist bag": "웨이스트백",
-        "fanny pack": "웨이스트백", "bucket bag": "버킷백", "hobo": "호보백",
-        "running shoe": "러닝화", "sneaker": "스니커즈", "slide": "슬라이드",
-        "sandal": "샌들", "boot": "부츠", "loafer": "로퍼",
-        "trainer": "트레이너", "slipper": "슬리퍼",
-        "hoodie": "후드", "jacket": "자켓", "t-shirt": "티셔츠",
-        "pants": "팬츠", "shorts": "쇼츠", "sweater": "스웨터",
+    # ── 제조자/수입자: 브랜드 추출 ──
+    BRAND_MAP = {
+        # 한글명 → 영문 브랜드 (한글 상품명에서 매칭)
+        "아디다스": "Adidas", "나이키": "Nike", "뉴발란스": "New Balance",
+        "아식스": "Asics", "퓨마": "Puma", "컨버스": "Converse",
+        "반스": "Vans", "리복": "Reebok", "필라": "Fila",
+        "스케쳐스": "Skechers", "디스커버리": "Discovery",
+        "노스페이스": "The North Face", "파타고니아": "Patagonia",
+        "스투시": "Stussy", "팔라스": "Palace", "슈프림": "Supreme",
+        "발렌시아가": "Balenciaga", "구찌": "Gucci", "프라다": "Prada",
+        "로에베": "Loewe", "몽클레르": "Moncler", "디올": "Dior",
+        "셀린느": "Celine", "보테가": "Bottega Veneta",
+        "메종키츠네": "Maison Kitsune", "아크네": "Acne Studios",
+        "마르지엘라": "Maison Margiela",
     }
-    info["type"] = "상품별 상이"
-    for eng, kor in type_map.items():
+    # 영문명 첫 단어 or 한글명에서 브랜드 감지
+    manufacturer = brand_raw
+    if not manufacturer:
+        # 한글 상품명에서 브랜드 매칭
+        for kr_brand, en_brand in BRAND_MAP.items():
+            if kr_brand in kor_name:
+                manufacturer = en_brand
+                break
+        # 폴백: 영문명 첫 단어
+        if not manufacturer and eng_name_raw:
+            first_word = eng_name_raw.split()[0] if eng_name_raw.split() else ""
+            known_en = [
+                "Adidas", "Nike", "New Balance", "Asics", "Puma",
+                "Converse", "Vans", "Reebok", "Fila", "Skechers",
+                "Balenciaga", "Gucci", "Prada", "Loewe", "Moncler",
+                "Dior", "Celine", "Supreme", "Stussy", "Palace",
+                "Discovery", "Patagonia",
+            ]
+            for b in known_en:
+                if b.lower() == first_word.lower():
+                    manufacturer = b
+                    break
+            if not manufacturer:
+                manufacturer = first_word
+
+    info = {"manufacturer": manufacturer}
+
+    # ── 종류: 상품명에서 가방 종류 매칭 ──
+    # 영문 매칭 (longer phrases first)
+    TYPE_MAP_EN = [
+        ("shoulder bag", "숄더백"), ("tote bag", "토트백"),
+        ("crossbody", "크로스백"), ("cross body", "크로스백"),
+        ("messenger bag", "메신저백"), ("messenger", "메신저백"),
+        ("duffle bag", "더플백"), ("duffle", "더플백"), ("duffel", "더플백"),
+        ("boston bag", "보스턴백"), ("bucket bag", "버킷백"),
+        ("waist bag", "웨이스트백"), ("belt bag", "웨이스트백"),
+        ("fanny pack", "힙색"), ("hip pack", "힙색"),
+        ("backpack", "백팩"), ("rucksack", "백팩"),
+        ("pouch", "파우치"), ("clutch", "클러치"),
+        ("eco bag", "에코백"), ("shopper", "쇼퍼백"),
+        ("hobo", "호보백"), ("tote", "토트백"),
+        ("wallet", "지갑"), ("card holder", "카드홀더"),
+        # 신발
+        ("running shoe", "러닝화"), ("sneaker", "스니커즈"),
+        ("slide", "슬라이드"), ("sandal", "샌들"), ("boot", "부츠"),
+        ("loafer", "로퍼"), ("trainer", "트레이너"), ("slipper", "슬리퍼"),
+        # 의류
+        ("hoodie", "후드"), ("jacket", "자켓"), ("t-shirt", "티셔츠"),
+        ("pants", "팬츠"), ("shorts", "쇼츠"), ("sweater", "스웨터"),
+    ]
+    # 한글 매칭
+    TYPE_MAP_KR = [
+        "숄더백", "크로스백", "토트백", "백팩", "클러치", "파우치",
+        "힙색", "웨이스트백", "더플백", "메신저백", "보스턴백", "에코백",
+        "쇼퍼백", "호보백", "버킷백",
+        "러닝화", "스니커즈", "슬라이드", "샌들", "부츠", "로퍼",
+        "후드", "자켓", "티셔츠", "팬츠", "쇼츠",
+    ]
+
+    detected_type = ""
+    for eng, kor in TYPE_MAP_EN:
         if eng in eng_name:
-            info["type"] = kor
+            detected_type = kor
             break
-    else:
-        kor_types = ["숄더백", "토트백", "크로스백", "백팩", "파우치", "지갑",
-                     "러닝화", "스니커즈", "슬라이드", "샌들", "부츠",
-                     "후드", "자켓", "티셔츠", "팬츠"]
-        for kt in kor_types:
+    if not detected_type:
+        for kt in TYPE_MAP_KR:
             if kt in kor_name:
-                info["type"] = kt
+                detected_type = kt
                 break
+    # 가방 카테고리인데 종류 못 찾으면 "가방"
+    info["type"] = detected_type or GOSI_DEFAULTS["type"]
 
-    # 소재
-    material_map = {
-        "denim": "데님", "leather": "가죽", "nylon": "나일론",
-        "canvas": "캔버스", "suede": "스웨이드", "mesh": "메쉬",
-        "cotton": "코튼", "polyester": "폴리에스터", "wool": "울",
-        "silk": "실크", "fleece": "플리스", "gore-tex": "고어텍스",
-        "rubber": "고무", "synthetic": "합성", "knit": "니트",
-        "terry": "테리", "corduroy": "코듀로이", "satin": "새틴",
-        "velvet": "벨벳", "linen": "리넨",
-    }
-    mats = [kor for eng, kor in material_map.items() if eng in eng_name]
-    info["material"] = ", ".join(mats) if mats else "상품별 상이"
-
-    # 색상
-    color_map = {
+    # ── 색상: 상품명에서 매칭 ──
+    COLOR_MAP_EN = {
         "black": "블랙", "white": "화이트", "red": "레드",
         "blue": "블루", "navy": "네이비", "green": "그린",
         "grey": "그레이", "gray": "그레이", "pink": "핑크",
         "beige": "베이지", "brown": "브라운", "cream": "크림",
-        "orange": "오렌지", "yellow": "옐로", "purple": "퍼플",
+        "orange": "오렌지", "yellow": "옐로우", "purple": "퍼플",
         "silver": "실버", "gold": "골드", "olive": "올리브",
         "burgundy": "버건디", "khaki": "카키", "ivory": "아이보리",
         "coral": "코랄", "mint": "민트", "charcoal": "차콜",
+        "multi": "멀티",
     }
-    colors = [kor for eng, kor in color_map.items() if eng in eng_name]
-    info["color"] = ", ".join(colors) if colors else "상품별 상이"
+    COLOR_MAP_KR = [
+        "블랙", "화이트", "네이비", "블루", "레드", "그린", "핑크",
+        "베이지", "브라운", "그레이", "카키", "옐로우", "퍼플",
+        "오렌지", "실버", "골드", "멀티", "아이보리", "크림",
+        "올리브", "버건디", "차콜", "민트", "코랄",
+    ]
 
-    info["size"] = "상품별 상이"
+    colors = []
+    for eng, kor in COLOR_MAP_EN.items():
+        if eng in eng_name and kor not in colors:
+            colors.append(kor)
+    if not colors:
+        for kc in COLOR_MAP_KR:
+            if kc in kor_name and kc not in colors:
+                colors.append(kc)
+    info["color"] = ", ".join(colors) if colors else GOSI_DEFAULTS["color"]
 
-    cat = detect_category(eng_name)
-    if cat.get("category") == "가방":
-        info["hs_code"] = "4202.92"
+    # ── 소재/크기: 고정 기본값 ──
+    info["material"] = GOSI_DEFAULTS["material"]
+    info["size"] = GOSI_DEFAULTS["size_info"]
+
+    # ── 신발 필수 필드: 발길이, 굽높이 ──
+    ext_category = kream_data.get("category", "")
+    is_shoe = "신발" in ext_category
+    if is_shoe:
+        info["foot_length"] = GOSI_DEFAULTS["foot_length"]
+        info["heel_height"] = GOSI_DEFAULTS["heel_height"]
+
+    # ── HS코드/관세: 외부 카테고리 우선, 폴백은 영문명 감지 ──
+    if is_shoe:
+        resolved_cat = "신발"
+    elif "가방" in ext_category:
+        resolved_cat = "가방"
+    else:
+        cat = detect_category(eng_name)
+        resolved_cat = cat.get("category", "")
+
+    if resolved_cat == "가방":
+        info["hs_code"] = GOSI_DEFAULTS["hs_bag"]
         info["tariff"] = 8
-    elif cat.get("category") == "신발":
-        info["hs_code"] = "6404.11"
+    elif resolved_cat == "신발":
+        info["hs_code"] = GOSI_DEFAULTS["hs_shoe"]
         info["tariff"] = 13
     else:
         info["hs_code"] = ""
@@ -1599,6 +1894,7 @@ def api_queue_add():
             "shipping": int(data.get("shipping", 8000)),
             "quantity": int(data.get("quantity", 1)),
             "bid_days": int(data.get("bid_days", 30)),
+            "bid_strategy": data.get("bid_strategy", "undercut"),
             "status": preset_status,
             "result": preset_result,
             "gosi": data.get("gosi", None),
@@ -1849,7 +2145,7 @@ def api_queue_update(item_id):
         if not item:
             return jsonify({"error": "항목 없음"}), 404
         for key in ["model", "cny", "category", "size", "shipping", "quantity",
-                     "sizes", "sizeSystem", "gosi", "selectedMargin", "bid_days"]:
+                     "sizes", "sizeSystem", "gosi", "selectedMargin", "bid_strategy", "bid_days"]:
             if key in data:
                 item[key] = data[key]
         if "model" in data:
@@ -1975,28 +2271,49 @@ def api_queue_execute():
                             item["category"] = "미분류"
                             item["categoryAuto"] = True
 
-                    # 고시정보 자동 채움
+                    # 고시정보 자동 채움 (카테고리 전달)
                     gosi = auto_fill_gosi({
                         "english_name": name_en,
                         "product_name": name_kr,
                         "brand": kream.get("brand", ""),
+                        "category": item["category"],
                     })
                     item["gosi"] = gosi
 
                     # 마진 계산 — 사이즈별 가격이 있으면 각각 계산
                     input_sizes = item.get("sizes", [])
+                    # 사이즈별 KREAM 즉시구매가 맵 구축 (sizeDeliveryPrices에서)
+                    # KREAM API 사이즈 형식: "W215", "260", "ONE SIZE" 등
+                    # 사용자 입력 형식: "215", "260", "ONE SIZE" 등
+                    # → 숫자만 추출하여 매칭 (W215 ↔ 215)
+                    sdp_list = kream.get("size_delivery_prices", [])
+                    sdp_map = {}  # size → buyPrice (원본 키 + 숫자만 키 모두 등록)
+                    for sdp in sdp_list:
+                        sdp_size = str(sdp.get("size", "")).strip()
+                        sdp_buy = sdp.get("buyPrice") or sdp.get("buyNormal") or 0
+                        if sdp_size and sdp_buy:
+                            sdp_map[sdp_size] = sdp_buy  # 원본: "W215"
+                            # 숫자만 추출한 키도 등록: "W215" → "215"
+                            digits = re.sub(r'[^0-9.]', '', sdp_size)
+                            if digits and digits != sdp_size:
+                                sdp_map[digits] = sdp_buy
+
                     if input_sizes:
                         size_margins = []
                         for sz in input_sizes:
                             sz_cny = float(sz.get("cny_price", 0))
+                            sz_name = str(sz["size"]).strip()
                             mi = calculate_margin_for_queue(
                                 sz_cny, item["category"], item["shipping"]
                             )
+                            # 사이즈별 즉시구매가 매칭
+                            sz_instant_buy = sdp_map.get(sz_name, 0)
                             size_margins.append({
-                                "size": sz["size"],
+                                "size": sz_name,
                                 "cny": sz_cny,
                                 "totalCost": mi["total_cost"],
                                 "margins": mi["margins"],
+                                "instantBuyPrice": sz_instant_buy,
                             })
                         # 대표 마진 (최저 CNY 기준)
                         min_cost = min(sm["totalCost"] for sm in size_margins)
@@ -2110,42 +2427,160 @@ def api_queue_auto_register():
 
             results = []
             stopped = False
-            for i, bi in enumerate(bid_items, 1):
-                # 일시정지 체크: event가 clear되면 대기
-                if not auto_bid_event.is_set():
-                    add_log(tid, "info", "⏸ 일시정지 중... (이어서 진행 또는 중단 대기)")
-                auto_bid_event.wait()  # paused면 여기서 블로킹
+            gosi_done_pids = set()  # 이 배치에서 고시정보 등록 완료한 productId
 
-                # 중단 체크
+            # ── 같은 productId를 그룹핑 ──
+            # 순서를 유지하면서 productId별로 그룹핑
+            from collections import OrderedDict
+            pid_groups = OrderedDict()  # pid → [items]
+            resolved_items = []  # pid가 확정된 아이템 목록
+
+            # 1단계: pid 확인 (검색 필요하면 검색)
+            for i, bi in enumerate(bid_items, 1):
+                pid = bi.get("productId") or 0
+                price = bi["price"]
+                size = bi.get("size", "ONE SIZE")
+                model = bi.get("model", "")
+
+                if not pid or str(pid) == "0":
+                    if model:
+                        add_log(tid, "info", f"[준비] {model} 상품번호 검색 중...")
+                        try:
+                            search_results = loop.run_until_complete(search_by_model(model))
+                            if search_results:
+                                kream_data = search_results[0].get("kream", {})
+                                pid = str(kream_data.get("product_id", ""))
+                            if not pid or pid == "0":
+                                add_log(tid, "error", f"{model}: 상품번호를 찾을 수 없음")
+                                results.append({"productId": pid, "model": model,
+                                    "size": size, "price": price, "success": False})
+                                continue
+                            add_log(tid, "info", f"{model} → #{pid}")
+                        except Exception as e:
+                            add_log(tid, "error", f"{model}: 검색 실패 — {e}")
+                            results.append({"productId": 0, "model": model,
+                                "size": size, "price": price, "success": False})
+                            continue
+                    else:
+                        add_log(tid, "error", f"[{i}] productId와 model 모두 없음")
+                        results.append({"productId": 0, "model": "",
+                            "size": size, "price": price, "success": False})
+                        continue
+
+                bi["_resolved_pid"] = str(pid)
+                pid_key = str(pid)
+                if pid_key not in pid_groups:
+                    pid_groups[pid_key] = []
+                pid_groups[pid_key].append(bi)
+
+            # 2단계: productId별로 고시정보 + 일괄 입찰 실행
+            total_items = sum(len(g) for g in pid_groups.values())
+            processed = 0
+            for pid, group in pid_groups.items():
+                # 일시정지/중단 체크
+                if not auto_bid_event.is_set():
+                    add_log(tid, "info", "⏸ 일시정지 중...")
+                auto_bid_event.wait()
                 with auto_bid_lock:
                     if auto_bid_control["state"] == "stopping":
-                        add_log(tid, "info", f"⏹ 사용자 중단 요청 — {i-1}/{len(bid_items)}건 완료 후 중단")
+                        add_log(tid, "info", f"⏹ 중단 — {processed}/{total_items}건 처리됨")
                         stopped = True
                         break
 
-                pid = bi["productId"]
-                price = bi["price"]
-                size = bi.get("size", "ONE SIZE")
-                qty = bi.get("quantity", 1)
-                gosi = bi.get("gosi", {})
-                gosi_already = bi.get("gosiAlready", False)
-                category = bi.get("category", "가방")
-                bid_days = int(bi.get("bid_days", 30))
+                first = group[0]
+                model = first.get("model", "")
+                gosi = first.get("gosi", {})
+                gosi_already = first.get("gosiAlready", False)
+                category = first.get("category", "가방")
+                bid_days = int(first.get("bid_days", 30))
 
+                sizes_str = ", ".join(bi.get("size", "?") for bi in group)
                 add_log(tid, "info",
-                        f"[{i}/{len(bid_items)}] #{pid} {bi.get('model','')} "
-                        f"{size} → {price:,}원 × {qty} ({bid_days}일)")
+                        f"[#{pid}] {model} — {len(group)}사이즈: {sizes_str}")
 
-                result = loop.run_until_complete(
-                    run_full_register(pid, price, size, qty,
-                                      gosi_already, {**gosi, "category": category}, tid,
-                                      model=bi.get("model", ""), bid_days=bid_days)
-                )
-                results.append({
-                    "productId": pid, "model": bi.get("model", ""),
-                    "size": size, "price": price,
-                    "success": result.get("success", False),
-                })
+                # 고시정보 등록 (중복 방지)
+                if not gosi_already and pid not in gosi_done_pids:
+                    add_log(tid, "info", f"  고시정보 등록 중... #{pid}")
+                    try:
+                        gosi_result = loop.run_until_complete(
+                            _run_gosi_only(pid, gosi, category, tid)
+                        )
+                        if gosi_result:
+                            gosi_done_pids.add(pid)
+                            add_log(tid, "success", f"  고시정보 등록 완료")
+                        else:
+                            add_log(tid, "error", f"  고시정보 등록 실패")
+                            for bi in group:
+                                results.append({"productId": pid, "model": model,
+                                    "size": bi.get("size"), "price": bi["price"], "success": False})
+                                processed += 1
+                            continue
+                    except Exception as e:
+                        add_log(tid, "error", f"  고시정보 오류: {e}")
+                        for bi in group:
+                            results.append({"productId": pid, "model": model,
+                                "size": bi.get("size"), "price": bi["price"], "success": False})
+                            processed += 1
+                        continue
+                else:
+                    skip_reason = "gosiAlready" if gosi_already else "배치 내 이미 등록"
+                    add_log(tid, "info", f"  고시정보 스킵 ({skip_reason})")
+
+                # 입찰: 여러 사이즈면 일괄, 1사이즈면 기존 방식
+                if len(group) > 1:
+                    # 일괄 입찰
+                    batch_bids = [{"size": bi.get("size", "ONE SIZE"),
+                                   "price": bi["price"],
+                                   "qty": bi.get("quantity", 1)} for bi in group]
+                    add_log(tid, "info",
+                            f"  일괄 입찰 {len(batch_bids)}사이즈 진행 중...")
+                    try:
+                        batch_result = loop.run_until_complete(
+                            _run_batch_bid(pid, batch_bids, bid_days, tid)
+                        )
+                        ok = batch_result.get("success", 0)
+                        fail = batch_result.get("fail", 0)
+                        add_log(tid, "success" if ok > 0 else "error",
+                                f"  일괄 입찰 결과: 성공 {ok}건, 실패 {fail}건")
+                        for bi_result in batch_result.get("results", []):
+                            matched_bi = next((b for b in group if b.get("size") == bi_result["size"]), group[0])
+                            results.append({"productId": pid, "model": model,
+                                "size": bi_result["size"], "price": bi_result["price"],
+                                "success": bi_result.get("ok", False)})
+                            processed += 1
+                            if bi_result.get("ok"):
+                                save_bid_local(pid, model=model, size=bi_result["size"],
+                                              price=bi_result["price"], source="placed")
+                    except Exception as e:
+                        add_log(tid, "error", f"  일괄 입찰 오류: {e}")
+                        for bi in group:
+                            results.append({"productId": pid, "model": model,
+                                "size": bi.get("size"), "price": bi["price"], "success": False})
+                            processed += 1
+                else:
+                    # 단일 사이즈 — 기존 방식
+                    bi = group[0]
+                    price = bi["price"]
+                    size = bi.get("size", "ONE SIZE")
+                    qty = bi.get("quantity", 1)
+                    add_log(tid, "info",
+                            f"  입찰: {size} → {price:,}원 × {qty}개 ({bid_days}일)")
+                    try:
+                        result = loop.run_until_complete(
+                            _run_bid_only(pid, price, size, qty, bid_days, tid, model)
+                        )
+                        ok = result.get("success", False)
+                        results.append({"productId": pid, "model": model,
+                            "size": size, "price": price, "success": ok})
+                        processed += 1
+                        if ok:
+                            save_bid_local(pid, model=model, size=size,
+                                          price=price, source="placed")
+                    except Exception as e:
+                        add_log(tid, "error", f"  입찰 오류: {e}")
+                        results.append({"productId": pid, "model": model,
+                            "size": size, "price": price, "success": False})
+                        processed += 1
 
             loop.close()
 
@@ -2377,6 +2812,454 @@ def api_my_bids_sync():
 
 
 # ═══════════════════════════════════════════
+# 입찰 순위 모니터링 + 가격 자동 조정
+# ═══════════════════════════════════════════
+
+
+def _get_next_monitor_time():
+    """다음 모니터링 실행 시간 계산 (MONITOR_HOURS 기반)"""
+    now = datetime.now()
+    for h in MONITOR_HOURS:
+        target = now.replace(hour=h, minute=0, second=0, microsecond=0)
+        if target > now:
+            return target
+    tomorrow = now + timedelta(days=1)
+    return tomorrow.replace(hour=MONITOR_HOURS[0], minute=0, second=0, microsecond=0)
+
+
+def _schedule_next_monitor():
+    """다음 모니터링 타이머 등록"""
+    global _monitor_timer
+    with _monitor_lock:
+        if not monitor_state["running"]:
+            return
+        next_time = _get_next_monitor_time()
+        delay = max(60, (next_time - datetime.now()).total_seconds())
+        monitor_state["next_run"] = next_time.strftime("%Y-%m-%d %H:%M")
+        _monitor_timer = threading.Timer(delay, _monitor_trigger)
+        _monitor_timer.daemon = True
+        _monitor_timer.start()
+        print(f"[모니터] 다음 실행: {monitor_state['next_run']} ({delay:.0f}초 후)")
+
+
+def _monitor_trigger():
+    """타이머 콜백 → 모니터링 실행 + 다음 스케줄"""
+    threading.Thread(target=_run_monitor_check, daemon=True).start()
+    _schedule_next_monitor()
+
+
+def _calc_settlement_for_monitor(sell_price):
+    """판매가에 대한 정산액 계산"""
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    fee_rate = float(settings.get("feeRate", 0.06))
+    fixed_fee = int(settings.get("fixedFee", 2500))
+    vat_rate = float(settings.get("vatRate", 0.10))
+    return round(sell_price * (1 - fee_rate * (1 + vat_rate)) - fixed_fee)
+
+
+def _find_cost_for_bid(bid):
+    """큐 데이터에서 입찰의 원가(total_cost) 찾기"""
+    model = (bid.get("model") or "").upper()
+    for item in product_queue:
+        if (item.get("model") or "").upper() != model:
+            continue
+        result = item.get("result")
+        if result and result.get("total_cost"):
+            return result["total_cost"]
+    return None
+
+
+def _run_monitor_check():
+    """모니터링: 순위 체크 → 가격 조정 계산 → DB 저장 → 이메일"""
+    print(f"\n[모니터] ===== 순위 체크: {datetime.now().strftime('%m-%d %H:%M')} =====")
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        from kream_adjuster import collect_my_bids, collect_market_data
+
+        # 1) 내 입찰 수집
+        print("[모니터] 내 입찰 수집 중...")
+        bids = loop.run_until_complete(collect_my_bids(headless=True))
+        if not bids:
+            print("[모니터] 입찰 없음")
+            with _monitor_lock:
+                monitor_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                monitor_state["total_checks"] += 1
+            loop.close()
+            return
+
+        # 2) 시장 데이터 수집
+        pids = list(set(b["productId"] for b in bids if b.get("productId")))
+        print(f"[모니터] 입찰 {len(bids)}건, 상품 {len(pids)}개 시세 수집")
+        market = loop.run_until_complete(collect_market_data(pids, headless=True))
+        loop.close()
+
+        # 3) 순위 분석 + 가격 조정 계산
+        adjustments = []
+        for bid in bids:
+            pid = bid.get("productId")
+            mkt = market.get(pid, {})
+            sell_bids = mkt.get("sell_bids", [])
+            if not sell_bids:
+                continue
+
+            my_price = bid.get("bidPrice", 0)
+            if not my_price:
+                continue
+
+            # 판매입찰 가격 오름차순
+            sorted_prices = sorted(set(s["price"] for s in sell_bids))
+            if not sorted_prices:
+                continue
+
+            # 내가 이미 최저가면 패스
+            if my_price <= sorted_prices[0]:
+                continue
+
+            # 경쟁자 최저가
+            competitor_low = sorted_prices[0]
+
+            # 새 가격 = 경쟁자 최저가 - 1,000원 (1,000원 단위 올림)
+            new_price = int(math.ceil((competitor_low - 1000) / 1000) * 1000)
+            if new_price <= 0:
+                continue
+
+            # 수익 계산
+            total_cost = _find_cost_for_bid(bid)
+            if total_cost is not None:
+                expected_profit = _calc_settlement_for_monitor(new_price) - total_cost
+            else:
+                expected_profit = None
+
+            # 상태 결정: 수익 5,000원 미만이면 profit_low
+            status = "pending"
+            if expected_profit is not None and expected_profit < 5000:
+                status = "profit_low"
+
+            adjustments.append({
+                "order_id": bid.get("orderId", ""),
+                "product_id": pid,
+                "model": bid.get("model", ""),
+                "name_kr": bid.get("nameKr", ""),
+                "size": bid.get("size", "ONE SIZE"),
+                "old_price": my_price,
+                "competitor_price": competitor_low,
+                "new_price": new_price,
+                "expected_profit": expected_profit,
+                "status": status,
+            })
+
+        # 4) DB 저장
+        pending = [a for a in adjustments if a["status"] == "pending"]
+        if adjustments:
+            _save_adjustments(adjustments)
+
+        # 5) 이메일 (pending 건만)
+        if pending:
+            _send_adjustment_email(pending)
+
+        with _monitor_lock:
+            monitor_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            monitor_state["total_checks"] += 1
+            monitor_state["total_adjustments"] += len(pending)
+
+        print(f"[모니터] 완료: {len(bids)}건 중 순위 밀림 {len(adjustments)}건, 조정 대상 {len(pending)}건")
+    except Exception as e:
+        print(f"[모니터] 오류: {e}")
+        traceback.print_exc()
+
+
+def _save_adjustments(adjustments):
+    """조정 대상 DB 저장 (같은 order_id로 pending이 있으면 스킵)"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    for adj in adjustments:
+        c.execute(
+            "SELECT id FROM price_adjustments WHERE order_id=? AND status='pending'",
+            (adj["order_id"],)
+        )
+        if c.fetchone():
+            continue
+        c.execute(
+            """INSERT INTO price_adjustments
+            (order_id, product_id, model, name_kr, size, old_price,
+             competitor_price, new_price, expected_profit, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (adj["order_id"], adj["product_id"], adj["model"],
+             adj.get("name_kr", ""), adj["size"], adj["old_price"],
+             adj["competitor_price"], adj["new_price"],
+             adj["expected_profit"], adj["status"], now)
+        )
+    conn.commit()
+    conn.close()
+
+
+def _send_adjustment_email(pending):
+    """가격 조정 알림 이메일 (Gmail SMTP)"""
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+
+    app_password = settings.get("emailAppPassword", "")
+    if not app_password:
+        print("[이메일] 앱 비밀번호 미설정 (설정 → emailAppPassword)")
+        return
+
+    subject = f"[KREAM] 입찰 순위 변동 {len(pending)}건 - 가격 조정 필요"
+    rows = ""
+    for a in pending:
+        name = a.get("name_kr") or a.get("model", "")
+        profit = f"{a['expected_profit']:,}원" if a["expected_profit"] is not None else "미확인"
+        rows += (
+            f"<tr>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{name}</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{a['size']}</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{a['old_price']:,}원</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{a['competitor_price']:,}원</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd;font-weight:700'>{a['new_price']:,}원</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{profit}</td>"
+            f"</tr>"
+        )
+
+    body = f"""<html><body style="font-family:-apple-system,sans-serif">
+<h2 style="color:#111">KREAM 입찰 순위 변동 알림</h2>
+<p>{datetime.now().strftime('%Y-%m-%d %H:%M')} 기준, <b>{len(pending)}건</b>의 가격 조정이 필요합니다.</p>
+<table style="border-collapse:collapse;width:100%;font-size:13px">
+<thead><tr style="background:#f5f5f5">
+<th style="padding:8px;border:1px solid #ddd">상품</th>
+<th style="padding:8px;border:1px solid #ddd">사이즈</th>
+<th style="padding:8px;border:1px solid #ddd">현재가</th>
+<th style="padding:8px;border:1px solid #ddd">경쟁자</th>
+<th style="padding:8px;border:1px solid #ddd">추천가</th>
+<th style="padding:8px;border:1px solid #ddd">예상수익</th>
+</tr></thead>
+<tbody>{rows}</tbody>
+</table>
+<p style="margin-top:20px">
+<a href="http://localhost:5001" style="background:#31b46e;color:#fff;padding:12px 28px;
+text-decoration:none;border-radius:8px;font-weight:600">대시보드에서 승인</a>
+</p>
+</body></html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECEIVER
+    msg.attach(MIMEText(body, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(EMAIL_SENDER, app_password)
+            server.send_message(msg)
+        print(f"[이메일] 발송 완료: {len(pending)}건 알림")
+    except Exception as e:
+        print(f"[이메일] 발송 실패: {e}")
+
+
+# ── 모니터링 API ──
+
+@app.route("/api/monitor/status")
+def api_monitor_status():
+    """모니터링 상태 조회"""
+    with _monitor_lock:
+        return jsonify(monitor_state.copy())
+
+
+@app.route("/api/monitor/start", methods=["POST"])
+def api_monitor_start():
+    """모니터링 시작"""
+    with _monitor_lock:
+        if monitor_state["running"]:
+            return jsonify({"ok": True, "msg": "이미 실행 중"})
+        monitor_state["running"] = True
+    _schedule_next_monitor()
+    return jsonify({"ok": True, "next_run": monitor_state.get("next_run")})
+
+
+@app.route("/api/monitor/stop", methods=["POST"])
+def api_monitor_stop():
+    """모니터링 중지"""
+    global _monitor_timer
+    with _monitor_lock:
+        monitor_state["running"] = False
+        monitor_state["next_run"] = None
+        if _monitor_timer:
+            _monitor_timer.cancel()
+            _monitor_timer = None
+    return jsonify({"ok": True})
+
+
+@app.route("/api/monitor/run-once", methods=["POST"])
+def api_monitor_run_once():
+    """수동 1회 모니터링"""
+    tid = new_task()
+    add_log(tid, "info", "수동 모니터링 시작...")
+
+    def run():
+        try:
+            _run_monitor_check()
+            add_log(tid, "success", "모니터링 완료")
+            finish_task(tid, result={"ok": True})
+        except Exception as e:
+            traceback.print_exc()
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
+
+
+# ── 조정 대기/승인/거절 API ──
+
+@app.route("/api/adjust/pending")
+def api_adjust_pending():
+    """pending/profit_low 상태의 조정 목록"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute(
+        """SELECT * FROM price_adjustments
+        WHERE status IN ('pending', 'profit_low')
+        ORDER BY created_at DESC LIMIT 200"""
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify({"adjustments": rows})
+
+
+@app.route("/api/adjust/history-log")
+def api_adjust_history_log():
+    """조정 이력 (실행/거절/실패)"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute(
+        """SELECT * FROM price_adjustments
+        WHERE status IN ('executed', 'rejected', 'failed')
+        ORDER BY executed_at DESC LIMIT 100"""
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify({"history": rows})
+
+
+@app.route("/api/adjust/approve", methods=["POST"])
+def api_adjust_approve():
+    """승인 → 가격 변경 실행"""
+    data = request.json or {}
+    ids = data.get("ids", [])
+    if not ids:
+        return jsonify({"error": "ids 필요"}), 400
+
+    tid = new_task()
+    add_log(tid, "info", f"가격 조정 승인: {len(ids)}건")
+
+    def run():
+        try:
+            conn = sqlite3.connect(str(PRICE_DB))
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            placeholders = ",".join("?" * len(ids))
+            c.execute(
+                f"SELECT * FROM price_adjustments WHERE id IN ({placeholders}) AND status='pending'",
+                ids
+            )
+            items = [dict(r) for r in c.fetchall()]
+            conn.close()
+
+            if not items:
+                add_log(tid, "error", "승인 대상 없음")
+                finish_task(tid, error="승인 대상 없음")
+                return
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            results = []
+            for item in items:
+                oid = item["order_id"]
+                price = item["new_price"]
+                add_log(tid, "info", f"{oid} → {price:,}원 수정 중...")
+
+                ok = loop.run_until_complete(
+                    modify_bid_price(oid, price, headless=get_headless())
+                )
+                results.append({"id": item["id"], "success": ok})
+
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn2 = sqlite3.connect(str(PRICE_DB))
+                conn2.execute(
+                    "UPDATE price_adjustments SET status=?, executed_at=? WHERE id=?",
+                    ("executed" if ok else "failed", now_str, item["id"])
+                )
+                conn2.commit()
+                conn2.close()
+
+                if ok:
+                    add_log(tid, "success", f"{oid} 수정 완료")
+                else:
+                    add_log(tid, "error", f"{oid} 수정 실패")
+
+            loop.close()
+
+            success_cnt = sum(1 for r in results if r["success"])
+            add_log(tid, "success", f"완료: {success_cnt}/{len(items)}건")
+            finish_task(tid, result={"results": results, "success": success_cnt})
+        except Exception as e:
+            traceback.print_exc()
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
+
+
+@app.route("/api/adjust/reject", methods=["POST"])
+def api_adjust_reject():
+    """거절 처리"""
+    data = request.json or {}
+    ids = data.get("ids", [])
+    if not ids:
+        return jsonify({"error": "ids 필요"}), 400
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    placeholders = ",".join("?" * len(ids))
+    conn.execute(
+        f"UPDATE price_adjustments SET status='rejected', executed_at=? "
+        f"WHERE id IN ({placeholders})",
+        [now_str] + ids
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "count": len(ids)})
+
+
+@app.route("/api/email/test", methods=["POST"])
+def api_email_test():
+    """이메일 발송 테스트"""
+    test_data = [{
+        "name_kr": "[테스트] 나이키 에어포스 1",
+        "model": "TEST-001",
+        "size": "270",
+        "old_price": 120000,
+        "competitor_price": 115000,
+        "new_price": 114000,
+        "expected_profit": 8500,
+    }]
+    _send_adjustment_email(test_data)
+    return jsonify({"ok": True, "msg": "테스트 이메일 발송 시도 완료"})
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
@@ -2384,7 +3267,11 @@ if __name__ == "__main__":
     print("=" * 50)
     print("  KREAM 판매자 대시보드 서버")
     print("  http://localhost:5001")
+    print(f"  모니터링 스케줄: 매일 {MONITOR_HOURS}시")
     print("=" * 50)
     # 서버 시작 시 환율 자동 조회 (백그라운드)
     threading.Thread(target=fetch_exchange_rates, daemon=True).start()
+    # 모니터링 자동 시작
+    monitor_state["running"] = True
+    _schedule_next_monitor()
     app.run(host="0.0.0.0", port=5001, debug=False)

@@ -6,19 +6,28 @@ KREAM 판매자센터 자동화 스크립트 v2
 - Playwright (async) 기반
 
 사용법:
-  pip3 install playwright openpyxl
+  pip3 install playwright openpyxl playwright-stealth
   python3 -m playwright install chromium
-  
-  python3 kream_bot.py --mode login       # 첫 로그인 (세션 저장)
-  python3 kream_bot.py --mode product     # 상품 고시정보 입력
-  python3 kream_bot.py --mode bid         # 판매 입찰
-  python3 kream_bot.py --mode all         # 고시정보 + 입찰 한번에
+
+  python3 kream_bot.py --mode login              # 판매자센터 수동 로그인
+  python3 kream_bot.py --mode login-kream         # KREAM 일반 수동 로그인
+  python3 kream_bot.py --mode auto-login          # 둘 다 자동 로그인 (Gmail IMAP + 네이버)
+  python3 kream_bot.py --mode auto-login-partner  # 판매자센터만 자동 (이메일+인증코드)
+  python3 kream_bot.py --mode auto-login-kream    # KREAM만 자동 (네이버 로그인)
+  python3 kream_bot.py --mode product             # 상품 고시정보 입력
+  python3 kream_bot.py --mode bid                 # 판매 입찰
+  python3 kream_bot.py --mode all                 # 고시정보 + 입찰 한번에
 """
 
 import asyncio
 import argparse
+import email as email_lib
+import imaplib
+import json
 import re
 import sys
+import time
+import traceback
 from pathlib import Path
 
 import openpyxl
@@ -30,6 +39,24 @@ PARTNER_URL = "https://partner.kream.co.kr"
 KREAM_URL = "https://kream.co.kr"
 STATE_FILE = "auth_state.json"
 STATE_FILE_KREAM = "auth_state_kream.json"
+SETTINGS_FILE = Path(__file__).parent / "settings.json"
+
+
+def load_auto_login_settings():
+    """settings.json에서 자동 로그인 설정 읽기"""
+    defaults = {
+        "kream_email": "", "kream_password": "", "gmail_app_password": "",
+        "naver_id": "", "naver_pw": "",
+    }
+    if not SETTINGS_FILE.exists():
+        return defaults
+    try:
+        s = json.loads(SETTINGS_FILE.read_text())
+        for k in defaults:
+            defaults[k] = s.get(k, "").strip()
+    except Exception:
+        pass
+    return defaults
 
 
 # ═══════════════════════════════════════════
@@ -111,12 +138,21 @@ async def select_dropdown(page, button_selector, option_text):
         print(f"  ⚠ 드롭다운 버튼 '{button_selector}' DOM에 없음")
         return
 
+    # 스크롤 (Playwright → JS 폴백)
     try:
-        await btn.scroll_into_view_if_needed()
+        await btn.scroll_into_view_if_needed(timeout=5000)
         await page.wait_for_timeout(300)
+    except Exception:
+        try:
+            await btn.evaluate("el => el.scrollIntoView({block: 'center'})")
+            await page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+    # 클릭 (일반 → JS 폴백)
+    try:
         await btn.click(timeout=5000)
     except Exception:
-        # JS 클릭 폴백
         try:
             await btn.evaluate("el => el.click()")
         except Exception:
@@ -124,12 +160,19 @@ async def select_dropdown(page, button_selector, option_text):
             return
 
     await page.wait_for_timeout(500)
+
+    # 드롭다운 목록에서 옵션 선택
     option = page.get_by_text(option_text, exact=False).first
     try:
-        await option.click(timeout=3000)
+        await option.click(timeout=5000)
     except Exception:
-        print(f"  ⚠ 드롭다운 옵션 '{option_text}' 찾기 실패")
-        await page.keyboard.press("Escape")
+        # 리스트 아이템 셀렉터로 재시도
+        try:
+            li = page.locator(f'li:has-text("{option_text}"), [role="option"]:has-text("{option_text}")').first
+            await li.click(timeout=3000)
+        except Exception:
+            print(f"  ⚠ 드롭다운 옵션 '{option_text}' 찾기 실패")
+            await page.keyboard.press("Escape")
 
 
 # ═══════════════════════════════════════════
@@ -158,6 +201,34 @@ async def create_context(browser, storage=None):
     return context
 
 
+async def save_state_with_localstorage(page, context, path, origin_url):
+    """storage_state에 localStorage 데이터를 병합하여 저장"""
+    try:
+        local_storage_data = await page.evaluate('() => JSON.stringify(localStorage)')
+        ls_items = json.loads(local_storage_data) if local_storage_data else {}
+        ls_entries = [{"name": k, "value": v} for k, v in ls_items.items()]
+    except Exception:
+        ls_entries = []
+
+    state = await context.storage_state()
+
+    if ls_entries:
+        origin_found = False
+        for origin in state.get("origins", []):
+            if origin.get("origin") == origin_url:
+                origin["localStorage"] = ls_entries
+                origin_found = True
+                break
+        if not origin_found:
+            state.setdefault("origins", []).append({
+                "origin": origin_url,
+                "localStorage": ls_entries,
+            })
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
 async def login_manual(playwright):
     print("🔐 판매자센터 로그인 모드")
     print("  브라우저가 열리면 직접 로그인해주세요.")
@@ -172,8 +243,42 @@ async def login_manual(playwright):
 
     input("\n✅ 로그인 완료되면 Enter를 누르세요...")
 
-    await context.storage_state(path=STATE_FILE)
-    print(f"✅ 로그인 상태 저장 완료 → {STATE_FILE}")
+    # 세션 쿠키 캡처를 위해 partner 페이지 한 번 방문
+    print("  📡 세션 쿠키 캡처를 위해 판매자센터 페이지 이동 중...")
+    await page.goto(f"{PARTNER_URL}/c2c")
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(2000)
+
+    # localStorage에서 인증 토큰 추출 (판매자센터는 JWT를 localStorage에 저장)
+    local_storage_data = await page.evaluate('() => JSON.stringify(localStorage)')
+    ls_items = json.loads(local_storage_data) if local_storage_data else {}
+    ls_entries = [{"name": k, "value": v} for k, v in ls_items.items()]
+    print(f"  📦 localStorage 항목 {len(ls_entries)}개 추출")
+
+    # storage_state를 딕셔너리로 가져와서 origins에 localStorage 병합
+    state = await context.storage_state()
+    origin_url = PARTNER_URL  # https://partner.kream.co.kr
+
+    # 기존 origins에서 해당 origin 찾거나 새로 생성
+    origin_found = False
+    for origin in state.get("origins", []):
+        if origin.get("origin") == origin_url:
+            origin["localStorage"] = ls_entries
+            origin_found = True
+            break
+    if not origin_found:
+        state.setdefault("origins", []).append({
+            "origin": origin_url,
+            "localStorage": ls_entries,
+        })
+
+    # 파일로 저장
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+    cookies = await context.cookies()
+    token_keys = [e["name"] for e in ls_entries if "token" in e["name"].lower() or "auth" in e["name"].lower()]
+    print(f"✅ 로그인 상태 저장 완료 → {STATE_FILE} (쿠키 {len(cookies)}개, 인증 키: {token_keys})")
     await browser.close()
 
 
@@ -192,24 +297,946 @@ async def login_kream(playwright):
 
     input("\n✅ 로그인 완료되면 Enter를 누르세요...")
 
-    await context.storage_state(path=STATE_FILE_KREAM)
-    print(f"✅ KREAM 로그인 상태 저장 완료 → {STATE_FILE_KREAM}")
+    # localStorage에서 인증 토큰 추출
+    local_storage_data = await page.evaluate('() => JSON.stringify(localStorage)')
+    ls_items = json.loads(local_storage_data) if local_storage_data else {}
+    ls_entries = [{"name": k, "value": v} for k, v in ls_items.items()]
+    print(f"  📦 localStorage 항목 {len(ls_entries)}개 추출")
+
+    state = await context.storage_state()
+    origin_url = KREAM_URL  # https://kream.co.kr
+
+    origin_found = False
+    for origin in state.get("origins", []):
+        if origin.get("origin") == origin_url:
+            origin["localStorage"] = ls_entries
+            origin_found = True
+            break
+    if not origin_found:
+        state.setdefault("origins", []).append({
+            "origin": origin_url,
+            "localStorage": ls_entries,
+        })
+
+    with open(STATE_FILE_KREAM, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+    token_keys = [e["name"] for e in ls_entries if "token" in e["name"].lower() or "auth" in e["name"].lower()]
+    print(f"✅ KREAM 로그인 상태 저장 완료 → {STATE_FILE_KREAM} (인증 키: {token_keys})")
     await browser.close()
 
 
-async def ensure_logged_in(page):
+# ═══════════════════════════════════════════
+# Gmail IMAP — KREAM 인증코드 자동 읽기
+# ═══════════════════════════════════════════
+
+def read_kream_code_from_gmail(gmail_user, gmail_app_pw, timeout=60, poll_interval=3):
+    """Gmail IMAP에서 KREAM 인증코드 메일을 폴링하여 숫자코드 반환.
+    Args:
+        gmail_user: Gmail 주소
+        gmail_app_pw: 앱 비밀번호 (16자)
+        timeout: 최대 대기 시간(초)
+        poll_interval: 폴링 간격(초)
+    Returns:
+        인증코드 문자열 (예: "123456") 또는 None
+    """
+    print(f"  📧 Gmail IMAP 연결 중... ({gmail_user})")
+    start_time = time.time()
+    # 검색 시작 시각 기록 (메일 도착 전에 보낸 이전 코드 무시)
+    search_start = start_time
+
+    while time.time() - start_time < timeout:
+        elapsed = int(time.time() - start_time)
+        try:
+            mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+            mail.login(gmail_user, gmail_app_pw)
+            mail.select("INBOX")
+
+            # KREAM 발신 메일 검색 (최근 것부터)
+            # FROM kream.co.kr 또는 SUBJECT에 인증/코드/verification 포함
+            status, msg_ids = mail.search(None, '(FROM "@kream.co.kr")')
+            if status != "OK" or not msg_ids[0]:
+                # 폴백: SUBJECT로도 검색
+                status, msg_ids = mail.search(None, '(OR SUBJECT "인증" SUBJECT "verification")')
+
+            if status == "OK" and msg_ids[0]:
+                id_list = msg_ids[0].split()
+                # 최신 메일부터 역순으로 확인 (최대 5개)
+                for msg_id in reversed(id_list[-5:]):
+                    status2, msg_data = mail.fetch(msg_id, "(RFC822)")
+                    if status2 != "OK":
+                        continue
+                    raw_email = msg_data[0][1]
+                    msg = email_lib.message_from_bytes(raw_email)
+
+                    # 메일 날짜 확인 — 검색 시작 직전~이후 메일만 유효
+                    # (Date 헤더 파싱이 복잡하므로, 최신 메일 기준으로 처리)
+                    body_text = ""
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            ct = part.get_content_type()
+                            if ct in ("text/plain", "text/html"):
+                                payload = part.get_payload(decode=True)
+                                if payload:
+                                    charset = part.get_content_charset() or "utf-8"
+                                    try:
+                                        body_text += payload.decode(charset, errors="replace")
+                                    except Exception:
+                                        body_text += payload.decode("utf-8", errors="replace")
+                    else:
+                        payload = msg.get_payload(decode=True)
+                        if payload:
+                            charset = msg.get_content_charset() or "utf-8"
+                            try:
+                                body_text = payload.decode(charset, errors="replace")
+                            except Exception:
+                                body_text = payload.decode("utf-8", errors="replace")
+
+                    # 인증코드 추출 (4~8자리 숫자)
+                    # 우선순위: "인증 코드: 123456", "인증코드 123456", 단독 6자리 숫자
+                    code_match = re.search(r'인증\s*코드\s*[:\s]*(\d{4,8})', body_text)
+                    if not code_match:
+                        code_match = re.search(r'[Vv]erification\s*[Cc]ode\s*[:\s]*(\d{4,8})', body_text)
+                    if not code_match:
+                        code_match = re.search(r'코드\s*[:\s]*(\d{4,8})', body_text)
+                    if not code_match:
+                        # HTML에서 큰 숫자 (보통 인증코드가 굵게/크게 표시됨)
+                        code_match = re.search(r'<\w[^>]*>\s*(\d{4,8})\s*</\w+>', body_text)
+                    if not code_match:
+                        # 6자리 숫자 단독 (가장 일반적)
+                        codes = re.findall(r'\b(\d{6})\b', body_text)
+                        if codes:
+                            code_match = type('M', (), {'group': lambda self, n=1: codes[-1]})()
+
+                    if code_match:
+                        code = code_match.group(1)
+                        subject = msg.get("Subject", "(제목없음)")
+                        print(f"  ✓ 인증코드 발견: {code} (제목: {subject})")
+                        mail.logout()
+                        return code
+
+            mail.logout()
+        except imaplib.IMAP4.error as e:
+            print(f"  ⚠ IMAP 오류: {e}")
+        except Exception as e:
+            print(f"  ⚠ Gmail 연결 오류: {e}")
+
+        print(f"  ⏳ 인증코드 메일 대기 중... ({elapsed}s/{timeout}s)")
+        time.sleep(poll_interval)
+
+    print(f"  ❌ {timeout}초 내 인증코드 메일을 찾지 못함")
+    return None
+
+
+# ═══════════════════════════════════════════
+# 판매자센터 자동 로그인 (이메일 + 비번 + 인증코드)
+# ═══════════════════════════════════════════
+
+async def login_auto_partner(playwright):
+    """판매자센터 완전 자동 로그인:
+    1. 이메일/비밀번호 입력 → 로그인 버튼
+    2. KREAM이 인증코드 이메일 발송
+    3. Gmail IMAP으로 인증코드 자동 읽기
+    4. 인증코드 입력 → 인증 완료
+    5. 세션 저장
+    """
+    cfg = load_auto_login_settings()
+    kream_email = cfg["kream_email"]
+    kream_pw = cfg["kream_password"]
+    gmail_app_pw = cfg["gmail_app_password"]
+
+    if not kream_email or not kream_pw:
+        print("❌ settings.json에 kream_email / kream_password 미설정")
+        return False
+    if not gmail_app_pw:
+        print("❌ settings.json에 gmail_app_password 미설정 (앱 비밀번호 필요)")
+        return False
+
+    print(f"\n{'='*50}")
+    print(f"🔐 [판매자센터] 자동 로그인")
+    print(f"   계정: {kream_email}")
+    print(f"{'='*50}")
+
+    browser = await create_browser(playwright, headless=False)
+    context = await create_context(browser)
+    page = await context.new_page()
+    await apply_stealth(page)
+
+    # ── 1단계: 로그인 페이지 이동 ──
+    print(f"\n  ─── [1] 로그인 페이지 이동 ───")
+    await page.goto(f"{PARTNER_URL}/sign-in", wait_until="domcontentloaded")
+    await page.wait_for_timeout(2000)
+    await _save_debug_screenshot(page, "partner_auto_step1_login_page")
+
+    # ── 2단계: 이메일 입력 ──
+    print(f"\n  ─── [2] 이메일 입력 ───")
+    email_input = None
+    for sel in ['input[type="email"]', 'input[name="email"]',
+                'input[placeholder*="이메일"]', 'input[placeholder*="email" i]',
+                'input[autocomplete="email"]', 'input[autocomplete="username"]']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    email_input = loc.first
+                    print(f"  ✓ 이메일 필드: {sel}")
+                    break
+            except Exception:
+                continue
+    if not email_input:
+        # 폴백: 첫 번째 visible input
+        fallback = page.locator('input:visible').first
+        if await fallback.count() > 0:
+            email_input = fallback
+            print(f"  ⚠ 이메일 필드 폴백 사용")
+        else:
+            print(f"  ❌ 이메일 필드 없음")
+            await _save_debug_screenshot(page, "partner_auto_no_email")
+            await browser.close()
+            return False
+
+    await email_input.click()
+    await page.keyboard.press("Meta+a")
+    await page.keyboard.press("Backspace")
+    await email_input.type(kream_email, delay=80)
+    await page.wait_for_timeout(300)
+    print(f"  ✓ 이메일 입력: {kream_email}")
+
+    # ── 3단계: 비밀번호 입력 ──
+    print(f"\n  ─── [3] 비밀번호 입력 ───")
+    pw_input = None
+    for sel in ['input[type="password"]', 'input[name="password"]',
+                'input[placeholder*="비밀번호"]']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    pw_input = loc.first
+                    print(f"  ✓ 비밀번호 필드: {sel}")
+                    break
+            except Exception:
+                continue
+    if not pw_input:
+        print(f"  ❌ 비밀번호 필드 없음")
+        await _save_debug_screenshot(page, "partner_auto_no_pw")
+        await browser.close()
+        return False
+
+    await pw_input.click()
+    await page.keyboard.press("Meta+a")
+    await page.keyboard.press("Backspace")
+    await pw_input.type(kream_pw, delay=80)
+    await page.wait_for_timeout(300)
+    print(f"  ✓ 비밀번호 입력 완료")
+
+    # ── 4단계: "다음" 버튼 클릭 (이메일+비밀번호 제출) ──
+    print(f"\n  ─── [4] '다음' 버튼 클릭 ───")
+    next_btn = None
+    for sel in ['button:has-text("다음")', 'button[type="submit"]',
+                'button:has-text("로그인")', 'button:has-text("Login")']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    next_btn = loc.first
+                    btn_text = (await next_btn.inner_text(timeout=1000)).strip()
+                    print(f"  ✓ 버튼 발견: '{btn_text}' ({sel})")
+                    break
+            except Exception:
+                continue
+    if next_btn:
+        await next_btn.click()
+    else:
+        print(f"  ⚠ 버튼 미발견 — Enter 제출")
+        await page.keyboard.press("Enter")
+
+    await page.wait_for_timeout(3000)
+    await _save_debug_screenshot(page, "partner_auto_step4_after_next")
+
+    # 로그인 에러 확인
+    try:
+        err = page.locator('[class*="error"]:visible, [class*="Error"]:visible')
+        if await err.count() > 0:
+            err_text = (await err.first.inner_text(timeout=1000)).strip()
+            if err_text:
+                print(f"  ❌ 로그인 에러: {err_text[:200]}")
+                await browser.close()
+                return False
+    except Exception:
+        pass
+
+    # ── 5단계: OTP 인증코드 감지 + Gmail 자동 읽기 ──
+    print(f"\n  ─── [5] OTP 인증코드 처리 ───")
+    current_url = page.url
+    print(f"  → 현재 URL: {current_url}")
+
+    # OTP 입력 필드 감지 (KREAM 판매자센터: placeholder="OTP 입력")
+    code_input = None
+    otp_selectors = [
+        'input[placeholder*="OTP"]', 'input[placeholder*="otp"]',
+        'input[placeholder*="인증"]', 'input[placeholder*="코드"]',
+        'input[placeholder*="code" i]', 'input[placeholder*="verification" i]',
+        'input[name*="otp" i]', 'input[name*="code" i]',
+        'input[type="number"]', 'input[type="tel"]',
+        'input[maxlength="6"]', 'input[inputmode="numeric"]',
+    ]
+    for sel in otp_selectors:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1000):
+                    code_input = loc.first
+                    print(f"  ✓ OTP 입력 필드 감지: {sel}")
+                    break
+            except Exception:
+                continue
+
+    # 인증코드 관련 텍스트 감지
+    code_text_detected = False
+    for text_sel in ['text=/인증.*발송/', 'text=/인증번호/', 'text=/OTP/',
+                     'text=/이메일.*발송/', 'text=/verification/i']:
+        try:
+            loc = page.locator(text_sel)
+            if await loc.count() > 0 and await loc.first.is_visible(timeout=500):
+                txt = (await loc.first.inner_text(timeout=1000)).strip()
+                print(f"  🔍 인증 관련 텍스트: {txt[:100]}")
+                code_text_detected = True
+                break
+        except Exception:
+            continue
+
+    if code_input or code_text_detected:
+        print(f"  📧 인증코드 이메일 발송됨 — Gmail에서 자동 읽기 시작")
+        code = await asyncio.to_thread(
+            read_kream_code_from_gmail, kream_email, gmail_app_pw, timeout=60, poll_interval=3
+        )
+
+        if not code:
+            print(f"\n  ⚠️  인증코드 자동 읽기 실패!")
+            print(f"  ⚠️  브라우저에서 직접 인증코드를 입력해주세요.")
+            input("  ✅ 인증 완료 후 Enter를 누르세요...")
+            await page.wait_for_timeout(2000)
+        else:
+            # OTP 입력 필드를 다시 확인 (메일 대기 중 DOM 변경 가능)
+            if not code_input:
+                for sel in otp_selectors:
+                    loc = page.locator(sel)
+                    if await loc.count() > 0:
+                        try:
+                            if await loc.first.is_visible(timeout=1000):
+                                code_input = loc.first
+                                break
+                        except Exception:
+                            continue
+
+            if code_input:
+                await code_input.click()
+                await page.keyboard.press("Meta+a")
+                await page.keyboard.press("Backspace")
+                await code_input.type(code, delay=80)
+                await page.wait_for_timeout(500)
+                print(f"  ✓ OTP 입력: {code}")
+
+                # "로그인" 버튼 클릭 (OTP 화면에서는 "로그인" 버튼)
+                login_btn = None
+                for sel in ['button:has-text("로그인")', 'button:has-text("확인")',
+                            'button:has-text("인증")', 'button[type="submit"]']:
+                    loc = page.locator(sel)
+                    if await loc.count() > 0:
+                        try:
+                            if await loc.first.is_visible(timeout=1000):
+                                login_btn = loc.first
+                                btn_text = (await login_btn.inner_text(timeout=500)).strip()
+                                print(f"  ✓ 로그인 버튼: '{btn_text}' ({sel})")
+                                break
+                        except Exception:
+                            continue
+                if login_btn:
+                    await login_btn.click()
+                else:
+                    await page.keyboard.press("Enter")
+                    print(f"  ✓ Enter 키로 제출")
+
+                await page.wait_for_timeout(5000)
+            else:
+                print(f"  ⚠ OTP 입력 필드를 찾을 수 없음 — Enter로 시도")
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(2000)
+
+        await _save_debug_screenshot(page, "partner_auto_step5_after_code")
+    else:
+        # 인증코드 없이 바로 로그인된 경우
+        print(f"  ✓ 인증코드 불필요 — 바로 로그인됨")
+
+    # ── 6단계: 로그인 성공 확인 + 세션 저장 ──
+    print(f"\n  ─── [6] 로그인 결과 확인 ───")
+    # 리다이렉트 대기
+    await page.wait_for_timeout(2000)
+    current_url = page.url
+    print(f"  → 최종 URL: {current_url}")
+
+    if "/sign-in" in current_url:
+        print(f"  ❌ 로그인 실패 — 여전히 로그인 페이지")
+        await _save_debug_screenshot(page, "partner_auto_login_failed")
+        await browser.close()
+        return False
+
+    # /c2c 이동하여 localStorage JWT 캡처
+    print(f"  📡 세션 캡처를 위해 /c2c 이동...")
+    await page.goto(f"{PARTNER_URL}/c2c")
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(2000)
+    await dismiss_popups(page)
+
+    await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+
+    token_keys = []
+    try:
+        ls_data = await page.evaluate('() => JSON.stringify(localStorage)')
+        ls_items = json.loads(ls_data) if ls_data else {}
+        token_keys = [k for k in ls_items if "token" in k.lower() or "auth" in k.lower()]
+    except Exception:
+        pass
+
+    print(f"✅ [판매자센터] 자동 로그인 완료 → {STATE_FILE} (인증 키: {token_keys})")
+    await browser.close()
+    return True
+
+
+# ═══════════════════════════════════════════
+# KREAM 일반사이트 자동 로그인 (네이버)
+# ═══════════════════════════════════════════
+
+async def login_auto_kream(playwright):
+    """KREAM 일반사이트 네이버 소셜 로그인:
+    1. KREAM 로그인 페이지 → "네이버 로그인" 버튼
+    2. 네이버 아이디/비밀번호 입력
+    3. 로그인 완료 → KREAM으로 리다이렉트
+    4. 세션 저장
+    """
+    cfg = load_auto_login_settings()
+    naver_id = cfg["naver_id"]
+    naver_pw = cfg["naver_pw"]
+
+    if not naver_id or not naver_pw:
+        print("❌ settings.json에 naver_id / naver_pw 미설정")
+        return False
+
+    print(f"\n{'='*50}")
+    print(f"🔐 [KREAM 일반] 네이버 자동 로그인")
+    print(f"   네이버 ID: {naver_id}")
+    print(f"{'='*50}")
+
+    browser = await create_browser(playwright, headless=False)
+    context = await create_context(browser)
+    page = await context.new_page()
+    await apply_stealth(page)
+
+    # ── 1단계: KREAM 로그인 페이지 ──
+    print(f"\n  ─── [1] KREAM 로그인 페이지 ───")
+    await page.goto(f"{KREAM_URL}/login", wait_until="domcontentloaded")
+    await page.wait_for_timeout(2000)
+    await _save_debug_screenshot(page, "kream_auto_step1_login")
+
+    # ── 2단계: 네이버 로그인 버튼 클릭 ──
+    print(f"\n  ─── [2] 네이버 로그인 버튼 ───")
+    naver_btn = None
+    for sel in ['a[class*="naver" i]', 'button[class*="naver" i]',
+                'a:has-text("네이버")', 'button:has-text("네이버")',
+                'a[href*="naver"]', '[class*="social"] a[class*="naver" i]',
+                'img[alt*="네이버"]', 'img[alt*="naver" i]']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    naver_btn = loc.first
+                    print(f"  ✓ 네이버 로그인 버튼: {sel}")
+                    break
+            except Exception:
+                continue
+
+    if not naver_btn:
+        # 이미지 기반 폴백: 네이버 아이콘/로고가 있는 링크
+        try:
+            naver_btn = page.locator('a:has(img[src*="naver"]), a:has(svg), [class*="social"] a').first
+            if await naver_btn.count() == 0:
+                naver_btn = None
+        except Exception:
+            pass
+
+    if not naver_btn:
+        print(f"  ❌ 네이버 로그인 버튼을 찾을 수 없음")
+        await _save_debug_screenshot(page, "kream_auto_no_naver_btn")
+        await browser.close()
+        return False
+
+    # 클릭 (새 탭/팝업으로 열릴 수 있음)
+    async with context.expect_page() as new_page_info:
+        try:
+            await naver_btn.click(timeout=5000)
+        except Exception:
+            try:
+                await naver_btn.evaluate("el => el.click()")
+            except Exception as e:
+                print(f"  ❌ 네이버 버튼 클릭 실패: {e}")
+                await browser.close()
+                return False
+
+    # 새 탭이 열렸는지 확인
+    try:
+        naver_page = await new_page_info.value
+        print(f"  ✓ 네이버 로그인 새 탭 열림: {naver_page.url}")
+    except Exception:
+        # 새 탭 없이 같은 페이지에서 리다이렉트
+        naver_page = page
+        await page.wait_for_timeout(3000)
+        print(f"  ✓ 네이버 로그인 페이지 리다이렉트: {page.url}")
+
+    await naver_page.wait_for_load_state("domcontentloaded")
+    await naver_page.wait_for_timeout(2000)
+    await _save_debug_screenshot(naver_page, "kream_auto_step2_naver_page")
+
+    # ── 3단계: 네이버 아이디/비밀번호 입력 ──
+    print(f"\n  ─── [3] 네이버 아이디/비밀번호 입력 ───")
+    print(f"  → 네이버 페이지 URL: {naver_page.url}")
+
+    # 네이버 아이디 입력
+    id_input = None
+    for sel in ['input#id', 'input[name="id"]', 'input[placeholder*="아이디"]',
+                'input[name="username"]']:
+        loc = naver_page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    id_input = loc.first
+                    print(f"  ✓ 아이디 필드: {sel}")
+                    break
+            except Exception:
+                continue
+
+    if not id_input:
+        print(f"  ❌ 네이버 아이디 필드 없음")
+        await _save_debug_screenshot(naver_page, "kream_auto_no_naver_id")
+        await browser.close()
+        return False
+
+    # 네이버 봇 감지 우회: JS로 값 설정 후 이벤트 발생
+    # (네이버는 타이핑 패턴을 감시하므로 clipboard 붙여넣기 사용)
+    await id_input.click()
+    await naver_page.wait_for_timeout(500)
+    # 클립보드 방식: 직접 evaluate로 값 설정
+    await naver_page.evaluate(f'document.querySelector("input#id").value = ""')
+    await id_input.type(naver_id, delay=100)
+    await naver_page.wait_for_timeout(300)
+    print(f"  ✓ 아이디 입력: {naver_id}")
+
+    # 네이버 비밀번호 입력
+    pw_input = None
+    for sel in ['input#pw', 'input[name="pw"]', 'input[type="password"]',
+                'input[placeholder*="비밀번호"]']:
+        loc = naver_page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    pw_input = loc.first
+                    print(f"  ✓ 비밀번호 필드: {sel}")
+                    break
+            except Exception:
+                continue
+
+    if not pw_input:
+        print(f"  ❌ 네이버 비밀번호 필드 없음")
+        await _save_debug_screenshot(naver_page, "kream_auto_no_naver_pw")
+        await browser.close()
+        return False
+
+    await pw_input.click()
+    await naver_page.wait_for_timeout(500)
+    await naver_page.evaluate(f'document.querySelector("input#pw").value = ""')
+    await pw_input.type(naver_pw, delay=100)
+    await naver_page.wait_for_timeout(300)
+    print(f"  ✓ 비밀번호 입력 완료")
+
+    # 로그인 버튼
+    login_btn = None
+    for sel in ['button#log\\.login', 'button[type="submit"]',
+                'button:has-text("로그인")', 'input[type="submit"]',
+                'button.btn_login', '#log\\.login']:
+        loc = naver_page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    login_btn = loc.first
+                    print(f"  ✓ 로그인 버튼: {sel}")
+                    break
+            except Exception:
+                continue
+
+    if login_btn:
+        await login_btn.click()
+    else:
+        await naver_page.keyboard.press("Enter")
+        print(f"  ⚠ 로그인 버튼 미발견 — Enter 제출")
+
+    print(f"  ⏳ 네이버 로그인 처리 중...")
+
+    # 네이버 로그인 후 탭이 KREAM 콜백으로 리다이렉트/닫힐 수 있음
+    naver_tab_closed = False
+    try:
+        await naver_page.wait_for_timeout(3000)
+    except Exception:
+        naver_tab_closed = True
+        print(f"  ✓ 네이버 탭이 닫힘 (KREAM 콜백 완료)")
+
+    # ── 4단계: 네이버 2차인증/보안 확인 대기 ──
+    print(f"\n  ─── [4] 네이버 보안 확인 ───")
+    if not naver_tab_closed:
+        try:
+            if naver_page.is_closed():
+                naver_tab_closed = True
+                print(f"  ✓ 네이버 탭 닫힘 확인")
+        except Exception:
+            naver_tab_closed = True
+
+    if not naver_tab_closed:
+        naver_current = naver_page.url
+        print(f"  → 네이버 현재 URL: {naver_current}")
+
+        # CAPTCHA / 기기인증 감지
+        captcha_detected = False
+        for indicator in ['iframe[src*="captcha"]', '[id*="captcha"]',
+                          'text="새로운 기기"', 'text="기기 인증"',
+                          'text="보안"', 'text="본인확인"',
+                          'text="자동입력 방지"']:
+            try:
+                loc = naver_page.locator(indicator)
+                if await loc.count() > 0 and await loc.first.is_visible(timeout=500):
+                    txt = ""
+                    try:
+                        txt = (await loc.first.inner_text(timeout=500)).strip()[:50]
+                    except Exception:
+                        pass
+                    if "naver" in naver_page.url:
+                        captcha_detected = True
+                        print(f"  🛡️ 네이버 보안 확인 감지: {indicator} ({txt})")
+                        break
+            except Exception:
+                continue
+
+        if captcha_detected or ("naver" in naver_current and "login" in naver_current):
+            print(f"\n  ⚠️  네이버 보안 인증이 필요합니다!")
+            print(f"  ⚠️  브라우저에서 직접 인증을 완료해주세요.")
+            input("  ✅ 인증 완료 후 Enter를 누르세요...")
+            try:
+                await naver_page.wait_for_timeout(2000)
+            except Exception:
+                naver_tab_closed = True
+    else:
+        print(f"  ✓ 보안 확인 불필요 (탭 이미 닫힘 = 인증 완료)")
+
+    # ── 5단계: KREAM으로 리다이렉트 확인 ──
+    print(f"\n  ─── [5] KREAM 리다이렉트 확인 ───")
+    target_page = page  # 원래 KREAM 페이지
+
+    if naver_page != page and not naver_tab_closed:
+        try:
+            if not naver_page.is_closed():
+                await naver_page.wait_for_timeout(2000)
+                if "kream.co.kr" in naver_page.url:
+                    target_page = naver_page
+                    print(f"  ✓ 네이버 탭이 KREAM으로 리다이렉트: {naver_page.url}")
+                else:
+                    await page.reload(wait_until="domcontentloaded")
+                    await page.wait_for_timeout(2000)
+            else:
+                # 탭 닫힘 → 원래 KREAM 페이지 새로고침
+                await page.reload(wait_until="domcontentloaded")
+                await page.wait_for_timeout(2000)
+        except Exception:
+            # 탭 접근 실패 → 원래 KREAM 페이지 사용
+            try:
+                await page.reload(wait_until="domcontentloaded")
+                await page.wait_for_timeout(2000)
+            except Exception:
+                pass
+    else:
+        # 탭이 닫혔거나 같은 탭 → 원래 KREAM 페이지 새로고침
+        try:
+            await page.reload(wait_until="domcontentloaded")
+            await page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+    # ── 6단계: 세션 저장 ──
+    print(f"\n  ─── [6] 세션 저장 ───")
+    # KREAM 메인으로 이동하여 로그인 상태 확인 + 세션 안정화
+    await target_page.goto(KREAM_URL, wait_until="domcontentloaded")
+    await target_page.wait_for_timeout(2000)
+
+    current_url = target_page.url
+    print(f"  → 최종 URL: {current_url}")
+
+    # 로그인 페이지로 다시 리다이렉트되면 실패
+    if "/login" in current_url:
+        print(f"  ❌ 로그인 실패 — 로그인 페이지로 리다이렉트됨")
+        await _save_debug_screenshot(target_page, "kream_auto_login_failed")
+        await browser.close()
+        return False
+
+    await save_state_with_localstorage(target_page, context, STATE_FILE_KREAM, KREAM_URL)
+
+    token_keys = []
+    try:
+        ls_data = await target_page.evaluate('() => JSON.stringify(localStorage)')
+        ls_items = json.loads(ls_data) if ls_data else {}
+        token_keys = [k for k in ls_items if "token" in k.lower() or "auth" in k.lower()]
+    except Exception:
+        pass
+
+    print(f"✅ [KREAM 일반] 네이버 자동 로그인 완료 → {STATE_FILE_KREAM} (인증 키: {token_keys})")
+    await browser.close()
+    return True
+
+
+# ═══════════════════════════════════════════
+# 세션 만료 시 자동 재로그인 (판매자센터)
+# ═══════════════════════════════════════════
+
+async def _try_auto_relogin(page, context):
+    """세션 만료 시 판매자센터 자동 재로그인 시도.
+    ensure_logged_in()에서 호출. Gmail IMAP으로 OTP 자동 처리.
+    Returns True if relogin succeeded.
+    """
+    cfg = load_auto_login_settings()
+    if not cfg["kream_email"] or not cfg["kream_password"] or not cfg["gmail_app_password"]:
+        print("  ⚠ 자동 재로그인 불가 — settings.json에 kream_email/kream_password/gmail_app_password 미설정")
+        return False
+
+    print("  🔄 자동 재로그인 시도 (판매자센터)...")
+
+    kream_email = cfg["kream_email"]
+    kream_pw = cfg["kream_password"]
+    gmail_app_pw = cfg["gmail_app_password"]
+
+    # 로그인 페이지로 이동
+    await page.goto(f"{PARTNER_URL}/sign-in", wait_until="domcontentloaded")
+    await page.wait_for_timeout(2000)
+
+    # 이메일 입력
+    email_input = None
+    for sel in ['input[type="email"]', 'input[name="email"]',
+                'input[placeholder*="이메일"]', 'input[autocomplete="email"]']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    email_input = loc.first
+                    break
+            except Exception:
+                continue
+    if not email_input:
+        fallback = page.locator('input:visible').first
+        if await fallback.count() > 0:
+            email_input = fallback
+        else:
+            print("  ❌ 재로그인 실패: 이메일 필드 없음")
+            return False
+
+    await email_input.click()
+    await page.keyboard.press("Meta+a")
+    await page.keyboard.press("Backspace")
+    await email_input.type(kream_email, delay=80)
+
+    # 비밀번호 입력
+    pw_input = None
+    for sel in ['input[type="password"]', 'input[name="password"]',
+                'input[placeholder*="비밀번호"]']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1500):
+                    pw_input = loc.first
+                    break
+            except Exception:
+                continue
+    if not pw_input:
+        print("  ❌ 재로그인 실패: 비밀번호 필드 없음")
+        return False
+
+    await pw_input.click()
+    await page.keyboard.press("Meta+a")
+    await page.keyboard.press("Backspace")
+    await pw_input.type(kream_pw, delay=80)
+
+    # "다음" 버튼
+    for sel in ['button:has-text("다음")', 'button[type="submit"]',
+                'button:has-text("로그인")']:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1000):
+                    await loc.first.click()
+                    break
+            except Exception:
+                continue
+    else:
+        await page.keyboard.press("Enter")
+
+    await page.wait_for_timeout(3000)
+
+    # OTP 필드 감지
+    otp_selectors = [
+        'input[placeholder*="OTP"]', 'input[placeholder*="otp"]',
+        'input[placeholder*="인증"]', 'input[placeholder*="코드"]',
+        'input[type="number"]', 'input[maxlength="6"]',
+        'input[inputmode="numeric"]',
+    ]
+    code_needed = False
+    for sel in otp_selectors:
+        loc = page.locator(sel)
+        if await loc.count() > 0:
+            try:
+                if await loc.first.is_visible(timeout=1000):
+                    code_needed = True
+                    break
+            except Exception:
+                continue
+
+    if not code_needed:
+        for text_sel in ['text=/인증.*발송/', 'text=/인증번호/', 'text=/OTP/']:
+            try:
+                loc = page.locator(text_sel)
+                if await loc.count() > 0 and await loc.first.is_visible(timeout=500):
+                    code_needed = True
+                    break
+            except Exception:
+                continue
+
+    if code_needed:
+        print("  📧 OTP 필요 — Gmail에서 자동 읽기...")
+        code = await asyncio.to_thread(
+            read_kream_code_from_gmail, kream_email, gmail_app_pw, timeout=60, poll_interval=3
+        )
+        if code:
+            code_input = None
+            for sel in otp_selectors:
+                loc = page.locator(sel)
+                if await loc.count() > 0:
+                    try:
+                        if await loc.first.is_visible(timeout=1000):
+                            code_input = loc.first
+                            break
+                    except Exception:
+                        continue
+            if code_input:
+                await code_input.click()
+                await page.keyboard.press("Meta+a")
+                await page.keyboard.press("Backspace")
+                await code_input.type(code, delay=80)
+                # "로그인" 버튼
+                for sel in ['button:has-text("로그인")', 'button:has-text("확인")',
+                            'button[type="submit"]']:
+                    loc = page.locator(sel)
+                    if await loc.count() > 0:
+                        try:
+                            if await loc.first.is_visible(timeout=1000):
+                                await loc.first.click()
+                                break
+                        except Exception:
+                            continue
+                else:
+                    await page.keyboard.press("Enter")
+                await page.wait_for_timeout(5000)
+                print(f"  ✓ OTP 입력 완료: {code}")
+            else:
+                print("  ❌ OTP 입력 필드를 찾을 수 없음")
+                return False
+        else:
+            print("  ❌ OTP 자동 읽기 실패")
+            return False
+
+    # 로그인 성공 확인
+    current_url = page.url
+    if "/sign-in" in current_url:
+        print(f"  ❌ 재로그인 실패 — 여전히 로그인 페이지")
+        return False
+
+    # /c2c 이동하여 JWT 캡처
+    print("  📡 세션 캡처를 위해 /c2c 이동...")
+    await page.goto(f"{PARTNER_URL}/c2c")
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(2000)
+
+    await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+    print("  ✅ 자동 재로그인 성공! 세션 저장 완료")
+    await dismiss_popups(page)
+    return True
+
+
+async def ensure_logged_in(page, context=None):
     print(f"🔐 로그인 상태 확인 중... → {PARTNER_URL}/c2c")
     try:
         await page.goto(f"{PARTNER_URL}/c2c", wait_until="domcontentloaded")
         await page.wait_for_load_state("networkidle", timeout=15000)
     except Exception as e:
         print(f"  ⚠ 페이지 로드 지연: {e}")
-    await page.wait_for_timeout(2000)
+    await page.wait_for_timeout(3000)
     current_url = page.url
     print(f"  → 현재 URL: {current_url}")
     if "/sign-in" in current_url:
-        print("❌ 로그인이 필요합니다. 먼저 --mode login 으로 로그인해주세요.")
+        print("  ⚠ 로그인 페이지로 리다이렉트됨 — 자동 재로그인 시도")
+        if context and await _try_auto_relogin(page, context):
+            return True
+        print("❌ 로그인이 필요합니다. --mode login 또는 --mode auto-login 으로 로그인해주세요.")
         return False
+
+    # HTML 소스 확인 (SPA 렌더링 전 상태도 체크)
+    try:
+        html_source = await page.content()
+        html_len = len(html_source)
+        print(f"  → HTML 소스 길이: {html_len}")
+        if html_len < 500:
+            print(f"  🔍 HTML 전문: {html_source}")
+        else:
+            print(f"  🔍 HTML 앞부분: {html_source[:500]}")
+    except Exception as e:
+        print(f"  ⚠ HTML 소스 확인 실패: {e}")
+
+    # JS 콘솔 에러 확인
+    try:
+        console_errors = await page.evaluate("""() => {
+            return window.__console_errors || [];
+        }""")
+        if console_errors:
+            print(f"  🔍 JS 콘솔 에러: {console_errors}")
+    except Exception:
+        pass
+
+    # 빈 페이지 감지 (SPA가 세션 없이 빈 화면 렌더링하는 경우)
+    try:
+        body_text = (await page.locator('body').inner_text(timeout=5000)).strip()
+        body_len = len(body_text)
+        print(f"  → 페이지 body 텍스트 길이: {body_len}")
+        if body_len < 20:
+            print(f"  ⚠ 빈 페이지 감지! body='{body_text[:100]}' — 세션 만료 가능성 높음")
+            await _save_debug_screenshot(page, "login_check_blank_page")
+            if context and await _try_auto_relogin(page, context):
+                return True
+            return False
+    except Exception as e:
+        print(f"  ⚠ 페이지 내용 확인 실패: {e}")
+
+    # 실제 로그인 상태 확인 (메뉴/네비게이션 존재 여부)
+    try:
+        nav_items = page.locator('nav, [class*="sidebar"], [class*="menu"], [class*="Menu"], [class*="nav"]')
+        nav_count = await nav_items.count()
+        print(f"  → 네비게이션 요소: {nav_count}개")
+        if nav_count == 0:
+            print(f"  ⚠ 네비게이션 없음 — 로그인 상태 의심")
+            await _save_debug_screenshot(page, "login_check_no_nav")
+    except Exception:
+        pass
+
     print("✅ 로그인 확인 완료")
     await dismiss_popups(page)
     return True
@@ -226,9 +1253,41 @@ async def dismiss_popups(page):
 
         # "다시 보지 않기" 체크박스가 있으면 체크
         try:
-            checkbox = page.locator('text="다시 보지 않기"')
-            if await checkbox.is_visible(timeout=500):
-                await checkbox.click()
+            for cb_text in ["다시 보지 않기", "다시보지않기"]:
+                checkbox = page.locator(f'text="{cb_text}"')
+                if await checkbox.is_visible(timeout=300):
+                    await checkbox.click()
+                    await page.wait_for_timeout(200)
+                    break
+        except Exception:
+            pass
+
+        # WELCOME PACKAGE / 신규 가입자 혜택 팝업
+        try:
+            welcome = page.locator('text=/WELCOME|신규 가입자|수수료 혜택/')
+            if await welcome.count() > 0 and await welcome.first.is_visible(timeout=300):
+                # "다시 보지 않기" 한번 더 시도 (팝업 내부)
+                try:
+                    cb = page.locator('[class*="modal"] text="다시 보지 않기", [role="dialog"] text="다시 보지 않기"').first
+                    if await cb.is_visible(timeout=300):
+                        await cb.click()
+                        await page.wait_for_timeout(200)
+                except Exception:
+                    pass
+                # 확인/닫기 버튼
+                for sel in ['button:has-text("확인")', 'button:has-text("닫기")', 'button:has-text("✕")']:
+                    btn = page.locator(sel).first
+                    try:
+                        if await btn.is_visible(timeout=300):
+                            await btn.click()
+                            await page.wait_for_timeout(500)
+                            closed = True
+                            print(f"  ✓ 팝업 {i+1} 닫음 (WELCOME)")
+                            break
+                    except Exception:
+                        continue
+                if closed:
+                    continue
         except Exception:
             pass
 
@@ -300,11 +1359,16 @@ async def fill_product_info(page, product, delay=2.0):
     gosi_section = page.locator('text=상품 고시정보')
     try:
         await gosi_section.wait_for(state="visible", timeout=10000)
-        await gosi_section.scroll_into_view_if_needed()
+        await gosi_section.scroll_into_view_if_needed(timeout=5000)
         await page.wait_for_timeout(500)
     except Exception:
-        print(f"  ⚠ '상품 고시정보' 섹션을 찾을 수 없음 — 스크롤 시도")
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.5)")
+        print(f"  ⚠ '상품 고시정보' 섹션을 찾을 수 없음 — JS 스크롤 시도")
+        # 카테고리 드롭다운 근처로 직접 스크롤
+        try:
+            cat_btn = page.locator('div[name="categoryName"]')
+            await cat_btn.evaluate("el => el.scrollIntoView({block: 'center'})")
+        except Exception:
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.6)")
         await page.wait_for_timeout(1000)
 
     # 페이지에 상품 편집 폼이 있는지 확인
@@ -324,39 +1388,76 @@ async def fill_product_info(page, product, delay=2.0):
 
     filled_count = 0
 
-    # 고시 카테고리 (드롭다운)
+    # 고시 카테고리 (드롭다운) — 반드시 먼저 선택해야 attributeSet 필드가 생성됨
     category = product.get("고시카테고리")
     if category:
         await select_dropdown(page, 'div[name="categoryName"] button', category)
         print(f"  ✓ 고시카테고리: {category}")
         filled_count += 1
+        await page.wait_for_timeout(1000)  # 필드 생성 대기
 
-    # attributeSet 필드들
-    field_map = {
-        "종류":           'input[name="attributeSet.0.value"]',
-        "소재":           'input[name="attributeSet.1.value"]',
-        "색상":           'input[name="attributeSet.2.value"]',
-        "크기":           'input[name="attributeSet.3.value"]',
-        "제조자_수입자":   'input[name="attributeSet.4.value"]',
-        "제조국":         'input[name="attributeSet.5.value"]',
-        "취급시_주의사항": 'input[name="attributeSet.6.value"]',
-        "품질보증기준":    'input[name="attributeSet.7.value"]',
-        "AS_전화번호":     'input[name="attributeSet.8.value"]',
+    # DOM에서 실제 필드 라벨→인덱스 매핑을 동적으로 읽기
+    label_to_idx = await page.evaluate(r"""() => {
+        const mapping = {};
+        let i = 0;
+        while (true) {
+            const input = document.querySelector('input[name="attributeSet.' + i + '.value"]');
+            if (!input) break;
+            let label = '';
+            let el = input.parentElement;
+            for (let j = 0; j < 5 && el; j++) {
+                for (const child of el.children) {
+                    if (child !== input && !child.contains(input)) {
+                        const t = child.innerText.trim();
+                        if (t && t.length < 50) { label = t; break; }
+                    }
+                }
+                if (label) break;
+                el = el.parentElement;
+            }
+            if (label) mapping[label] = i;
+            i++;
+        }
+        return mapping;
+    }""")
+    print(f"  🔍 감지된 필드: {label_to_idx}")
+
+    # 데이터 키 → DOM 라벨 유연 매칭 (카테고리별 필드명이 다름)
+    LABEL_ALIASES = {
+        "종류":           ["종류"],
+        "소재":           ["소재"],
+        "색상":           ["색상"],
+        "크기":           ["크기", "치수"],
+        "발길이":         ["발길이"],
+        "굽높이":         ["굽높이"],
+        "제조자_수입자":   ["제조자/수입자", "제조자_수입자", "제조자"],
+        "제조국":         ["제조국"],
+        "취급시_주의사항": ["세탁방법 및 취급시 주의사항", "취급시 주의사항", "취급시_주의사항"],
+        "제조년월":       ["제조년월"],
+        "품질보증기준":    ["품질보증기준"],
+        "AS_전화번호":     ["AS 책임자와 전화번호", "AS_전화번호", "AS 전화번호"],
     }
 
-    for field_name, selector in field_map.items():
+    for field_name, aliases in LABEL_ALIASES.items():
         value = product.get(field_name)
-        if value and str(value).strip():
-            try:
-                el = page.locator(selector)
-                if await el.count() > 0:
-                    await react_clear_and_fill(page, selector, str(value))
-                    print(f"  ✓ {field_name}: {str(value)[:40]}")
-                    filled_count += 1
-                else:
-                    print(f"  ⚠ {field_name}: 입력 필드 '{selector}' 미발견")
-            except Exception as e:
-                print(f"  ⚠ {field_name}: 입력 실패 — {e}")
+        if not value or not str(value).strip():
+            continue
+        # 별칭으로 실제 DOM 라벨 매칭
+        matched_idx = None
+        for alias in aliases:
+            if alias in label_to_idx:
+                matched_idx = label_to_idx[alias]
+                break
+        if matched_idx is None:
+            print(f"  ⚠ {field_name}: 현재 카테고리에 해당 필드 없음 (건너뜀)")
+            continue
+        selector = f'input[name="attributeSet.{matched_idx}.value"]'
+        try:
+            await react_clear_and_fill(page, selector, str(value))
+            print(f"  ✓ {field_name}: {str(value)[:40]}")
+            filled_count += 1
+        except Exception as e:
+            print(f"  ⚠ {field_name}: 입력 실패 — {e}")
 
     # 원산지 (드롭다운)
     origin = product.get("원산지")
@@ -392,15 +1493,96 @@ async def fill_product_info(page, product, delay=2.0):
 
     print(f"  → 총 {filled_count}개 필드 입력 완료")
 
-    # 저장하기 버튼 클릭 + 결과 확인
+    # ── 저장하기 버튼 클릭 + 결과 확인 (상세 디버그) ──
+    print(f"\n  ─── 저장 단계 시작 ───")
     save_btn = page.locator('button:has-text("저장하기")')
-    if await save_btn.is_visible():
+    save_count = await save_btn.count()
+    print(f"  🔍 [SAVE] '저장하기' 버튼 count: {save_count}")
+
+    for i in range(save_count):
+        try:
+            btn = save_btn.nth(i)
+            is_vis = await btn.is_visible(timeout=1000)
+            is_dis = await btn.is_disabled()
+            btn_text = (await btn.inner_text(timeout=1000)).strip()
+            box = await btn.bounding_box()
+            print(f"  🔍 [SAVE] 버튼[{i}]: text='{btn_text}', visible={is_vis}, disabled={is_dis}, box={box}")
+        except Exception as e:
+            print(f"  🔍 [SAVE] 버튼[{i}] 정보 가져오기 실패: {e}")
+
+    if save_count > 0 and await save_btn.first.is_visible(timeout=2000):
+        # 저장 전 스크롤해서 버튼이 뷰포트에 보이게
+        try:
+            await save_btn.first.scroll_into_view_if_needed(timeout=3000)
+            await page.wait_for_timeout(300)
+            print(f"  🔍 [SAVE] 버튼 스크롤 완료")
+        except Exception as e:
+            print(f"  🔍 [SAVE] 버튼 스크롤 실패: {e}")
+            try:
+                await save_btn.first.evaluate("el => el.scrollIntoView({block: 'center'})")
+                await page.wait_for_timeout(500)
+                print(f"  🔍 [SAVE] JS 스크롤 폴백 완료")
+            except Exception as e2:
+                print(f"  🔍 [SAVE] JS 스크롤도 실패: {e2}")
+
         # 저장 전 스크린샷
         await _save_debug_screenshot(page, f"gosi_{product_id}_before_save")
 
-        await save_btn.click()
-        print(f"  → '저장하기' 버튼 클릭")
+        # 버튼 위에 다른 요소가 가리고 있는지 확인
+        try:
+            box = await save_btn.first.bounding_box()
+            if box:
+                el_at_point = await page.evaluate(
+                    f"document.elementFromPoint({box['x'] + box['width']/2}, {box['y'] + box['height']/2})?.tagName + '.' + document.elementFromPoint({box['x'] + box['width']/2}, {box['y'] + box['height']/2})?.className"
+                )
+                print(f"  🔍 [SAVE] 버튼 중심 좌표의 최상위 요소: {el_at_point}")
+        except Exception as e:
+            print(f"  🔍 [SAVE] 최상위 요소 확인 실패: {e}")
+
+        # 네트워크 요청 모니터링 시작
+        save_requests = []
+        def on_request(req):
+            if req.method in ("POST", "PUT", "PATCH"):
+                save_requests.append({"method": req.method, "url": req.url})
+        page.on("request", on_request)
+
+        save_responses = []
+        def on_response(resp):
+            if resp.request.method in ("POST", "PUT", "PATCH"):
+                save_responses.append({"status": resp.status, "url": resp.url})
+        page.on("response", on_response)
+
+        # 클릭 시도
+        print(f"  → '저장하기' 버튼 클릭 시도...")
+        try:
+            await save_btn.first.click(timeout=5000)
+            print(f"  ✓ '저장하기' 버튼 클릭 성공 (Playwright click)")
+        except Exception as e:
+            print(f"  ⚠ 일반 클릭 실패: {e}")
+            print(f"  → JS 클릭 폴백 시도...")
+            try:
+                await save_btn.first.evaluate("el => el.click()")
+                print(f"  ✓ JS 클릭 성공")
+            except Exception as e2:
+                print(f"  ❌ JS 클릭도 실패: {e2}")
+                await _save_debug_screenshot(page, f"gosi_{product_id}_click_fail")
+                page.remove_listener("request", on_request)
+                page.remove_listener("response", on_response)
+                raise Exception(f"저장 버튼 클릭 불가: {e2}")
+
+        # 네트워크 응답 대기
         await page.wait_for_timeout(3000)
+
+        # 네트워크 로그 출력
+        print(f"  🔍 [SAVE] 저장 후 POST/PUT/PATCH 요청 {len(save_requests)}건:")
+        for req in save_requests:
+            print(f"    → {req['method']} {req['url'][:120]}")
+        print(f"  🔍 [SAVE] 저장 후 응답 {len(save_responses)}건:")
+        for resp in save_responses:
+            print(f"    ← {resp['status']} {resp['url'][:120]}")
+
+        page.remove_listener("request", on_request)
+        page.remove_listener("response", on_response)
 
         # 저장 결과 확인
         saved = False
@@ -408,7 +1590,7 @@ async def fill_product_info(page, product, delay=2.0):
         # 성공 토스트/메시지 확인
         try:
             success_msg = page.locator('text=/저장.*완료|수정.*완료|성공/')
-            if await success_msg.is_visible(timeout=2000):
+            if await success_msg.is_visible(timeout=3000):
                 msg_text = await success_msg.first.inner_text()
                 print(f"  ✓ 저장 성공 메시지: {msg_text}")
                 saved = True
@@ -429,16 +1611,46 @@ async def fill_product_info(page, product, delay=2.0):
                     raise
                 pass
 
-        # 에러도 성공도 없으면 — URL 변화/화면 상태로 간접 확인
+        # 저장 후 전체 페이지 상태 덤프
+        await _debug_dump_page(page, f"SAVE_AFTER_{product_id}")
+        await _save_debug_screenshot(page, f"gosi_{product_id}_after_save")
+
+        # 에러도 성공도 없으면 — 네트워크 응답으로 간접 판단
         if not saved:
-            print(f"  ⚠ 명시적 성공/실패 메시지 없음 — 저장 상태 불확실")
-            await _save_debug_screenshot(page, f"gosi_{product_id}_after_save")
-            # URL이 바뀌었거나 토스트가 없었으면 일단 진행
-            print(f"  💾 상품 #{product_id} 저장 시도 완료 (결과 불확실)")
+            # API 응답이 200이면 성공으로 간주
+            ok_responses = [r for r in save_responses if 200 <= r['status'] < 300]
+            err_responses = [r for r in save_responses if r['status'] >= 400]
+            if ok_responses:
+                print(f"  ✓ API 응답 200 OK → 저장 성공으로 판단")
+                saved = True
+            elif err_responses:
+                print(f"  ❌ API 에러 응답: {err_responses}")
+            else:
+                print(f"  ⚠ 명시적 성공/실패 메시지 없음, API 요청도 없음 — 저장 안 된 것으로 판단")
+
+        if saved:
+            # 실제 저장 검증: 페이지 새로고침 후 필드 값 확인
+            print(f"  🔍 [SAVE] 저장 검증: 페이지 새로고침...")
+            await page.reload(wait_until="networkidle")
+            await page.wait_for_timeout(2000)
+            try:
+                first_field = page.locator('input[name="attributeSet.0.value"]')
+                if await first_field.count() > 0:
+                    val = await first_field.first.input_value()
+                    print(f"  🔍 [SAVE] 새로고침 후 첫 필드 값: '{val}'")
+                    if val and val.strip():
+                        print(f"  💾 상품 #{product_id} 저장 확인 완료!")
+                    else:
+                        print(f"  ❌ 새로고침 후 필드가 비어있음 — 저장 안 된 것!")
+                        await _save_debug_screenshot(page, f"gosi_{product_id}_verify_empty")
+            except Exception as e:
+                print(f"  🔍 [SAVE] 검증 실패: {e}")
         else:
-            print(f"  💾 상품 #{product_id} 저장 완료!")
+            print(f"  ❌ 상품 #{product_id} 저장 실패!")
+            await _save_debug_screenshot(page, f"gosi_{product_id}_save_failed_final")
     else:
-        print(f"  ❌ '저장하기' 버튼을 찾을 수 없음")
+        print(f"  ❌ '저장하기' 버튼을 찾을 수 없음 (count={save_count})")
+        await _debug_dump_page(page, f"NO_SAVE_BTN_{product_id}")
         await _save_debug_screenshot(page, f"gosi_{product_id}_no_save_btn")
         raise Exception("저장하기 버튼 미발견")
 
@@ -457,15 +1669,60 @@ async def _save_debug_screenshot(page, name):
         from datetime import datetime as dt
         ts = dt.now().strftime("%Y%m%d_%H%M%S")
         path = debug_dir / f"{ts}_{name}.png"
-        await page.screenshot(path=str(path))
+        await page.screenshot(path=str(path), full_page=True)
         print(f"  📸 스크린샷: {path}")
     except Exception as e:
         print(f"  ⚠ 스크린샷 실패: {e}")
 
 
+async def _debug_dump_page(page, label=""):
+    """페이지 상태 덤프 (디버그용)"""
+    try:
+        print(f"  🔍 [DEBUG-{label}] URL: {page.url}")
+        title = await page.title()
+        print(f"  🔍 [DEBUG-{label}] 타이틀: {title}")
+        # 화면에 보이는 버튼 목록
+        buttons = page.locator('button:visible')
+        btn_count = await buttons.count()
+        btn_texts = []
+        for i in range(min(btn_count, 20)):
+            try:
+                txt = (await buttons.nth(i).inner_text(timeout=1000)).strip().replace('\n', ' ')
+                if txt:
+                    btn_texts.append(txt[:50])
+            except Exception:
+                pass
+        print(f"  🔍 [DEBUG-{label}] 화면 버튼 {btn_count}개: {btn_texts}")
+        # 모달/팝업 확인
+        modals = page.locator('[class*="modal"], [class*="Modal"], [class*="popup"], [class*="Popup"], [role="dialog"]')
+        modal_count = await modals.count()
+        if modal_count > 0:
+            print(f"  🔍 [DEBUG-{label}] 모달/팝업 {modal_count}개 감지")
+            for i in range(min(modal_count, 5)):
+                try:
+                    mtxt = (await modals.nth(i).inner_text(timeout=1000)).strip()[:200]
+                    print(f"  🔍 [DEBUG-{label}] 모달[{i}]: {mtxt}")
+                except Exception:
+                    pass
+        # 에러 메시지 확인
+        errors = page.locator('[class*="error"], [class*="Error"], [class*="alert"], [class*="warning"], [class*="toast"]')
+        err_count = await errors.count()
+        if err_count > 0:
+            for i in range(min(err_count, 5)):
+                try:
+                    if await errors.nth(i).is_visible(timeout=500):
+                        etxt = (await errors.nth(i).inner_text(timeout=1000)).strip()[:200]
+                        if etxt:
+                            print(f"  🔍 [DEBUG-{label}] 에러/알림[{i}]: {etxt}")
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"  🔍 [DEBUG-{label}] 페이지 덤프 실패: {e}")
+
+
 async def place_bid(page, bid, delay=3.0):
     """
-    판매 입찰 플로우:
+    판매 입찰 플로우 (상세 디버그 버전):
     1. 상품번호로 URL 직접 접근 (검색 대신 URL 파라미터 사용)
     2. "판매 입찰하기" 버튼 클릭
     3. 사이즈 선택 + 수량 설정
@@ -481,9 +1738,13 @@ async def place_bid(page, bid, delay=3.0):
     qty = int(bid.get("수량", 1))
     bid_days = int(bid.get("bid_days", 30))
 
-    print(f"\n💰 입찰: 상품 #{product_id}, 사이즈={size}, {price}원, {qty}개, {bid_days}일")
+    print(f"\n{'='*60}")
+    print(f"💰 입찰 시작: 상품 #{product_id}")
+    print(f"  파라미터: 사이즈={size}, 가격={price}원, 수량={qty}개, 기한={bid_days}일")
+    print(f"{'='*60}")
 
     # ── 1단계: 상품번호로 검색 (전체 기간 + keyword) ──
+    print(f"\n  ─── [1단계] 상품 검색 페이지 이동 ───")
     bid_url = (
         f"{PARTNER_URL}/business/products"
         f"?page=1&perPage=10"
@@ -491,18 +1752,21 @@ async def place_bid(page, bid, delay=3.0):
         f"&keyword={product_id}"
         f"&categoryId=&brandId=&productId=&sort="
     )
-    print(f"  → URL: {bid_url}")
+    print(f"  🔍 [1] 이동할 URL: {bid_url}")
     await page.goto(bid_url)
     await page.wait_for_load_state("networkidle")
     await page.wait_for_timeout(3000)
 
     # 현재 URL 확인 (리다이렉트 감지)
     current_url = page.url
-    print(f"  → 현재 URL: {current_url}")
+    print(f"  🔍 [1] 현재 URL: {current_url}")
     if "/sign-in" in current_url:
-        print(f"  ❌ 세션 만료 — 로그인 페이지로 리다이렉트됨")
+        print(f"  ❌ [1] 세션 만료 — 로그인 페이지로 리다이렉트됨")
         await _save_debug_screenshot(page, f"bid_{product_id}_session_expired")
         return False
+    print(f"  ✓ [1] 상품 검색 페이지 이동 성공")
+    await _save_debug_screenshot(page, f"bid_{product_id}_step1_search_page")
+    await _debug_dump_page(page, f"STEP1_{product_id}")
 
     # "전체" 기간 탭 클릭 (혹시 안 눌려있으면)
     try:
@@ -510,55 +1774,119 @@ async def place_bid(page, bid, delay=3.0):
         if await all_tab.is_visible(timeout=1000):
             await all_tab.click()
             await page.wait_for_timeout(1000)
+            print(f"  🔍 [1] '전체' 탭 클릭 완료")
     except Exception:
-        pass
+        print(f"  🔍 [1] '전체' 탭 없거나 이미 선택됨")
+
+    # 검색 결과 확인
+    try:
+        rows = page.locator('table tbody tr, [class*="product-item"], [class*="ProductItem"], [class*="list-item"]')
+        row_count = await rows.count()
+        print(f"  🔍 [1] 검색 결과 행 수: {row_count}")
+        if row_count == 0:
+            print(f"  🔍 [1] 검색 결과 없음 — 테이블 전체 텍스트 확인:")
+            try:
+                body_text = await page.locator('main, [class*="content"], [class*="Content"]').first.inner_text(timeout=3000)
+                print(f"  🔍 [1] 페이지 본문 (일부): {body_text[:500]}")
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"  🔍 [1] 검색 결과 확인 실패: {e}")
 
     # ── 2단계: "판매 입찰하기" 버튼 클릭 ──
+    print(f"\n  ─── [2단계] '판매 입찰하기' 버튼 클릭 ───")
     bid_buttons = page.locator('button:has-text("판매 입찰하기")')
     count = await bid_buttons.count()
-    print(f"  → '판매 입찰하기' 버튼 {count}개 발견")
+    print(f"  🔍 [2] '판매 입찰하기' 버튼 {count}개 발견")
+
+    # 버튼 상세 정보
+    for i in range(count):
+        try:
+            btn = bid_buttons.nth(i)
+            is_vis = await btn.is_visible(timeout=1000)
+            is_dis = await btn.is_disabled()
+            btn_text = (await btn.inner_text(timeout=1000)).strip()
+            box = await btn.bounding_box()
+            print(f"  🔍 [2] 버튼[{i}]: text='{btn_text}', visible={is_vis}, disabled={is_dis}, box={box}")
+        except Exception as e:
+            print(f"  🔍 [2] 버튼[{i}] 정보 실패: {e}")
+
     if count == 0:
-        print(f"  ❌ '판매 입찰하기' 버튼 없음 — 상품이 검색되지 않았거나 입찰 불가")
+        print(f"  ❌ [2] '판매 입찰하기' 버튼 없음 — 상품이 검색되지 않았거나 입찰 불가")
+        await _debug_dump_page(page, f"NO_BID_BTN_{product_id}")
         await _save_debug_screenshot(page, f"bid_{product_id}_no_button")
         return False
 
-    await bid_buttons.first.click()
+    print(f"  → [2] 첫 번째 '판매 입찰하기' 버튼 클릭 시도...")
+    try:
+        await bid_buttons.first.click(timeout=5000)
+        print(f"  ✓ [2] 클릭 성공")
+    except Exception as e:
+        print(f"  ❌ [2] 클릭 실패: {e}")
+        try:
+            await bid_buttons.first.evaluate("el => el.click()")
+            print(f"  ✓ [2] JS 폴백 클릭 성공")
+        except Exception as e2:
+            print(f"  ❌ [2] JS 클릭도 실패: {e2}")
+            await _save_debug_screenshot(page, f"bid_{product_id}_btn_click_fail")
+            return False
     await page.wait_for_timeout(2000)
+    await _save_debug_screenshot(page, f"bid_{product_id}_step2_after_bid_btn")
 
     # "상품 정보 입력 필요" 팝업 체크
     try:
         info_needed = page.locator('text="상품 정보 입력 필요"')
-        if await info_needed.is_visible(timeout=1000):
-            print(f"  ❌ 고시정보 미입력! 먼저 고시정보 등록 필요")
+        if await info_needed.is_visible(timeout=1500):
+            print(f"  ❌ [2] 고시정보 미입력! '상품 정보 입력 필요' 팝업 감지")
+            # 팝업 전체 텍스트 캡처
+            try:
+                popup_text = await page.locator('[class*="modal"], [class*="Modal"], [role="dialog"]').first.inner_text(timeout=2000)
+                print(f"  🔍 [2] 팝업 전문: {popup_text[:300]}")
+            except Exception:
+                pass
             await _save_debug_screenshot(page, f"bid_{product_id}_gosi_needed")
-            await page.locator('button:has-text("취소")').first.click()
+            try:
+                await page.locator('button:has-text("취소")').first.click()
+            except Exception:
+                pass
             return False
     except Exception:
         pass
+    print(f"  ✓ [2] '상품 정보 입력 필요' 팝업 없음 — 계속 진행")
 
     # ── 3단계: 옵션/수량 선택 모달 ──
+    print(f"\n  ─── [3단계] 옵션/수량 선택 ───")
     try:
         await page.locator('text="옵션/수량 선택"').wait_for(timeout=5000)
-        print(f"  ✓ 옵션/수량 선택 모달 열림")
+        print(f"  ✓ [3] '옵션/수량 선택' 모달 열림")
     except Exception:
-        print(f"  ❌ 옵션/수량 선택 모달 안 열림")
+        print(f"  ❌ [3] '옵션/수량 선택' 모달 안 열림")
+        await _debug_dump_page(page, f"NO_MODAL_{product_id}")
         await _save_debug_screenshot(page, f"bid_{product_id}_no_modal")
         return False
+    await _save_debug_screenshot(page, f"bid_{product_id}_step3_modal_open")
 
     # ── 3-1단계: 사이즈 선택 ──
     if size and size != "ONE SIZE":
-        print(f"  → 사이즈 '{size}' 선택 시도...")
+        print(f"  → [3-1] 사이즈 '{size}' 선택 시도...")
         size_selected = False
 
         # 방법1: 사이즈 버튼/라벨 텍스트 매칭
         size_btns = page.locator(f'button:has-text("{size}"), label:has-text("{size}"), [data-size="{size}"]')
         sc = await size_btns.count()
-        print(f"  → 사이즈 버튼 {sc}개 발견 (text 매칭)")
+        print(f"  🔍 [3-1] 셀렉터 'button/label:has-text(\"{size}\")' → {sc}개 발견")
         if sc > 0:
+            for i in range(sc):
+                try:
+                    txt = (await size_btns.nth(i).inner_text(timeout=1000)).strip()
+                    vis = await size_btns.nth(i).is_visible(timeout=500)
+                    print(f"  🔍 [3-1]   [{i}] text='{txt}', visible={vis}")
+                except Exception:
+                    pass
             await size_btns.first.click()
             await page.wait_for_timeout(500)
             size_selected = True
-            print(f"  ✓ 사이즈 '{size}' 선택 완료 (버튼)")
+            print(f"  ✓ [3-1] 사이즈 '{size}' 선택 완료 (버튼)")
 
         # 방법2: 드롭다운/셀렉트 방식
         if not size_selected:
@@ -566,131 +1894,215 @@ async def place_bid(page, bid, delay=3.0):
                 size_select = page.locator('select').first
                 if await size_select.count() > 0:
                     options = await size_select.locator('option').all_text_contents()
-                    print(f"  → 셀렉트 옵션: {options}")
+                    print(f"  🔍 [3-1] 셀렉트 옵션: {options}")
                     matching = [opt for opt in options if size in opt]
                     if matching:
                         await size_select.select_option(label=matching[0])
                         size_selected = True
-                        print(f"  ✓ 사이즈 '{size}' 선택 완료 (select)")
-            except Exception:
-                pass
+                        print(f"  ✓ [3-1] 사이즈 '{size}' 선택 완료 (select: '{matching[0]}')")
+                    else:
+                        print(f"  🔍 [3-1] select에 '{size}' 매칭 옵션 없음")
+                else:
+                    print(f"  🔍 [3-1] select 요소 없음")
+            except Exception as e:
+                print(f"  🔍 [3-1] select 방식 실패: {e}")
 
         # 방법3: 모달 내 사이즈 목록에서 정확 매칭
         if not size_selected:
             try:
-                # 사이즈 칩/옵션 클릭 (partial text match)
                 all_items = page.locator('[class*="size"], [class*="option"], [class*="chip"]')
                 item_count = await all_items.count()
+                print(f"  🔍 [3-1] class 매칭 요소 {item_count}개:")
                 for idx in range(item_count):
                     item = all_items.nth(idx)
                     txt = (await item.inner_text()).strip()
+                    print(f"  🔍 [3-1]   [{idx}] '{txt}'")
                     if size in txt or txt == size:
                         await item.click()
                         await page.wait_for_timeout(500)
                         size_selected = True
-                        print(f"  ✓ 사이즈 '{size}' 선택 완료 (class 매칭: '{txt}')")
+                        print(f"  ✓ [3-1] 사이즈 '{size}' 선택 완료 (class 매칭: '{txt}')")
                         break
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  🔍 [3-1] class 매칭 실패: {e}")
 
         if not size_selected:
-            print(f"  ⚠ 사이즈 '{size}' 선택 실패 — 기본 사이즈로 진행")
+            print(f"  ⚠ [3-1] 사이즈 '{size}' 선택 실패 — 기본 사이즈로 진행")
             await _save_debug_screenshot(page, f"bid_{product_id}_size_fail_{size}")
+        else:
+            await _save_debug_screenshot(page, f"bid_{product_id}_step3_size_selected")
     else:
-        print(f"  → ONE SIZE / 사이즈 선택 불필요")
+        print(f"  → [3-1] ONE SIZE / 사이즈 선택 불필요")
 
     # ── 3-2단계: 수량 설정 (+ 버튼) ──
+    print(f"  → [3-2] 수량 설정...")
     plus_btn = page.locator('[class*="Counter_plus"]')
-    if await plus_btn.count() == 0:
+    plus_count = await plus_btn.count()
+    print(f"  🔍 [3-2] Counter_plus 요소: {plus_count}개")
+    if plus_count == 0:
         plus_btn = page.locator('button:has-text("+")').first
+        plus_count2 = await plus_btn.count()
+        print(f"  🔍 [3-2] '+' 버튼 폴백: {plus_count2}개")
 
     # 현재 수량값 확인해서 정확히 맞추기
     try:
         counter_input = page.locator('input[type="number"], [class*="Counter"] input, [class*="counter"] input')
-        if await counter_input.count() > 0:
+        ci_count = await counter_input.count()
+        print(f"  🔍 [3-2] 수량 input 요소: {ci_count}개")
+        if ci_count > 0:
             current_qty = int(await counter_input.first.input_value() or "0")
             clicks_needed = max(0, qty - current_qty)
-            print(f"  → 현재 수량: {current_qty}, 목표: {qty}, 클릭 필요: {clicks_needed}")
+            print(f"  🔍 [3-2] 현재 수량: {current_qty}, 목표: {qty}, 클릭 필요: {clicks_needed}")
         else:
             clicks_needed = qty
-            print(f"  → 수량 입력 필드 미발견, {qty}번 클릭")
-    except Exception:
+            print(f"  🔍 [3-2] 수량 입력 필드 미발견, {qty}번 클릭 예정")
+    except Exception as e:
         clicks_needed = qty
+        print(f"  🔍 [3-2] 수량 확인 실패: {e}")
 
     for i in range(clicks_needed):
-        await plus_btn.first.click()
-        await page.wait_for_timeout(200)
-    print(f"  ✓ 수량 {qty}개 설정 완료")
+        try:
+            await plus_btn.first.click()
+            await page.wait_for_timeout(200)
+        except Exception as e:
+            print(f"  ⚠ [3-2] +버튼 클릭 {i+1}번째 실패: {e}")
+    print(f"  ✓ [3-2] 수량 {qty}개 설정 완료")
 
     # "판매 입찰 계속" 클릭
+    print(f"  → [3-3] '판매 입찰 계속' 버튼...")
     continue_btn = page.locator('button:has-text("판매 입찰 계속")')
+    cont_count = await continue_btn.count()
+    print(f"  🔍 [3-3] '판매 입찰 계속' 버튼 {cont_count}개")
+    if cont_count > 0:
+        try:
+            is_dis = await continue_btn.first.is_disabled()
+            print(f"  🔍 [3-3] disabled={is_dis}")
+        except Exception:
+            pass
     try:
         await continue_btn.click(timeout=3000)
         await page.wait_for_timeout(2000)
-        print(f"  ✓ '판매 입찰 계속' 클릭")
-    except Exception:
-        print(f"  ❌ '판매 입찰 계속' 버튼 실패")
+        print(f"  ✓ [3-3] '판매 입찰 계속' 클릭 성공")
+    except Exception as e:
+        print(f"  ❌ [3-3] '판매 입찰 계속' 버튼 실패: {e}")
+        await _debug_dump_page(page, f"CONTINUE_FAIL_{product_id}")
         await _save_debug_screenshot(page, f"bid_{product_id}_continue_fail")
         return False
+    await _save_debug_screenshot(page, f"bid_{product_id}_step3_continue")
 
-    # ── 4단계: 판매 희망가 입력 (수량만큼 input이 여러 개일 수 있음) ──
+    # ── 4단계: 판매 희망가 입력 ──
+    print(f"\n  ─── [4단계] 판매 희망가 입력 ───")
+    print(f"  🔍 [4] 현재 URL: {page.url}")
+
     price_inputs = page.locator('input[placeholder*="판매 희망가"]')
     input_count = await price_inputs.count()
+    print(f"  🔍 [4] 'placeholder*=판매 희망가' input: {input_count}개")
     if input_count == 0:
         price_inputs = page.locator('input[placeholder*="희망가"]')
         input_count = await price_inputs.count()
+        print(f"  🔍 [4] 'placeholder*=희망가' input: {input_count}개")
     if input_count == 0:
+        # 모든 input 상세 조사
+        all_inputs = page.locator('input:visible')
+        all_count = await all_inputs.count()
+        print(f"  🔍 [4] 화면 전체 visible input: {all_count}개")
+        for i in range(min(all_count, 15)):
+            try:
+                inp = all_inputs.nth(i)
+                inp_type = await inp.get_attribute("type") or "?"
+                inp_ph = await inp.get_attribute("placeholder") or ""
+                inp_name = await inp.get_attribute("name") or ""
+                inp_val = await inp.input_value()
+                print(f"  🔍 [4]   input[{i}]: type={inp_type}, name='{inp_name}', placeholder='{inp_ph}', value='{inp_val}'")
+            except Exception:
+                pass
         # 추가 폴백: 가격 관련 input
         price_inputs = page.locator('input[type="text"]').filter(has=page.locator('..'))
         input_count = await price_inputs.count()
-        print(f"  → 폴백: text input {input_count}개 발견")
+        print(f"  🔍 [4] 폴백 text input: {input_count}개")
 
     if input_count == 0:
-        print(f"  ❌ 가격 입력 필드를 찾을 수 없음")
+        print(f"  ❌ [4] 가격 입력 필드를 찾을 수 없음")
+        await _debug_dump_page(page, f"NO_PRICE_{product_id}")
         await _save_debug_screenshot(page, f"bid_{product_id}_no_price_input")
         return False
 
     try:
         for i in range(input_count):
             inp = price_inputs.nth(i)
+            ph = await inp.get_attribute("placeholder") or ""
+            print(f"  🔍 [4] 가격 input[{i}] placeholder='{ph}', 입력값='{price}'")
             await inp.click()
             await page.keyboard.press("Meta+a")
             await page.keyboard.press("Backspace")
             await inp.type(price, delay=50)
-        print(f"  ✓ 판매 희망가: {price}원 ({input_count}개 입력)")
+            # 입력 후 실제 값 확인
+            actual_val = await inp.input_value()
+            print(f"  🔍 [4] 입력 후 실제 값: '{actual_val}'")
+        print(f"  ✓ [4] 판매 희망가: {price}원 ({input_count}개 입력)")
     except Exception as e:
-        print(f"  ❌ 가격 입력 실패: {e}")
+        print(f"  ❌ [4] 가격 입력 실패: {e}")
+        print(f"  🔍 [4] 상세 에러:\n{traceback.format_exc()}")
         await _save_debug_screenshot(page, f"bid_{product_id}_price_fail")
         return False
+    await _save_debug_screenshot(page, f"bid_{product_id}_step4_price_entered")
 
     # ── 4-1단계: 입찰기한 설정 (30/60/90일) ──
+    print(f"\n  ─── [4-1단계] 입찰기한 설정 ({bid_days}일) ───")
     try:
         deadline_label = f"{bid_days}일"
+
         # select 형태 드롭다운
+        all_selects = page.locator('select:visible')
+        sel_count = await all_selects.count()
+        print(f"  🔍 [4-1] visible select 요소: {sel_count}개")
+        for i in range(sel_count):
+            try:
+                opts = await all_selects.nth(i).locator('option').all_text_contents()
+                print(f"  🔍 [4-1]   select[{i}] options: {opts}")
+            except Exception:
+                pass
+
         deadline_sel = page.locator('select').filter(has_text=re.compile(r'[369]0일'))
-        if await deadline_sel.count() > 0:
+        dsel_count = await deadline_sel.count()
+        print(f"  🔍 [4-1] '30/60/90일' 매칭 select: {dsel_count}개")
+        if dsel_count > 0:
             await deadline_sel.first.select_option(label=deadline_label)
-            print(f"  ✓ 입찰기한 select: {bid_days}일")
+            print(f"  ✓ [4-1] 입찰기한 select: {bid_days}일")
         else:
             # 버튼/라디오 형태
             deadline_btn = page.locator(f'button:has-text("{deadline_label}"), label:has-text("{deadline_label}")')
-            if await deadline_btn.count() > 0:
+            dbc = await deadline_btn.count()
+            print(f"  🔍 [4-1] '{deadline_label}' 버튼/라벨: {dbc}개")
+            if dbc > 0:
                 await deadline_btn.first.click()
-                print(f"  ✓ 입찰기한 버튼: {bid_days}일")
+                print(f"  ✓ [4-1] 입찰기한 버튼: {bid_days}일")
             else:
-                print(f"  ℹ 입찰기한 선택 UI 없음 (기본값 사용)")
+                print(f"  ℹ [4-1] 입찰기한 선택 UI 없음 (기본값 사용)")
     except Exception as e:
-        print(f"  ⚠ 입찰기한 설정 실패: {e}")
+        print(f"  ⚠ [4-1] 입찰기한 설정 실패: {e}")
+        print(f"  🔍 [4-1] 상세 에러:\n{traceback.format_exc()}")
+    await _save_debug_screenshot(page, f"bid_{product_id}_step4_1_deadline")
 
     # ── 5단계: 체크박스 선택 (동의 체크박스만 대상) ──
+    print(f"\n  ─── [5단계] 체크박스 선택 ───")
     try:
         checkboxes = page.locator('input[type="checkbox"]')
         cnt = await checkboxes.count()
         checked_count = 0
-        print(f"  → 체크박스 {cnt}개 발견")
+        print(f"  🔍 [5] 체크박스 총 {cnt}개")
 
         for i in range(cnt):
             cb = checkboxes.nth(i)
+            try:
+                is_vis = await cb.is_visible(timeout=500)
+                is_chk = await cb.is_checked()
+                cb_name = await cb.get_attribute("name") or ""
+                cb_id = await cb.get_attribute("id") or ""
+                print(f"  🔍 [5]   cb[{i}]: name='{cb_name}', id='{cb_id}', visible={is_vis}, checked={is_chk}")
+            except Exception:
+                pass
+
             if not await cb.is_visible():
                 continue
             if await cb.is_checked():
@@ -703,6 +2115,9 @@ async def place_bid(page, bid, delay=3.0):
                 await page.wait_for_timeout(300)
                 if await cb.is_checked():
                     checked_count += 1
+                    print(f"  ✓ [5] cb[{i}] 체크 완료 (부모 클릭)")
+                else:
+                    print(f"  ⚠ [5] cb[{i}] 부모 클릭했으나 여전히 unchecked")
             except Exception:
                 # fallback: force click
                 try:
@@ -710,56 +2125,144 @@ async def place_bid(page, bid, delay=3.0):
                     await page.wait_for_timeout(300)
                     if await cb.is_checked():
                         checked_count += 1
-                except Exception:
-                    pass
+                        print(f"  ✓ [5] cb[{i}] 체크 완료 (force 클릭)")
+                    else:
+                        print(f"  ⚠ [5] cb[{i}] force 클릭했으나 여전히 unchecked")
+                except Exception as e:
+                    print(f"  ❌ [5] cb[{i}] 체크 완전 실패: {e}")
 
         await page.wait_for_timeout(500)
-        print(f"  ✓ 체크박스 {checked_count}/{cnt}개 선택됨")
+        print(f"  ✓ [5] 체크박스 {checked_count}/{cnt}개 선택됨")
     except Exception as e:
-        print(f"  ⚠ 체크박스 실패: {e}")
+        print(f"  ⚠ [5] 체크박스 처리 실패: {e}")
+        print(f"  🔍 [5] 상세 에러:\n{traceback.format_exc()}")
+    await _save_debug_screenshot(page, f"bid_{product_id}_step5_checkbox")
 
     # ── 6단계: 하단 "판매 입찰하기" 버튼 클릭 ──
+    print(f"\n  ─── [6단계] 최종 '판매 입찰하기' 버튼 ───")
+    all_bid_btns = page.locator('button:has-text("판매 입찰하기")')
+    all_bid_count = await all_bid_btns.count()
+    print(f"  🔍 [6] '판매 입찰하기' 버튼 총 {all_bid_count}개 (마지막 것 사용)")
+    for i in range(all_bid_count):
+        try:
+            btn = all_bid_btns.nth(i)
+            txt = (await btn.inner_text(timeout=1000)).strip()
+            vis = await btn.is_visible(timeout=500)
+            dis = await btn.is_disabled()
+            box = await btn.bounding_box()
+            print(f"  🔍 [6]   btn[{i}]: text='{txt}', visible={vis}, disabled={dis}, box={box}")
+        except Exception:
+            pass
+
     final_btn = page.locator('button:has-text("판매 입찰하기")').last
     try:
+        is_visible = await final_btn.is_visible(timeout=2000)
         is_disabled = await final_btn.is_disabled()
-        print(f"  → 최종 버튼 상태: disabled={is_disabled}")
+        final_text = (await final_btn.inner_text(timeout=1000)).strip()
+        print(f"  🔍 [6] 최종 버튼: text='{final_text}', visible={is_visible}, disabled={is_disabled}")
+
         if is_disabled:
-            print(f"  ❌ '판매 입찰하기' 버튼이 비활성 — 필수 입력 누락 가능성")
+            print(f"  ❌ [6] '판매 입찰하기' 버튼 비활성!")
+            print(f"  🔍 [6] disabled 원인 조사: 필수 입력 누락 가능성")
+            # 비활성 원인 조사 — 화면에 보이는 에러/경고
+            await _debug_dump_page(page, f"BTN_DISABLED_{product_id}")
             await _save_debug_screenshot(page, f"bid_{product_id}_btn_disabled")
             return False
+
+        # 네트워크 모니터링 시작
+        bid_requests = []
+        def on_bid_request(req):
+            if req.method in ("POST", "PUT", "PATCH"):
+                bid_requests.append({"method": req.method, "url": req.url})
+        page.on("request", on_bid_request)
+
+        bid_responses = []
+        def on_bid_response(resp):
+            if resp.request.method in ("POST", "PUT", "PATCH"):
+                bid_responses.append({"status": resp.status, "url": resp.url})
+        page.on("response", on_bid_response)
+
         await final_btn.click(timeout=3000)
         await page.wait_for_timeout(2000)
-        print(f"  ✓ '판매 입찰하기' 최종 클릭")
+        print(f"  ✓ [6] '판매 입찰하기' 최종 클릭 완료")
+        await _save_debug_screenshot(page, f"bid_{product_id}_step6_final_click")
     except Exception as e:
-        print(f"  ❌ 최종 버튼 실패: {e}")
+        print(f"  ❌ [6] 최종 버튼 실패: {e}")
+        print(f"  🔍 [6] 상세 에러:\n{traceback.format_exc()}")
         await _save_debug_screenshot(page, f"bid_{product_id}_final_btn_fail")
         return False
 
     # ── 7단계: 확인 팝업 ("총 N건의 판매 입찰하기" → 확인) ──
+    print(f"\n  ─── [7단계] 확인 팝업 ───")
+    await _debug_dump_page(page, f"STEP7_{product_id}")
     try:
         confirm_btn = page.locator('button:has-text("확인")')
         await confirm_btn.wait_for(state="visible", timeout=3000)
+        confirm_text = (await confirm_btn.inner_text(timeout=1000)).strip()
+        print(f"  🔍 [7] 확인 버튼 text: '{confirm_text}'")
+        # 팝업 내용 캡처
+        try:
+            dialog = page.locator('[class*="modal"], [class*="Modal"], [role="dialog"], [class*="popup"]').last
+            if await dialog.is_visible(timeout=1000):
+                dialog_text = (await dialog.inner_text(timeout=2000)).strip()[:500]
+                print(f"  🔍 [7] 팝업 전문: {dialog_text}")
+        except Exception:
+            pass
         await confirm_btn.click()
         await page.wait_for_timeout(2000)
-        print(f"  ✓ 확인 팝업 클릭")
+        print(f"  ✓ [7] 확인 팝업 클릭 완료")
     except Exception as e:
-        print(f"  ⚠ 확인 팝업 없거나 실패: {e}")
+        print(f"  ⚠ [7] 확인 팝업 없거나 실패: {e}")
+    await _save_debug_screenshot(page, f"bid_{product_id}_step7_confirm")
 
     # ── 8단계: 입찰 신청 결과 확인 (성공 여부 판별) ──
+    print(f"\n  ─── [8단계] 결과 확인 ───")
+    await _debug_dump_page(page, f"STEP8_{product_id}")
+
+    # 네트워크 로그 출력
+    print(f"  🔍 [8] POST/PUT/PATCH 요청 {len(bid_requests)}건:")
+    for req in bid_requests:
+        print(f"    → {req['method']} {req['url'][:120]}")
+    print(f"  🔍 [8] 응답 {len(bid_responses)}건:")
+    for resp in bid_responses:
+        print(f"    ← {resp['status']} {resp['url'][:120]}")
+
+    try:
+        page.remove_listener("request", on_bid_request)
+        page.remove_listener("response", on_bid_response)
+    except Exception:
+        pass
+
     bid_success = False
     try:
         result = page.locator('text="입찰 신청 결과"')
         await result.wait_for(timeout=8000)
-        print(f"  ✓ '입찰 신청 결과' 팝업 감지")
+        print(f"  ✓ [8] '입찰 신청 결과' 팝업 감지")
+
+        # 결과 팝업 전문 캡처
+        try:
+            result_dialog = page.locator('[class*="modal"], [class*="Modal"], [role="dialog"]').last
+            if await result_dialog.is_visible(timeout=1000):
+                full_text = (await result_dialog.inner_text(timeout=2000)).strip()
+                print(f"  🔍 [8] 결과 팝업 전문:\n{full_text[:600]}")
+        except Exception:
+            pass
 
         # "성공 N건" 텍스트 확인
         try:
             result_text = await page.locator('text=/성공.*건/').first.inner_text(timeout=3000)
-            print(f"  🎉 결과: {result_text}")
+            print(f"  🎉 [8] 결과: {result_text}")
             if "성공" in result_text:
                 bid_success = True
         except Exception:
-            print(f"  ⚠ '성공 N건' 텍스트 못 찾음")
+            print(f"  ⚠ [8] '성공 N건' 텍스트 못 찾음")
+
+        # "실패 N건" 확인
+        try:
+            fail_text = await page.locator('text=/실패.*건/').first.inner_text(timeout=1000)
+            print(f"  ❌ [8] 실패 결과: {fail_text}")
+        except Exception:
+            pass
 
         # 결과 팝업 닫기
         close_btn = page.locator('button:has-text("확인")')
@@ -768,24 +2271,360 @@ async def place_bid(page, bid, delay=3.0):
             await page.wait_for_timeout(1000)
     except Exception:
         # 결과 팝업이 안 뜬 경우 — 에러 팝업이 있는지 확인
-        print(f"  ⚠ '입찰 신청 결과' 팝업 미감지 — 에러 확인 중...")
+        print(f"  ⚠ [8] '입찰 신청 결과' 팝업 미감지 — 에러 확인 중...")
         await _save_debug_screenshot(page, f"bid_{product_id}_no_result")
+        await _debug_dump_page(page, f"NO_RESULT_{product_id}")
         try:
-            # 에러 메시지 확인
-            error_texts = await page.locator('[class*="error"], [class*="alert"], [class*="warning"]').all_text_contents()
-            if error_texts:
-                print(f"  ❌ 에러 메시지: {'; '.join(t.strip() for t in error_texts if t.strip())}")
+            error_els = page.locator('[class*="error"], [class*="Error"], [class*="alert"], [class*="warning"], [class*="toast"], [class*="Toast"]')
+            err_count = await error_els.count()
+            print(f"  🔍 [8] 에러/경고 요소 {err_count}개:")
+            for i in range(err_count):
+                try:
+                    if await error_els.nth(i).is_visible(timeout=500):
+                        etxt = (await error_els.nth(i).inner_text(timeout=1000)).strip()
+                        if etxt:
+                            print(f"  ❌ [8]   [{i}]: {etxt[:200]}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # 전체 페이지 텍스트에서 에러 키워드 검색
+        try:
+            body = await page.locator('body').inner_text(timeout=3000)
+            for keyword in ["실패", "오류", "에러", "error", "fail", "invalid", "부족", "초과"]:
+                if keyword in body.lower():
+                    # 키워드 주변 텍스트 추출
+                    idx = body.lower().find(keyword)
+                    context = body[max(0,idx-50):idx+100]
+                    print(f"  🔍 [8] 페이지에서 '{keyword}' 발견: ...{context}...")
         except Exception:
             pass
 
+    await _save_debug_screenshot(page, f"bid_{product_id}_step8_result")
+
     if bid_success:
+        print(f"\n  {'='*40}")
         print(f"  💾 입찰 등록 완료! #{product_id}, {size}, {price}원 × {qty}개")
+        print(f"  {'='*40}")
     else:
-        print(f"  ❌ 입찰 등록 실패 — 결과 확인 불가. #{product_id}")
-        await _save_debug_screenshot(page, f"bid_{product_id}_failed")
+        print(f"\n  {'='*40}")
+        print(f"  ❌ 입찰 등록 실패 — #{product_id}")
+        print(f"  {'='*40}")
+        await _save_debug_screenshot(page, f"bid_{product_id}_FAILED_FINAL")
 
     await page.wait_for_timeout(delay * 1000)
     return bid_success
+
+
+# ═══════════════════════════════════════════
+# 여러 사이즈 일괄 입찰
+# ═══════════════════════════════════════════
+
+async def place_bids_batch(page, product_id, bids, bid_days=30, delay=3.0):
+    """같은 상품의 여러 사이즈를 한 번에 입찰.
+    bids: [{"size": "W215", "price": 128000, "qty": 1}, ...]
+    Returns: {"success": int, "fail": int, "results": [{"size","price","ok"}, ...]}
+    """
+    product_id = str(product_id)
+    print(f"\n{'='*60}")
+    print(f"💰 일괄 입찰: #{product_id} ({len(bids)}사이즈)")
+    for b in bids:
+        print(f"  {b['size']}: {b['price']:,}원 × {b.get('qty',1)}개")
+    print(f"{'='*60}")
+
+    # ── 1단계: /asks/{productId}/create 직접 이동 ──
+    print(f"\n  ─── [1] 입찰 페이지 직접 이동 ───")
+    create_url = f"{PARTNER_URL}/asks/{product_id}/create"
+    await page.goto(create_url, wait_until="domcontentloaded")
+    await page.wait_for_timeout(3000)
+
+    if "/sign-in" in page.url:
+        print(f"  ❌ 세션 만료")
+        return {"success": 0, "fail": len(bids), "results": []}
+
+    # "상품 정보 입력 필요" 팝업 체크
+    try:
+        info_needed = page.locator('text="상품 정보 입력 필요"')
+        if await info_needed.is_visible(timeout=2000):
+            print(f"  ❌ 고시정보 미등록!")
+            await _save_debug_screenshot(page, f"batch_{product_id}_gosi_needed")
+            try:
+                await page.locator('button:has-text("취소")').first.click()
+            except Exception:
+                pass
+            return {"success": 0, "fail": len(bids), "results": []}
+    except Exception:
+        pass
+
+    # 옵션/수량 모달 대기
+    try:
+        await page.locator('text=/옵션.*수량/').wait_for(timeout=5000)
+        print(f"  ✓ 옵션/수량 선택 모달 열림")
+    except Exception:
+        print(f"  ⚠ 옵션/수량 텍스트 미감지 — 계속 진행")
+    await _save_debug_screenshot(page, f"batch_{product_id}_step1_modal")
+
+    # ── 2단계: 사이즈별 수량 input에 직접 값 입력 ──
+    print(f"\n  ─── [2] 사이즈별 수량 설정 ───")
+
+    # JS로 사이즈→input 매핑 구축 + 수량 설정
+    set_count = await page.evaluate(r"""(bidsJson) => {
+        const bids = JSON.parse(bidsJson);
+        let setCount = 0;
+
+        // 모든 텍스트 노드에서 사이즈 레이블(W215 등) 찾기
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const sizeElements = {};  // "W220" → element
+        while (walker.nextNode()) {
+            const txt = walker.currentNode.textContent.trim();
+            if (/^[WM]?\d{2,3}$/.test(txt) || txt === 'ONE SIZE') {
+                sizeElements[txt] = walker.currentNode.parentElement;
+            }
+        }
+
+        for (const bid of bids) {
+            const size = bid.size;
+            const qty = bid.qty || 1;
+            const sizeDigits = size.replace(/[^0-9.]/g, '');
+
+            // 사이즈 요소 찾기: 원본 → W접두사 → 숫자만
+            let sizeEl = sizeElements[size]
+                || sizeElements['W' + sizeDigits]
+                || sizeElements[sizeDigits];
+
+            if (!sizeEl) continue;
+
+            // 사이즈 요소의 행 컨테이너 찾기 (부모를 올라가며 input이 있는 레벨)
+            let row = sizeEl;
+            for (let i = 0; i < 6; i++) {
+                if (!row.parentElement) break;
+                row = row.parentElement;
+                const inp = row.querySelector('input[type="text"], input[type="number"]');
+                if (inp) {
+                    // React input 값 설정
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    nativeInputValueSetter.call(inp, String(qty));
+                    inp.dispatchEvent(new Event('input', { bubbles: true }));
+                    inp.dispatchEvent(new Event('change', { bubbles: true }));
+                    setCount++;
+                    break;
+                }
+            }
+        }
+        return setCount;
+    }""", json.dumps(bids))
+
+    print(f"  ✓ {set_count}/{len(bids)}사이즈 수량 설정 완료")
+    await page.wait_for_timeout(1000)
+    await _save_debug_screenshot(page, f"batch_{product_id}_step2_qty_set")
+
+    if set_count == 0:
+        print(f"  ❌ 수량 설정 실패 — 사이즈 매칭 불가")
+        await _save_debug_screenshot(page, f"batch_{product_id}_qty_fail")
+        return {"success": 0, "fail": len(bids), "results": []}
+
+    # "판매 입찰 계속" 클릭
+    print(f"\n  ─── [3] 판매 입찰 계속 ───")
+    continue_btn = page.locator('button:has-text("판매 입찰 계속")')
+    try:
+        # disabled 상태일 수 있으므로 대기
+        await page.wait_for_timeout(500)
+        if await continue_btn.is_disabled():
+            print(f"  ⚠ '판매 입찰 계속' 비활성 — 수량 확인")
+            await _save_debug_screenshot(page, f"batch_{product_id}_continue_disabled")
+            return {"success": 0, "fail": len(bids), "results": []}
+        await continue_btn.click(timeout=3000)
+        await page.wait_for_timeout(2000)
+        print(f"  ✓ '판매 입찰 계속' 클릭")
+    except Exception as e:
+        print(f"  ❌ '판매 입찰 계속' 실패: {e}")
+        await _save_debug_screenshot(page, f"batch_{product_id}_continue_fail")
+        return {"success": 0, "fail": len(bids), "results": []}
+
+    # ── 4단계: 사이즈별 가격 입력 ──
+    print(f"\n  ─── [4] 사이즈별 가격 입력 ───")
+    await _save_debug_screenshot(page, f"batch_{product_id}_step4_price_page")
+
+    # 가격 매핑 구축
+    price_map = {}
+    for b in bids:
+        sd = re.sub(r'[^0-9.]', '', b["size"])
+        price_map[b["size"]] = b["price"]
+        if sd:
+            price_map[f"W{sd}"] = b["price"]
+            price_map[sd] = b["price"]
+
+    # JS로 사이즈→가격 입력 필드 매핑 후 가격 입력
+    filled = await page.evaluate(r"""(priceMapJson) => {
+        const priceMap = JSON.parse(priceMapJson);
+        let filled = 0;
+
+        // "판매 희망가" 관련 input 찾기
+        const inputs = document.querySelectorAll('input[placeholder*="희망가"], input[placeholder*="입력"]');
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set;
+
+        for (const inp of inputs) {
+            // 이 input의 행에서 사이즈 텍스트 찾기
+            let row = inp;
+            let sizeText = '';
+            for (let i = 0; i < 8; i++) {
+                if (!row.parentElement) break;
+                row = row.parentElement;
+                const text = row.innerText || '';
+                const match = text.match(/\b([WM]?\d{2,3})\b/);
+                if (match) {
+                    sizeText = match[1];
+                    break;
+                }
+                if (text.includes('ONE SIZE')) {
+                    sizeText = 'ONE SIZE';
+                    break;
+                }
+            }
+
+            // 가격 매칭
+            let price = priceMap[sizeText];
+            if (!price) {
+                const digits = sizeText.replace(/[^0-9.]/g, '');
+                price = priceMap['W' + digits] || priceMap[digits] || priceMap[sizeText];
+            }
+
+            if (price) {
+                nativeSetter.call(inp, String(Math.round(price)));
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+                filled++;
+            }
+        }
+        return filled;
+    }""", json.dumps(price_map))
+
+    print(f"  ✓ {filled}개 가격 입력 완료")
+    await page.wait_for_timeout(500)
+    await _save_debug_screenshot(page, f"batch_{product_id}_step4_filled")
+
+    if filled == 0:
+        print(f"  ❌ 가격 입력 실패")
+        return {"success": 0, "fail": len(bids), "results": []}
+
+    # ── 4-1단계: 입찰기한 ──
+    print(f"\n  ─── [4-1] 입찰기한 ({bid_days}일) ───")
+    try:
+        deadline_sel = page.locator('select').filter(has_text=re.compile(r'[369]0일'))
+        if await deadline_sel.count() > 0:
+            await deadline_sel.first.select_option(label=f"{bid_days}일")
+            print(f"  ✓ 입찰기한: {bid_days}일")
+        else:
+            dl_btn = page.locator(f'button:has-text("{bid_days}일"), label:has-text("{bid_days}일")')
+            if await dl_btn.count() > 0:
+                await dl_btn.first.click()
+                print(f"  ✓ 입찰기한: {bid_days}일")
+    except Exception:
+        pass
+
+    # ── 5단계: 체크박스 ──
+    print(f"\n  ─── [5] 체크박스 ───")
+    try:
+        checkboxes = page.locator('input[type="checkbox"]:visible')
+        cnt = await checkboxes.count()
+        for i in range(cnt):
+            cb = checkboxes.nth(i)
+            if await cb.is_checked():
+                continue
+            try:
+                await cb.locator('xpath=..').click(timeout=1000)
+            except Exception:
+                await cb.click(force=True)
+            await page.wait_for_timeout(200)
+        print(f"  ✓ 체크박스 완료")
+    except Exception as e:
+        print(f"  ⚠ 체크박스: {e}")
+
+    # ── 6단계: 최종 제출 ──
+    print(f"\n  ─── [6] 최종 제출 ───")
+    final_btn = page.locator('button:has-text("판매 입찰하기")').last
+    try:
+        if await final_btn.is_disabled():
+            print(f"  ❌ 버튼 비활성")
+            await _save_debug_screenshot(page, f"batch_{product_id}_btn_disabled")
+            return {"success": 0, "fail": len(bids), "results": []}
+        await final_btn.click(timeout=3000)
+        await page.wait_for_timeout(2000)
+        print(f"  ✓ 최종 제출")
+    except Exception as e:
+        print(f"  ❌ 제출 실패: {e}")
+        return {"success": 0, "fail": len(bids), "results": []}
+    await _save_debug_screenshot(page, f"batch_{product_id}_step6_submitted")
+
+    # ── 7단계: 확인 팝업 ──
+    print(f"\n  ─── [7] 확인 팝업 ───")
+    try:
+        # "총 N건의 판매 입찰하기" 확인 팝업
+        confirm = page.locator('button:has-text("확인")')
+        await confirm.wait_for(state="visible", timeout=3000)
+        await confirm.click()
+        await page.wait_for_timeout(3000)
+        print(f"  ✓ 확인 클릭")
+    except Exception:
+        print(f"  ⚠ 확인 팝업 없음")
+
+    # ── 8단계: 결과 ──
+    print(f"\n  ─── [8] 결과 확인 ───")
+    await _save_debug_screenshot(page, f"batch_{product_id}_step8_result")
+
+    success_count = 0
+    fail_count = 0
+
+    # "입찰 신청 결과" 팝업 또는 "성공 N건" 텍스트 확인
+    try:
+        success_el = page.locator('text=/성공.*건/')
+        await success_el.wait_for(timeout=5000)
+        result_text = await success_el.first.inner_text(timeout=2000)
+        print(f"  🔍 결과: {result_text}")
+        sm = re.search(r'성공\s*(\d+)', result_text)
+        if sm:
+            success_count = int(sm.group(1))
+    except Exception:
+        pass
+
+    try:
+        fail_el = page.locator('text=/실패.*건/')
+        if await fail_el.count() > 0:
+            fail_text = await fail_el.first.inner_text(timeout=1000)
+            fm = re.search(r'실패\s*(\d+)', fail_text)
+            if fm:
+                fail_count = int(fm.group(1))
+    except Exception:
+        pass
+
+    # 팝업 닫기
+    try:
+        close_btn = page.locator('button:has-text("확인")')
+        if await close_btn.count() > 0 and await close_btn.first.is_visible(timeout=1000):
+            await close_btn.first.click()
+            await page.wait_for_timeout(1000)
+    except Exception:
+        pass
+
+    if success_count > 0:
+        print(f"\n  {'='*40}")
+        print(f"  ✅ 성공 {success_count}건 / 실패 {fail_count}건")
+        print(f"  {'='*40}")
+    else:
+        # 네트워크 응답으로 간접 판단
+        print(f"  ⚠ 결과 팝업 미감지 — 페이지 상태 확인")
+        await _debug_dump_page(page, f"BATCH_RESULT_{product_id}")
+
+    await page.wait_for_timeout(delay * 1000)
+
+    results = []
+    for i, b in enumerate(bids):
+        results.append({"size": b["size"], "price": b["price"],
+                        "ok": i < success_count})
+    return {"success": success_count, "fail": fail_count or (len(bids) - success_count),
+            "results": results}
 
 
 # ═══════════════════════════════════════════
@@ -794,9 +2633,15 @@ async def place_bid(page, bid, delay=3.0):
 
 async def main():
     parser = argparse.ArgumentParser(description="KREAM 판매자센터 자동화 v2")
-    parser.add_argument("--mode", choices=["login", "login-kream", "product", "bid", "all"],
+    parser.add_argument("--mode", choices=[
+                            "login", "login-kream",
+                            "auto-login", "auto-login-partner", "auto-login-kream",
+                            "product", "bid", "all",
+                        ],
                         default="product",
-                        help="login=판매자센터 로그인, login-kream=KREAM 로그인, product=고시정보, bid=입찰, all=전부")
+                        help="login=판매자센터 수동, login-kream=KREAM 수동, "
+                             "auto-login=둘 다 자동, auto-login-partner=판매자센터만, "
+                             "auto-login-kream=KREAM만(네이버), product=고시정보, bid=입찰, all=전부")
     parser.add_argument("--excel", default=EXCEL_PATH, help="데이터 엑셀 파일 경로")
     args = parser.parse_args()
 
@@ -816,6 +2661,19 @@ async def main():
             await login_kream(p)
             return
 
+        if args.mode == "auto-login":
+            await login_auto_partner(p)
+            await login_auto_kream(p)
+            return
+
+        if args.mode == "auto-login-partner":
+            await login_auto_partner(p)
+            return
+
+        if args.mode == "auto-login-kream":
+            await login_auto_kream(p)
+            return
+
         settings = load_settings(args.excel)
         headless = str(settings.get("headless_mode", "false")).lower() == "true"
         delay = float(settings.get("delay_between_items", 3))
@@ -825,7 +2683,7 @@ async def main():
         page = await context.new_page()
         await apply_stealth(page)
 
-        if not await ensure_logged_in(page):
+        if not await ensure_logged_in(page, context):
             await browser.close()
             return
 
@@ -855,7 +2713,7 @@ async def main():
                     fail += 1
             print(f"\n📊 입찰 결과: 성공 {success}건, 실패 {fail}건")
 
-        await context.storage_state(path=STATE_FILE)
+        await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
         print("\n✅ 모든 작업 완료!")
         await browser.close()
 

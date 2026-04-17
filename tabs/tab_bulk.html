@@ -1,0 +1,37 @@
+      <div id="tab-bulk" class="tab-view">
+        <div class="card">
+          <div class="card-title"><span class="icon">📋</span> 대량 입찰 엑셀 생성</div>
+          <p class="text-muted mb-16">상품 리스트를 입력하면 KREAM 대량입찰 양식 엑셀을 자동 생성합니다.</p>
+          <div style="background:var(--bg); border-radius:8px; padding:16px; margin-bottom:16px">
+            <div style="font-weight:600; margin-bottom:8px">상품 추가</div>
+            <div class="form-row">
+              <span class="form-label">상품번호</span>
+              <input type="text" class="form-input form-input-sm" id="bulk-pid" placeholder="299954">
+              <span class="form-label" style="margin-left:8px">모델번호</span>
+              <input type="text" class="form-input form-input-sm" id="bulk-model" placeholder="IX7693">
+              <span class="form-label" style="margin-left:8px">영문명</span>
+              <input type="text" class="form-input form-input-lg" id="bulk-name" placeholder="Product Name">
+              <span class="form-label" style="margin-left:8px">옵션</span>
+              <input type="text" class="form-input form-input-sm" id="bulk-size" value="ONE SIZE" style="width:80px">
+              <span class="form-label" style="margin-left:8px">가격</span>
+              <input type="number" class="form-input form-input-sm" id="bulk-price" placeholder="79000" style="width:90px">
+              <span class="form-label" style="margin-left:8px">수량</span>
+              <input type="number" class="form-input form-input-sm" id="bulk-qty" value="1" style="width:50px">
+              <button class="btn btn-primary" onclick="bulkAdd()" style="margin-left:8px">추가</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>상품번호</th><th>모델번호</th><th>영문명</th><th>옵션</th><th>가격</th><th>수량</th><th>삭제</th></tr></thead>
+            <tbody id="bulk-tbody"><tr><td colspan="7" class="text-muted">상품을 추가하세요</td></tr></tbody>
+          </table>
+          <div style="margin-top:16px; display:flex; gap:8px">
+            <button class="btn btn-accent" onclick="bulkGenerate()">엑셀 생성</button>
+            <button class="btn" onclick="bulkDownload()">엑셀 다운로드</button>
+            <button class="btn btn-primary" onclick="bulkUpload()">KREAM에 업로드</button>
+            <span id="bulk-status" style="color:var(--text2); font-size:13px; line-height:36px; margin-left:8px"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭4: 가격 수집 ═══ -->
+      <!-- ═══ 탭: 상품 발굴 ═══ -->

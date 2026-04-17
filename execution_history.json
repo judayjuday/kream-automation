@@ -1,5 +1,293 @@
 [
   {
+    "date": "2026/04/14 23:33",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 146000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 23:33",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 115000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 23:33",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 114000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 23:33",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 128000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 23:23",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 115000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 23:23",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 114000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 23:00",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 139000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:59",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 114000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:59",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 113000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:58",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 124000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:57",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 146000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:56",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 115000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:55",
+    "type": "입찰",
+    "productId": "467187",
+    "price": 114000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:54",
+    "type": "고시정보+입찰",
+    "productId": "467187",
+    "price": 128000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:22",
+    "type": "고시정보+입찰",
+    "productId": "467187",
+    "price": 82000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 22:19",
+    "type": "입찰실패",
+    "productId": "467187",
+    "price": 82000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 22:12",
+    "type": "입찰실패",
+    "productId": "467187",
+    "price": 112000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 22:11",
+    "type": "입찰실패",
+    "productId": "467187",
+    "price": 114000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 22:09",
+    "type": "입찰실패",
+    "productId": "467187",
+    "price": 125000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 18:15",
+    "type": "고시정보+입찰",
+    "productId": "490300",
+    "price": 76000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 18:13",
+    "type": "고시정보+입찰",
+    "productId": "490299",
+    "price": 83000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 18:11",
+    "type": "고시정보+입찰",
+    "productId": "220480",
+    "price": 149000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 18:10",
+    "type": "고시정보+입찰",
+    "productId": "220481",
+    "price": 149000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 18:09",
+    "type": "고시정보+입찰",
+    "productId": "490299",
+    "price": 86000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 18:07",
+    "type": "고시정보+입찰",
+    "productId": "490300",
+    "price": 78000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 18:06",
+    "type": "고시정보+입찰",
+    "productId": "299955",
+    "price": 77000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 17:42",
+    "type": "고시정보+입찰",
+    "productId": "299955",
+    "price": 76000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 13:37",
+    "type": "고시정보+입찰",
+    "productId": "125755",
+    "price": 119000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/14 12:31",
+    "type": "입찰실패",
+    "productId": "490299",
+    "price": 79000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 12:30",
+    "type": "입찰실패",
+    "productId": "490300",
+    "price": 76000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 12:29",
+    "type": "입찰실패",
+    "productId": "125755",
+    "price": 126000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
+    "date": "2026/04/14 12:28",
+    "type": "입찰실패",
+    "productId": "299955",
+    "price": 76000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
     "date": "2026/04/14 07:37",
     "type": "자동입찰실패",
     "productId": "307489",

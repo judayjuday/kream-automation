@@ -1,4 +1,140 @@
 {
-  "bids": [],
+  "bids": [
+    {
+      "productId": "125755",
+      "model": "IC8349",
+      "size": "ONE SIZE",
+      "price": 119000,
+      "date": "2026/04/14 13:37",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "299955",
+      "model": "IX7694",
+      "size": "ONE SIZE",
+      "price": 77000,
+      "date": "2026/04/14 18:06",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "220481",
+      "model": "JE3208",
+      "size": "ONE SIZE",
+      "price": 149000,
+      "date": "2026/04/14 18:10",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "220480",
+      "model": "JE3209",
+      "size": "ONE SIZE",
+      "price": 149000,
+      "date": "2026/04/14 18:11",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "490299",
+      "model": "KA9266",
+      "size": "ONE SIZE",
+      "price": 83000,
+      "date": "2026/04/14 18:13",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "490300",
+      "model": "KA9271",
+      "size": "ONE SIZE",
+      "price": 76000,
+      "date": "2026/04/14 18:15",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "",
+      "size": "W240",
+      "price": 82000,
+      "date": "2026/04/14 22:22",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "215",
+      "price": 124000,
+      "date": "2026/04/14 22:58",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "220",
+      "price": 113000,
+      "date": "2026/04/14 22:59",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "250",
+      "price": 114000,
+      "date": "2026/04/14 22:59",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "255",
+      "price": 139000,
+      "date": "2026/04/14 23:00",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "W215",
+      "price": 128000,
+      "date": "2026/04/14 23:33",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "W220",
+      "price": 114000,
+      "date": "2026/04/14 23:33",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "W250",
+      "price": 115000,
+      "date": "2026/04/14 23:33",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "W255",
+      "price": 146000,
+      "date": "2026/04/14 23:33",
+      "source": "placed",
+      "orderId": null
+    }
+  ],
   "lastSync": "2026/04/14 08:10"
 }

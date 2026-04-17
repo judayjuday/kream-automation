@@ -49,6 +49,34 @@ async def stealth(page):
     await Stealth().apply_stealth_async(page)
 
 
+async def save_state_with_localstorage(page, context, path, origin_url):
+    """storage_state에 localStorage 데이터를 병합하여 저장"""
+    try:
+        local_storage_data = await page.evaluate('() => JSON.stringify(localStorage)')
+        ls_items = json.loads(local_storage_data) if local_storage_data else {}
+        ls_entries = [{"name": k, "value": v} for k, v in ls_items.items()]
+    except Exception:
+        ls_entries = []
+
+    state = await context.storage_state()
+
+    if ls_entries:
+        origin_found = False
+        for origin in state.get("origins", []):
+            if origin.get("origin") == origin_url:
+                origin["localStorage"] = ls_entries
+                origin_found = True
+                break
+        if not origin_found:
+            state.setdefault("origins", []).append({
+                "origin": origin_url,
+                "localStorage": ls_entries,
+            })
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
 # ═══════════════════════════════════════════
 # 1단계: 내 입찰 목록 수집
 # ═══════════════════════════════════════════
@@ -61,9 +89,9 @@ async def collect_my_bids(headless=True) -> list:
         page = await context.new_page()
         await stealth(page)
 
-        # 전체 기간, 50개씩
+        # 전체 기간, 100개씩
         url = (f"{PARTNER_URL}/business/asks"
-               f"?page=1&perPage=50&startDate=&endDate=")
+               f"?page=1&perPage=100&startDate=&endDate=")
         await page.goto(url, wait_until="domcontentloaded")
         await page.wait_for_timeout(5000)
 
@@ -83,7 +111,7 @@ async def collect_my_bids(headless=True) -> list:
 
         bids = await parse_asks_page(page)
 
-        await context.storage_state(path=STATE_FILE_PARTNER)
+        await save_state_with_localstorage(page, context, STATE_FILE_PARTNER, PARTNER_URL)
         await browser.close()
 
     return bids
@@ -205,7 +233,7 @@ async def collect_market_data(product_ids: list, headless=True) -> dict:
             await page.wait_for_timeout(2000)
 
         if kream_session:
-            await context.storage_state(path=STATE_FILE_KREAM)
+            await save_state_with_localstorage(page, context, STATE_FILE_KREAM, KREAM_URL)
         await browser.close()
 
     return market
@@ -348,7 +376,7 @@ async def modify_bid_price(order_id: str, new_price: int, headless=True) -> bool
 
         success = await _click_modify_and_change(page, order_id, new_price)
 
-        await context.storage_state(path=STATE_FILE_PARTNER)
+        await save_state_with_localstorage(page, context, STATE_FILE_PARTNER, PARTNER_URL)
         await browser.close()
 
     return success

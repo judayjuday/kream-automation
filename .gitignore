@@ -1,6 +1,10 @@
 auth_state.json
 auth_state_kream.json
+auth_state_backup.json
+auth_state_partner_backup.json
+settings.json
 __pycache__
 *.pyc
 debug_screenshots/
+price_history.db
 server.log

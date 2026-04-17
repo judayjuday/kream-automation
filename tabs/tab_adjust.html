@@ -1,0 +1,160 @@
+      <div id="tab-adjust" class="tab-view">
+        <!-- 모니터링 상태 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📡</span> 입찰 순위 모니터링</div>
+          <div class="metrics" id="mon-metrics">
+            <div class="metric">
+              <div class="metric-label">상태</div>
+              <div class="metric-value" id="mon-status-text">확인 중...</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">마지막 실행</div>
+              <div class="metric-value" id="mon-last-run" style="font-size:15px">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">다음 실행</div>
+              <div class="metric-value" id="mon-next-run" style="font-size:15px">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">총 체크 / 조정</div>
+              <div class="metric-value" id="mon-stats">-</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:14px; align-items:center; flex-wrap:wrap">
+            <button class="btn btn-primary" id="mon-start-btn" onclick="monitorStart()">모니터링 시작</button>
+            <button class="btn btn-danger" id="mon-stop-btn" onclick="monitorStop()">모니터링 중지</button>
+            <button class="btn btn-outline" onclick="monitorRunOnce()">수동 1회 실행</button>
+            <button class="btn btn-outline" onclick="emailTest()" style="font-size:12px">이메일 테스트</button>
+            <span id="mon-action-status" style="color:var(--text2); font-size:13px"></span>
+          </div>
+          <div style="margin-top:10px; font-size:12px; color:var(--text3)">
+            스케줄: 매일 08, 10, 12, 14, 16, 18, 20, 22시 자동 실행 · 서버 시작 시 자동 활성화
+          </div>
+        </div>
+
+        <!-- 조정 대기 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">⏳</span> 조정 대기 (<span id="pending-count">0</span>건)</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-outline" onclick="loadPendingAdjustments()" style="font-size:12px; padding:4px 12px">새로고침</button>
+              <button class="btn btn-primary" onclick="approveAllPending()" style="font-size:13px; padding:8px 20px">전체 승인</button>
+              <button class="btn btn-danger btn-sm" onclick="rejectAllPending()">전체 거절</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="pend-check-all" onchange="pendToggleAll(this.checked)"></th>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>현재가</th>
+                  <th>경쟁자 최저가</th>
+                  <th>추천가</th>
+                  <th>예상 수익</th>
+                  <th>상태</th>
+                  <th>생성 시간</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="pending-table-body">
+                <tr><td colspan="10" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 조정 이력 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 조정 이력</span>
+            <button class="btn btn-outline" onclick="loadAdjustHistory()" style="font-size:12px; padding:4px 12px">새로고침</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>기존가</th>
+                  <th>변경가</th>
+                  <th>상태</th>
+                  <th>실행 시간</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <tr><td colspan="6" class="text-muted">-</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 이메일 설정 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📧</span> 이메일 알림 설정</div>
+          <div class="form-row">
+            <span class="form-label">Gmail 앱 비밀번호</span>
+            <input type="password" id="email-app-password" class="form-input form-input-md" placeholder="xxxx xxxx xxxx xxxx">
+            <button class="btn btn-outline" onclick="saveEmailPassword()">저장</button>
+          </div>
+          <div style="font-size:11px; color:var(--text3); margin-top:4px">
+            발신/수신: judaykream@gmail.com · Google 계정 → 보안 → 앱 비밀번호에서 생성
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 수동 스캔 (기존) -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🎯</span> 수동 스캔 + 분석</div>
+          <p class="text-muted" style="margin-bottom:12px">판매자센터에서 내 입찰 목록을 수집하고, 시장 현황을 분석하여 최적 가격을 제안합니다.</p>
+          <div style="display:flex; gap:12px; align-items:center">
+            <button class="btn btn-primary" id="adj-scan-btn" onclick="adjScan()" style="font-size:14px; padding:10px 24px">
+              내 입찰 스캔 + 시장 분석
+            </button>
+            <span id="adj-scan-status" style="color:var(--text2); font-size:13px"></span>
+          </div>
+        </div>
+
+        <!-- 제안 테이블 (기존) -->
+        <div class="card" style="margin-top:16px" id="adj-result-card" hidden>
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 조정 제안 (<span id="adj-count">0</span>건)</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn" onclick="adjSelectAll()" style="font-size:12px; padding:4px 12px">전체 선택</button>
+              <button class="btn" onclick="adjDeselectAll()" style="font-size:12px; padding:4px 12px">전체 해제</button>
+              <button class="btn btn-primary" onclick="adjExecute()" style="font-size:13px; padding:8px 20px">선택한 상품 일괄 조정</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="adj-check-all" onchange="adjToggleAll(this.checked)"></th>
+                  <th>상품명</th>
+                  <th>사이즈</th>
+                  <th>현재 입찰가</th>
+                  <th>현재 순번</th>
+                  <th>시장 최저가</th>
+                  <th>추천가</th>
+                  <th>추천 순번</th>
+                  <th>제안</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody id="adj-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 실행 로그 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📋</span> 실행 로그</div>
+          <div id="adj-log" style="background:#1a1a1a; color:#eee; padding:12px; border-radius:8px; max-height:200px; overflow-y:auto; font-family:monospace; font-size:12px;">
+            대기 중...
+          </div>
+        </div>
+      </div>

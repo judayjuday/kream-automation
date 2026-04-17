@@ -1,0 +1,78 @@
+      <div id="tab-discover" class="tab-view">
+        <!-- KREAM 키워드 검색 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🔍</span> KREAM 키워드 검색</div>
+          <div class="form-row">
+            <input type="text" class="form-input form-input-lg" id="kw-input" placeholder="키워드 입력 후 추가 (예: 토쿠텐)" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();kwAddTag()}">
+            <button class="btn" onclick="kwAddTag()" style="margin-left:8px">추가</button>
+            <button class="btn btn-primary" id="kw-search-btn" onclick="kwSearch()" style="margin-left:4px">검색</button>
+            <button class="btn" onclick="kwBulkPrice()" style="margin-left:4px">선택 일괄 가격 수집</button>
+            <button class="btn" onclick="kwDownloadExcel()" style="margin-left:4px">엑셀 다운로드</button>
+          </div>
+          <div id="kw-tags" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; min-height:8px"></div>
+          <div id="kw-status" style="font-size:12px; color:var(--text3); margin-top:4px"></div>
+          <div id="kw-result" hidden style="margin-top:12px; overflow-x:auto; max-height:500px; overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:35px"><input type="checkbox" id="kw-check-all" onchange="document.querySelectorAll('.kw-cb').forEach(c=>c.checked=this.checked)"></th>
+                  <th>키워드</th>
+                  <th>브랜드</th>
+                  <th>상품명</th>
+                  <th>모델번호</th>
+                  <th>표시가</th>
+                  <th>거래수</th>
+                  <th>상품ID</th>
+                  <th>액션</th>
+                </tr>
+              </thead>
+              <tbody id="kw-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 엑셀 데이터 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📊</span> KREAM 데이터 (엑셀)</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <label class="btn" style="cursor:pointer; font-size:12px; padding:6px 14px">
+                엑셀 업로드 <input type="file" accept=".xlsx" onchange="discUpload(this)" hidden>
+              </label>
+              <button class="btn btn-primary" onclick="discLoad()" style="font-size:12px; padding:6px 14px">데이터 불러오기</button>
+            </div>
+          </div>
+          <!-- 서브탭 -->
+          <div style="display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:16px">
+            <button class="btn" id="disc-tab-overseas" onclick="discShowTab('overseas')" style="border:none; border-bottom:2px solid var(--accent); border-radius:0; font-weight:600; padding:10px 20px">해외직구 TOP 100</button>
+            <button class="btn" id="disc-tab-surge" onclick="discShowTab('surge')" style="border:none; border-radius:0; padding:10px 20px; color:var(--text2)">검색량 급등</button>
+            <button class="btn" id="disc-tab-brand" onclick="discShowTab('brand')" style="border:none; border-radius:0; padding:10px 20px; color:var(--text2)">BRAND TOP 100</button>
+          </div>
+
+          <!-- 필터 -->
+          <div class="form-row" style="margin-bottom:12px">
+            <span class="form-label">카테고리</span>
+            <select class="form-select" id="disc-cat-filter" onchange="discRender()" style="width:160px">
+              <option value="">전체</option>
+              <option value="sneakers">스니커즈</option>
+              <option value="bag">가방</option>
+              <option value="apparel">의류</option>
+            </select>
+            <span class="form-label" style="margin-left:12px">검색</span>
+            <input type="text" class="form-input form-input-lg" id="disc-search" oninput="discRender()" placeholder="브랜드, 상품명, 모델번호 검색...">
+          </div>
+
+          <!-- 테이블 -->
+          <div style="overflow-x:auto; max-height:600px; overflow-y:auto">
+            <table>
+              <thead id="disc-thead"></thead>
+              <tbody id="disc-tbody">
+                <tr><td colspan="8" class="text-muted">데이터를 불러오세요</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="disc-status" style="margin-top:8px; font-size:12px; color:var(--text3)"></div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭: 가격 자동 조정 ═══ -->

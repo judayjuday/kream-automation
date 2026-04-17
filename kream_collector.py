@@ -14,6 +14,7 @@ KREAM 가격 수집 스크립트
 import asyncio
 import argparse
 import json
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -23,6 +24,114 @@ from playwright_stealth import Stealth
 
 STATE_FILE_PARTNER = "auth_state.json"
 STATE_FILE_KREAM = "auth_state_kream.json"
+DB_PATH = Path(__file__).parent / "price_history.db"
+
+
+def _init_db():
+    """가격 이력 DB 초기화 (테이블 생성)"""
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS price_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT NOT NULL,
+        model TEXT,
+        size TEXT,
+        delivery_type TEXT,
+        buy_price INTEGER,
+        sell_price INTEGER,
+        recent_trade_price INTEGER,
+        bid_count INTEGER,
+        collected_at TEXT NOT NULL
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS my_bids_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT,
+        product_id TEXT,
+        model TEXT,
+        size TEXT,
+        price INTEGER,
+        rank INTEGER,
+        status TEXT DEFAULT '입찰중',
+        recorded_at TEXT NOT NULL
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS competitor_info (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT NOT NULL,
+        size TEXT,
+        delivery_type TEXT,
+        price INTEGER,
+        seller_name TEXT,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        price_changes TEXT DEFAULT '[]'
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ph_pid ON price_history(product_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ph_collected ON price_history(collected_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_mb_pid ON my_bids_history(product_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ci_pid ON competitor_info(product_id)")
+    conn.commit()
+    conn.close()
+
+
+def save_prices_to_db(product_id, model, size_delivery_prices, recent_trade=None):
+    """사이즈×배송타입별 가격을 DB에 저장"""
+    if not size_delivery_prices:
+        return
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    for sdp in size_delivery_prices:
+        size = sdp.get("size", "")
+        for dtype, buy_key, sell_key in [
+            ("빠른배송", "buyFast", "sellFast"),
+            ("일반배송", "buyNormal", "sellNormal"),
+            ("해외배송", "buyOverseas", "sellOverseas"),
+        ]:
+            bp = sdp.get(buy_key)
+            sp = sdp.get(sell_key)
+            if bp or sp:
+                c.execute(
+                    "INSERT INTO price_history "
+                    "(product_id,model,size,delivery_type,buy_price,sell_price,recent_trade_price,collected_at) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (product_id, model or "", size, dtype, bp, sp, recent_trade, now)
+                )
+        # 전체 최저가도 별도 저장
+        bp_all = sdp.get("buyPrice")
+        sp_all = sdp.get("sellPrice")
+        if bp_all or sp_all:
+            c.execute(
+                "INSERT INTO price_history "
+                "(product_id,model,size,delivery_type,buy_price,sell_price,recent_trade_price,collected_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (product_id, model or "", size, "최저가", bp_all, sp_all, recent_trade, now)
+            )
+    conn.commit()
+    conn.close()
+
+
+def save_my_bids_to_db(bids):
+    """내 입찰 현황을 DB에 저장"""
+    if not bids:
+        return
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    for b in bids:
+        c.execute(
+            "INSERT INTO my_bids_history "
+            "(order_id,product_id,model,size,price,rank,status,recorded_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (b.get("orderId"), b.get("productId"), b.get("model", ""),
+             b.get("size", ""), b.get("bidPrice"), b.get("bidRank"),
+             "입찰중", now)
+        )
+    conn.commit()
+    conn.close()
+
+
+# DB 초기화 (모듈 로드 시 실행)
+_init_db()
 EXCEL_OUTPUT = "kream_price_data.xlsx"
 KREAM_URL = "https://kream.co.kr"
 PARTNER_URL = "https://partner.kream.co.kr"
@@ -55,6 +164,34 @@ async def create_context(browser, storage=None):
             "Chrome/120.0.0.0 Safari/537.36"
         ),
     )
+
+
+async def save_state_with_localstorage(page, context, path, origin_url):
+    """storage_state에 localStorage 데이터를 병합하여 저장"""
+    try:
+        local_storage_data = await page.evaluate('() => JSON.stringify(localStorage)')
+        ls_items = json.loads(local_storage_data) if local_storage_data else {}
+        ls_entries = [{"name": k, "value": v} for k, v in ls_items.items()]
+    except Exception:
+        ls_entries = []
+
+    state = await context.storage_state()
+
+    if ls_entries:
+        origin_found = False
+        for origin in state.get("origins", []):
+            if origin.get("origin") == origin_url:
+                origin["localStorage"] = ls_entries
+                origin_found = True
+                break
+        if not origin_found:
+            state.setdefault("origins", []).append({
+                "origin": origin_url,
+                "localStorage": ls_entries,
+            })
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
 
 
 async def apply_stealth(page):
@@ -490,6 +627,20 @@ async def collect_from_kream(page: Page, product_id: str) -> dict:
     finally:
         page.remove_listener('response', _on_api_resp)
 
+    # 가격 이력 DB 저장
+    try:
+        sdp = result.get("size_delivery_prices", [])
+        if sdp:
+            save_prices_to_db(
+                product_id,
+                result.get("model_number", ""),
+                sdp,
+                recent_trade=result.get("recent_trade_price"),
+            )
+            print(f"  💾 가격 이력 DB 저장: {len(sdp)}사이즈")
+    except Exception as e:
+        print(f"  ⚠ DB 저장 실패: {e}")
+
     return result
 
 
@@ -601,10 +752,14 @@ async def collect_size_prices_via_api(page: Page, product_id: str, pre_captured:
                     result.append(existing)
 
                 if picker_type == "buy":
-                    # buyPrice: 국내 배송 최저가 우선 (해외 포함 overall_price 대신)
-                    domestic_prices = [p for p in [delivery_prices.get("fast"), delivery_prices.get("normal")] if p]
-                    if domestic_prices:
-                        existing["buyPrice"] = min(domestic_prices)
+                    # buyPrice: 모든 배송타입(빠른/일반/해외) 중 최저가
+                    all_prices = [p for p in [
+                        delivery_prices.get("fast"),
+                        delivery_prices.get("normal"),
+                        delivery_prices.get("overseas"),
+                    ] if p]
+                    if all_prices:
+                        existing["buyPrice"] = min(all_prices)
                     elif overall_price is not None:
                         existing["buyPrice"] = overall_price
                     existing["buyFast"] = delivery_prices.get("fast")
@@ -934,11 +1089,11 @@ async def collect_prices(product_ids: list, headless=False, save_excel=False,
             if i < len(product_ids):
                 await kream_page.wait_for_timeout(2000)
 
-        # 세션 갱신 저장
+        # 세션 갱신 저장 (localStorage 포함)
         if kream_session:
-            await kream_context.storage_state(path=STATE_FILE_KREAM)
+            await save_state_with_localstorage(kream_page, kream_context, STATE_FILE_KREAM, KREAM_URL)
         if partner_context:
-            await partner_context.storage_state(path=STATE_FILE_PARTNER)
+            await save_state_with_localstorage(partner_page, partner_context, STATE_FILE_PARTNER, PARTNER_URL)
         await browser.close()
 
     # 요약 출력

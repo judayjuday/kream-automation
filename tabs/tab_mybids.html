@@ -1,0 +1,39 @@
+      <div id="tab-mybids" class="tab-view">
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📑</span> 내 입찰 목록</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-primary" id="mybids-load-btn" onclick="mybidsLoad()">입찰 목록 조회</button>
+              <button class="btn" onclick="mybidsDeleteSelected()" style="color:var(--danger)">선택 삭제</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="mybids-check-all" onchange="document.querySelectorAll('.mybid-cb').forEach(c=>c.checked=this.checked)"></th>
+                  <th>주문번호</th>
+                  <th>상품명</th>
+                  <th>모델번호</th>
+                  <th>사이즈</th>
+                  <th>입찰가</th>
+                  <th>순번</th>
+                  <th>유형</th>
+                  <th>액션</th>
+                </tr>
+              </thead>
+              <tbody id="mybids-tbody">
+                <tr><td colspan="9" class="text-muted">조회 버튼을 눌러주세요</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="mybids-status" style="margin-top:8px; font-size:12px; color:var(--text3)"></div>
+        </div>
+        <!-- 수정/삭제 로그 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📋</span> 실행 로그</div>
+          <div id="mybids-log" style="background:#1a1a1a; color:#eee; padding:12px; border-radius:8px; max-height:200px; overflow-y:auto; font-family:monospace; font-size:12px;">대기 중...</div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭5: 실행 이력 ═══ -->

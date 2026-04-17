@@ -1,0 +1,13 @@
+      <div id="tab-prices" class="tab-view">
+        <div class="card">
+          <div class="card-title"><span class="icon">📊</span> KREAM 가격 수집</div>
+          <p class="text-muted mb-16">상품번호를 입력하면 KREAM에서 가격 정보를 자동 수집합니다.</p>
+          <div class="form-row">
+            <span class="form-label">상품번호</span>
+            <input type="text" class="form-input form-input-lg" id="collect-ids" placeholder="299954, 12831 (쉼표로 구분)">
+            <button class="btn btn-primary" onclick="alert('python3 kream_collector.py --mode collect --products ' + document.getElementById('collect-ids').value.replace(/,/g,' ') + '\n\n터미널에서 실행하세요')">수집 시작</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 탭: 입찰 관리 ═══ -->
