@@ -136,13 +136,14 @@ def calc_total_cost(cny_price):
     krw_buy = round(cny_price * CNY_RATE * CNY_MARGIN)
     usd_equiv = cny_price * CNY_RATE / USD_RATE
 
+    # 관부가세는 고객 부담 → 원가에서 제외, 참고용으로만 계산
     customs = 0
     import_vat = 0
     if usd_equiv > USD_LIMIT:
         customs = round(cny_price * CNY_RATE * TARIFF_SHOE)
         import_vat = round((cny_price * CNY_RATE + customs) * 0.10)
 
-    total = krw_buy + customs + import_vat + SHIPPING_KRW
+    total = krw_buy + SHIPPING_KRW  # 관부가세 제외
     return {
         "cny": cny_price,
         "krw_buy": krw_buy,

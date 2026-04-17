@@ -1,6 +1,141 @@
 {
   "history": [
     {
+      "executed_at": "2026-04-18T02:27:16",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "",
+          "bid_price": null,
+          "cost": 91461,
+          "instant_buy": 84000,
+          "margin": "+14,383 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-17T11:50:56",
+      "type": "자동입찰",
+      "total": 4,
+      "success": 4,
+      "failed": 0,
+      "items": [
+        {
+          "model": "IX7693",
+          "name": "Adidas Always Original Denim Shoulder Bag Blue",
+          "size": "ONE SIZE",
+          "bid_price": 74000,
+          "margin": "+12,546 (23.2%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) Adidas Ozgaia Triple Black",
+          "size": "215",
+          "bid_price": 130000,
+          "margin": "+28,572 (31.6%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "JE3208",
+          "name": "Adidas Always Original Polyurethane Leather Shoulder Bag Black",
+          "size": "ONE SIZE",
+          "bid_price": 146000,
+          "margin": "+47,967 (55.8%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "JE3209",
+          "name": "Adidas Always Original Polyurethane Leather Shoulder Bag White",
+          "size": "ONE SIZE",
+          "bid_price": 146000,
+          "margin": "+47,967 (55.8%)",
+          "status": "입찰완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-17T11:27:04",
+      "type": "자동입찰",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) Adidas Ozgaia Triple Black",
+          "size": "215",
+          "bid_price": 128000,
+          "margin": "+26,704 (29.6%)",
+          "status": "입찰완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-17T11:22:55",
+      "type": "검색+마진계산",
+      "total": 2,
+      "success": 2,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JE3208",
+          "name": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 85897,
+          "instant_buy": 149000,
+          "margin": "+13,409 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JE3209",
+          "name": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 화이트",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 85897,
+          "instant_buy": 149000,
+          "margin": "+13,409 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-17T11:17:27",
+      "type": "검색+마진계산",
+      "total": 2,
+      "success": 2,
+      "failed": 0,
+      "items": [
+        {
+          "model": "IX7693",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블루",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 54070,
+          "instant_buy": 77000,
+          "margin": "+8,810 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "",
+          "bid_price": null,
+          "cost": 90348,
+          "instant_buy": 80000,
+          "margin": "+13,628 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
       "executed_at": "2026-04-15T10:23:14",
       "type": "검색+마진계산",
       "total": 1,

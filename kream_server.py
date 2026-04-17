@@ -252,6 +252,120 @@ def _init_dewu_tables():
 _init_dewu_tables()
 
 
+def _init_trade_volume_table():
+    """trade_volume 테이블 생성 (주간 거래량 추적용)"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS trade_volume (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT NOT NULL,
+        size TEXT,
+        weekly_trades INTEGER DEFAULT 0,
+        collected_at TEXT NOT NULL
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tv_pid ON trade_volume(product_id)")
+    conn.commit()
+    conn.close()
+
+
+_init_trade_volume_table()
+
+
+def calc_customer_total(bid_price, category="신발"):
+    """해외배송 고객 총 결제금액 계산.
+    고객 결제 = 입찰가 + 배송비(3,000원) + 관부가세(USD $150 초과 시)
+    """
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    usd_rate = float(settings.get("usdRate", 1495.76))
+    vat_rate = float(settings.get("vatRate", 0.10))
+
+    tariff_rate = 0.08 if category == "가방" else 0.13
+    shipping_customer = 3000  # 해외배송 고객 배송비
+
+    usd_value = bid_price / usd_rate
+    customs = 0
+    import_vat = 0
+    if usd_value > 150:
+        customs = round(bid_price * tariff_rate)
+        import_vat = round((bid_price + customs) * vat_rate)
+
+    total = bid_price + shipping_customer + customs + import_vat
+    return {
+        "bid_price": bid_price,
+        "shipping": shipping_customer,
+        "customs": customs,
+        "import_vat": import_vat,
+        "customer_total": total,
+        "usd_value": round(usd_value, 1),
+        "over_limit": usd_value > 150,
+    }
+
+
+def analyze_competitiveness(bid_price, category, sdp_entry):
+    """사이즈별 입찰 경쟁력 분석.
+    sdp_entry: sizeDeliveryPrices의 한 항목 {buyFast, buyNormal, buyOverseas, ...}
+    반환: {domestic_min, overseas_min, customer_total, competitiveness, ...}
+    """
+    buy_fast = sdp_entry.get("buyFast") or 0
+    buy_normal = sdp_entry.get("buyNormal") or 0
+    buy_overseas = sdp_entry.get("buyOverseas") or 0
+
+    # 국내 최저가 (빠른배송 + 일반배송)
+    domestic_prices = [p for p in [buy_fast, buy_normal] if p > 0]
+    domestic_min = min(domestic_prices) if domestic_prices else 0
+
+    # 해외 최저가 (다른 해외배송 판매자 = buyOverseas)
+    overseas_min = buy_overseas if buy_overseas > 0 else 0
+
+    # 해외배송 고객 총 결제금액 (우리 입찰가 기준)
+    ct = calc_customer_total(bid_price, category)
+    customer_total = ct["customer_total"]
+
+    # 경쟁력 판단
+    if domestic_min == 0:
+        competitiveness = "독점 가능"
+        comp_color = "green"
+        diff = 0
+        diff_pct = 0
+    elif customer_total <= domestic_min:
+        competitiveness = "경쟁력 있음"
+        comp_color = "green"
+        diff = customer_total - domestic_min
+        diff_pct = round(diff / domestic_min * 100, 1)
+    elif customer_total <= domestic_min * 1.2:
+        competitiveness = "보통"
+        comp_color = "yellow"
+        diff = customer_total - domestic_min
+        diff_pct = round(diff / domestic_min * 100, 1)
+    else:
+        competitiveness = "경쟁 어려움"
+        comp_color = "red"
+        diff = customer_total - domestic_min
+        diff_pct = round(diff / domestic_min * 100, 1)
+
+    return {
+        "domestic_min": domestic_min,
+        "domestic_fast": buy_fast,
+        "domestic_normal": buy_normal,
+        "overseas_min": overseas_min,
+        "customer_total": customer_total,
+        "customer_shipping": ct["shipping"],
+        "customer_customs": ct["customs"],
+        "customer_vat": ct["import_vat"],
+        "customer_usd": ct["usd_value"],
+        "customer_over_limit": ct["over_limit"],
+        "competitiveness": competitiveness,
+        "comp_color": comp_color,
+        "diff_vs_domestic": diff,
+        "diff_pct": diff_pct,
+    }
+
+
 def get_dewu_prices(model):
     """DB에서 모델별 得物 가격 조회 → {kr_size: cny_price, ...}"""
     conn = sqlite3.connect(str(PRICE_DB))
@@ -2034,13 +2148,14 @@ def calculate_margin_for_queue(cny_price, category, shipping_krw=8000):
     krw_price = round(cny_price * cny_rate * cny_margin)
     usd_equiv = round(cny_price * cny_rate / usd_rate, 2)
 
+    # 관부가세는 고객 부담 → 원가에서 제외, 참고용으로만 계산
     customs = 0
     import_vat = 0
     if usd_equiv > usd_limit:
         customs = round(cny_price * cny_rate * tariff_rate)
         import_vat = round((cny_price * cny_rate + customs) * vat_rate)
 
-    total_cost = krw_price + customs + import_vat + shipping_krw
+    total_cost = krw_price + shipping_krw  # 관부가세 제외
 
     margins = {}
     for pct in [0, 10, 15, 20]:
@@ -2500,15 +2615,19 @@ def api_queue_execute():
                     # → 숫자만 추출하여 매칭 (W215 ↔ 215)
                     sdp_list = kream.get("size_delivery_prices", [])
                     sdp_map = {}  # size → buyPrice (원본 키 + 숫자만 키 모두 등록)
+                    sdp_full_map = {}  # size → full sdp entry (배송타입별 가격 포함)
                     for sdp in sdp_list:
                         sdp_size = str(sdp.get("size", "")).strip()
                         sdp_buy = sdp.get("buyPrice") or sdp.get("buyNormal") or 0
-                        if sdp_size and sdp_buy:
-                            sdp_map[sdp_size] = sdp_buy  # 원본: "W215"
-                            # 숫자만 추출한 키도 등록: "W215" → "215"
+                        if sdp_size:
+                            sdp_full_map[sdp_size] = sdp
                             digits = re.sub(r'[^0-9.]', '', sdp_size)
                             if digits and digits != sdp_size:
-                                sdp_map[digits] = sdp_buy
+                                sdp_full_map[digits] = sdp
+                            if sdp_buy:
+                                sdp_map[sdp_size] = sdp_buy
+                                if digits and digits != sdp_size:
+                                    sdp_map[digits] = sdp_buy
 
                     if input_sizes:
                         size_margins = []
@@ -2518,14 +2637,24 @@ def api_queue_execute():
                             mi = calculate_margin_for_queue(
                                 sz_cny, item["category"], item["shipping"]
                             )
-                            # 사이즈별 즉시구매가 매칭
-                            sz_instant_buy = sdp_map.get(sz_name, 0)
+                            # 사이즈별 즉시구매가 매칭 (해외배송 우선)
+                            sz_sdp = sdp_full_map.get(sz_name, {})
+                            sz_instant_buy = (
+                                sz_sdp.get("buyOverseas")
+                                or sz_sdp.get("buyPrice")
+                                or sdp_map.get(sz_name, 0)
+                            )
+                            sz_comp = {}
+                            if sz_instant_buy and sz_sdp:
+                                sz_comp = analyze_competitiveness(
+                                    sz_instant_buy, item["category"], sz_sdp)
                             size_margins.append({
                                 "size": sz_name,
                                 "cny": sz_cny,
                                 "totalCost": mi["total_cost"],
                                 "margins": mi["margins"],
                                 "instantBuyPrice": sz_instant_buy,
+                                "comp": sz_comp,
                             })
                         # 대표 마진 (최저 CNY 기준)
                         min_cost = min(sm["totalCost"] for sm in size_margins)
@@ -2539,6 +2668,17 @@ def api_queue_execute():
                         margin_info = calculate_margin_for_queue(
                             item["cny"], item["category"], item["shipping"]
                         )
+
+                    # ONE SIZE 경쟁력 분석 (사이즈 없는 경우)
+                    one_size_comp = {}
+                    if not size_margins and instant_buy:
+                        os_key = item.get("size", "ONE SIZE")
+                        os_sdp = sdp_full_map.get(os_key, {})
+                        if not os_sdp and sdp_full_map:
+                            os_sdp = next(iter(sdp_full_map.values()), {})
+                        if os_sdp:
+                            one_size_comp = analyze_competitiveness(
+                                instant_buy, item["category"], os_sdp)
 
                     # 시장 분류 계산
                     market_info = {"market_type": "데이터 부족", "market_color": "gray",
@@ -2581,6 +2721,8 @@ def api_queue_execute():
                         "profitableCount": market_info["profitable_count"],
                         "marketTotalCount": market_info["total_count"],
                         "marketDetails": market_info["details"],
+                        # 경쟁력 분석 (ONE SIZE용)
+                        "comp": one_size_comp,
                     }
                     item["status"] = "완료"
                     cost_str = f"원가 {margin_info['total_cost']:,}원"
@@ -2681,15 +2823,9 @@ def api_market_check():
     for key, info in dewu["sizes"].items():
         cny = info["cny"]
         kr_size = info["kr_size"] or info["eu_size"]
-        # 원가 계산
+        # 원가 계산 (관부가세는 고객 부담 → 제외)
         krw_buy = round(cny * cny_rate * cny_margin)
-        usd_equiv = cny * cny_rate / usd_rate
-        customs = 0
-        import_vat = 0
-        if usd_equiv > usd_limit:
-            customs = round(cny * cny_rate * tariff_rate)
-            import_vat = round((cny * cny_rate + customs) * 0.10)
-        total_cost = krw_buy + customs + import_vat + 8000
+        total_cost = krw_buy + 8000
 
         # KREAM 가격 매칭
         kream_sell = kream_prices.get(kr_size) or kream_prices.get(info["eu_size"]) or kream_prices.get("ALL") or 0
@@ -3129,6 +3265,7 @@ def api_my_bids_sync():
                     "model": b.get("model", ""),
                     "size": b.get("size", "ONE SIZE"),
                     "price": b.get("bidPrice", 0),
+                    "rank": b.get("bidRank"),
                     "date": datetime.now().strftime("%Y/%m/%d %H:%M"),
                     "source": "sync",
                     "orderId": b.get("orderId", ""),

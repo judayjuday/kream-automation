@@ -1,5 +1,5 @@
 {
-  "analyzed_at": "2026-04-16 14:22",
+  "analyzed_at": "2026-04-18 02:10",
   "params": {
     "cny_rate": 217.3,
     "tariff": 0.13,
@@ -21,11 +21,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 127072,
-          "kream_sell": 145000,
-          "sell_price": 145000,
-          "settlement": 139417,
-          "margin": 12345,
-          "margin_rate": 9.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU37",
@@ -37,11 +33,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 129758,
-          "kream_sell": 110000,
-          "sell_price": 110000,
-          "settlement": 105765,
-          "margin": -23993,
-          "margin_rate": -18.5
+          "kream_sell": null
         },
         {
           "eu_size": "EU37.5",
@@ -53,11 +45,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 134458,
-          "kream_sell": 121000,
-          "sell_price": 121000,
-          "settlement": 116341,
-          "margin": -18117,
-          "margin_rate": -13.5
+          "kream_sell": null
         },
         {
           "eu_size": "EU38",
@@ -69,11 +57,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 134458,
-          "kream_sell": 162000,
-          "sell_price": 162000,
-          "settlement": 155763,
-          "margin": 21305,
-          "margin_rate": 15.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU39",
@@ -85,11 +69,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 119686,
-          "kream_sell": 145000,
-          "sell_price": 145000,
-          "settlement": 139417,
-          "margin": 19731,
-          "margin_rate": 16.5
+          "kream_sell": null
         },
         {
           "eu_size": "EU39.5",
@@ -101,11 +81,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 120357,
-          "kream_sell": 146000,
-          "sell_price": 146000,
-          "settlement": 140379,
-          "margin": 20022,
-          "margin_rate": 16.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU40",
@@ -117,11 +93,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 116328,
-          "kream_sell": 142000,
-          "sell_price": 142000,
-          "settlement": 136533,
-          "margin": 20205,
-          "margin_rate": 17.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU40.5",
@@ -133,11 +105,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 115433,
-          "kream_sell": 139000,
-          "sell_price": 139000,
-          "settlement": 133649,
-          "margin": 18216,
-          "margin_rate": 15.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU41.5",
@@ -149,11 +117,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 115209,
-          "kream_sell": 135000,
-          "sell_price": 135000,
-          "settlement": 129803,
-          "margin": 14594,
-          "margin_rate": 12.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU42",
@@ -165,11 +129,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 119462,
-          "kream_sell": 120000,
-          "sell_price": 120000,
-          "settlement": 115380,
-          "margin": -4082,
-          "margin_rate": -3.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU42.5",
@@ -181,11 +141,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117895,
-          "kream_sell": 143000,
-          "sell_price": 143000,
-          "settlement": 137495,
-          "margin": 19600,
-          "margin_rate": 16.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU43.5",
@@ -197,11 +153,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 123491,
-          "kream_sell": 154000,
-          "sell_price": 154000,
-          "settlement": 148071,
-          "margin": 24580,
-          "margin_rate": 19.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU44",
@@ -213,11 +165,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 121029,
-          "kream_sell": 145000,
-          "sell_price": 145000,
-          "settlement": 139417,
-          "margin": 18388,
-          "margin_rate": 15.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU44.5",
@@ -241,11 +189,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 133562,
-          "kream_sell": 214000,
-          "sell_price": 214000,
-          "settlement": 205761,
-          "margin": 72199,
-          "margin_rate": 54.1
+          "kream_sell": null
         },
         {
           "eu_size": "EU46",
@@ -257,16 +201,12 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 136472,
-          "kream_sell": 221000,
-          "sell_price": 221000,
-          "settlement": 212491,
-          "margin": 76019,
-          "margin_rate": 55.7
+          "kream_sell": null
         }
       ],
-      "avg_margin": 15.4,
-      "min_margin": -18.5,
-      "max_margin": 55.7
+      "avg_margin": null,
+      "min_margin": null,
+      "max_margin": null
     },
     "M1906AD": {
       "name": "뉴발란스 1906AD",
@@ -281,11 +221,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 179893,
-          "kream_sell": 163000,
-          "sell_price": 163000,
-          "settlement": 156725,
-          "margin": -23168,
-          "margin_rate": -12.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU37",
@@ -297,11 +233,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 179893,
-          "kream_sell": 167000,
-          "sell_price": 167000,
-          "settlement": 160571,
-          "margin": -19322,
-          "margin_rate": -10.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU37.5",
@@ -313,11 +245,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 195560,
-          "kream_sell": 193000,
-          "sell_price": 193000,
-          "settlement": 185569,
-          "margin": -9991,
-          "margin_rate": -5.1
+          "kream_sell": null
         },
         {
           "eu_size": "EU38",
@@ -329,11 +257,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 196679,
-          "kream_sell": 187000,
-          "sell_price": 187000,
-          "settlement": 179801,
-          "margin": -16878,
-          "margin_rate": -8.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU38.5",
@@ -345,11 +269,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 206304,
-          "kream_sell": 196000,
-          "sell_price": 196000,
-          "settlement": 188454,
-          "margin": -17850,
-          "margin_rate": -8.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU39.5",
@@ -361,11 +281,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 191532,
-          "kream_sell": 187000,
-          "sell_price": 187000,
-          "settlement": 179801,
-          "margin": -11731,
-          "margin_rate": -6.1
+          "kream_sell": null
         },
         {
           "eu_size": "EU40",
@@ -377,11 +293,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 197575,
-          "kream_sell": 197000,
-          "sell_price": 197000,
-          "settlement": 189415,
-          "margin": -8160,
-          "margin_rate": -4.1
+          "kream_sell": null
         },
         {
           "eu_size": "EU40.5",
@@ -393,11 +305,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 200484,
-          "kream_sell": 194000,
-          "sell_price": 194000,
-          "settlement": 186531,
-          "margin": -13953,
-          "margin_rate": -7.0
+          "kream_sell": null
         },
         {
           "eu_size": "EU41.5",
@@ -409,11 +317,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 194665,
-          "kream_sell": 193000,
-          "sell_price": 193000,
-          "settlement": 185569,
-          "margin": -9096,
-          "margin_rate": -4.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU42",
@@ -425,11 +329,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 193546,
-          "kream_sell": 189000,
-          "sell_price": 189000,
-          "settlement": 181723,
-          "margin": -11823,
-          "margin_rate": -6.1
+          "kream_sell": null
         },
         {
           "eu_size": "EU42.5",
@@ -441,11 +341,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 197575,
-          "kream_sell": 185000,
-          "sell_price": 185000,
-          "settlement": 177877,
-          "margin": -19698,
-          "margin_rate": -10.0
+          "kream_sell": null
         },
         {
           "eu_size": "EU43",
@@ -457,11 +353,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 208094,
-          "kream_sell": 176000,
-          "sell_price": 176000,
-          "settlement": 169224,
-          "margin": -38870,
-          "margin_rate": -18.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU44",
@@ -473,11 +365,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 188174,
-          "kream_sell": 175000,
-          "sell_price": 175000,
-          "settlement": 168263,
-          "margin": -19911,
-          "margin_rate": -10.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU44.5",
@@ -489,11 +377,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 213466,
-          "kream_sell": 228000,
-          "sell_price": 228000,
-          "settlement": 219222,
-          "margin": 5756,
-          "margin_rate": 2.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU45",
@@ -505,16 +389,12 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 231148,
-          "kream_sell": 500000,
-          "sell_price": 500000,
-          "settlement": 480750,
-          "margin": 249602,
-          "margin_rate": 108.0
+          "kream_sell": null
         }
       ],
-      "avg_margin": -0.2,
-      "min_margin": -18.7,
-      "max_margin": 108.0
+      "avg_margin": null,
+      "min_margin": null,
+      "max_margin": null
     },
     "M1906AG": {
       "name": "뉴발란스 1906AG",
@@ -528,12 +408,8 @@
           "customs": 28757,
           "import_vat": 24997,
           "shipping": 8000,
-          "total_cost": 289602,
-          "kream_sell": 308000,
-          "sell_price": 308000,
-          "settlement": 296142,
-          "margin": 6540,
-          "margin_rate": 2.3
+          "total_cost": 235848,
+          "kream_sell": null
         },
         {
           "eu_size": "EU37",
@@ -545,11 +421,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 222642,
-          "kream_sell": 209000,
-          "sell_price": 209000,
-          "settlement": 200953,
-          "margin": -21689,
-          "margin_rate": -9.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU37.5",
@@ -560,12 +432,8 @@
           "customs": 28644,
           "import_vat": 24899,
           "shipping": 8000,
-          "total_cost": 288495,
-          "kream_sell": 230000,
-          "sell_price": 230000,
-          "settlement": 221145,
-          "margin": -67350,
-          "margin_rate": -23.3
+          "total_cost": 234952,
+          "kream_sell": null
         },
         {
           "eu_size": "EU38",
@@ -576,12 +444,8 @@
           "customs": 28870,
           "import_vat": 25095,
           "shipping": 8000,
-          "total_cost": 290708,
-          "kream_sell": 225000,
-          "sell_price": 225000,
-          "settlement": 216337,
-          "margin": -74371,
-          "margin_rate": -25.6
+          "total_cost": 236743,
+          "kream_sell": null
         },
         {
           "eu_size": "EU38.5",
@@ -592,12 +456,8 @@
           "customs": 29605,
           "import_vat": 25734,
           "shipping": 8000,
-          "total_cost": 297901,
-          "kream_sell": 222000,
-          "sell_price": 222000,
-          "settlement": 213453,
-          "margin": -84448,
-          "margin_rate": -28.3
+          "total_cost": 242562,
+          "kream_sell": null
         },
         {
           "eu_size": "EU39.5",
@@ -609,11 +469,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 216375,
-          "kream_sell": 227000,
-          "sell_price": 227000,
-          "settlement": 218261,
-          "margin": 1886,
-          "margin_rate": 0.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU40",
@@ -625,11 +481,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 213690,
-          "kream_sell": 207000,
-          "sell_price": 207000,
-          "settlement": 199031,
-          "margin": -14659,
-          "margin_rate": -6.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU40.5",
@@ -641,11 +493,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 220404,
-          "kream_sell": 216000,
-          "sell_price": 216000,
-          "settlement": 207684,
-          "margin": -12720,
-          "margin_rate": -5.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU41.5",
@@ -657,11 +505,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 199813,
-          "kream_sell": 179000,
-          "sell_price": 179000,
-          "settlement": 172109,
-          "margin": -27704,
-          "margin_rate": -13.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU42",
@@ -673,11 +517,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 195560,
-          "kream_sell": 180000,
-          "sell_price": 180000,
-          "settlement": 173070,
-          "margin": -22490,
-          "margin_rate": -11.5
+          "kream_sell": null
         },
         {
           "eu_size": "EU42.5",
@@ -689,11 +529,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 204737,
-          "kream_sell": 218000,
-          "sell_price": 218000,
-          "settlement": 209607,
-          "margin": 4870,
-          "margin_rate": 2.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU43",
@@ -705,11 +541,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 198918,
-          "kream_sell": 199000,
-          "sell_price": 199000,
-          "settlement": 191339,
-          "margin": -7579,
-          "margin_rate": -3.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU44",
@@ -721,11 +553,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 199813,
-          "kream_sell": 172000,
-          "sell_price": 172000,
-          "settlement": 165378,
-          "margin": -34435,
-          "margin_rate": -17.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU44.5",
@@ -736,12 +564,8 @@
           "customs": 32232,
           "import_vat": 28017,
           "shipping": 8000,
-          "total_cost": 323626,
-          "kream_sell": 196000,
-          "sell_price": 196000,
-          "settlement": 188454,
-          "margin": -135172,
-          "margin_rate": -41.8
+          "total_cost": 263377,
+          "kream_sell": null
         },
         {
           "eu_size": "EU45",
@@ -752,17 +576,13 @@
           "customs": 29068,
           "import_vat": 25267,
           "shipping": 8000,
-          "total_cost": 292645,
-          "kream_sell": 271000,
-          "sell_price": 271000,
-          "settlement": 260567,
-          "margin": -32078,
-          "margin_rate": -11.0
+          "total_cost": 238310,
+          "kream_sell": null
         }
       ],
-      "avg_margin": -12.9,
-      "min_margin": -41.8,
-      "max_margin": 2.4
+      "avg_margin": null,
+      "min_margin": null,
+      "max_margin": null
     },
     "1183B799-101": {
       "name": "오니츠카 중국단독 B799",
@@ -789,11 +609,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 102452,
-          "kream_sell": 100000,
-          "sell_price": 100000,
-          "settlement": 96150,
-          "margin": -6302,
-          "margin_rate": -6.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU37.5",
@@ -805,11 +621,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 105137,
-          "kream_sell": 96000,
-          "sell_price": 96000,
-          "settlement": 92304,
-          "margin": -12833,
-          "margin_rate": -12.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU38",
@@ -821,11 +633,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 105809,
-          "kream_sell": 103000,
-          "sell_price": 103000,
-          "settlement": 99035,
-          "margin": -6774,
-          "margin_rate": -6.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU39",
@@ -837,11 +645,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 102675,
-          "kream_sell": 107000,
-          "sell_price": 107000,
-          "settlement": 102881,
-          "margin": 206,
-          "margin_rate": 0.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU39.5",
@@ -853,11 +657,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 106033,
-          "kream_sell": 94000,
-          "sell_price": 94000,
-          "settlement": 90381,
-          "margin": -15652,
-          "margin_rate": -14.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU40",
@@ -869,11 +669,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 106704,
-          "kream_sell": 102000,
-          "sell_price": 102000,
-          "settlement": 98073,
-          "margin": -8631,
-          "margin_rate": -8.1
+          "kream_sell": null
         },
         {
           "eu_size": "EU40.5",
@@ -885,11 +681,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 106033,
-          "kream_sell": 100000,
-          "sell_price": 100000,
-          "settlement": 96150,
-          "margin": -9883,
-          "margin_rate": -9.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU41.5",
@@ -901,11 +693,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 104018,
-          "kream_sell": 100000,
-          "sell_price": 100000,
-          "settlement": 96150,
-          "margin": -7868,
-          "margin_rate": -7.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU42",
@@ -917,11 +705,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 119238,
-          "kream_sell": 103000,
-          "sell_price": 103000,
-          "settlement": 99035,
-          "margin": -20203,
-          "margin_rate": -16.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU42.5",
@@ -933,11 +717,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 142068,
-          "kream_sell": 103000,
-          "sell_price": 103000,
-          "settlement": 99035,
-          "margin": -43033,
-          "margin_rate": -30.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU43.5",
@@ -949,11 +729,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 118567,
-          "kream_sell": 119000,
-          "sell_price": 119000,
-          "settlement": 114419,
-          "margin": -4148,
-          "margin_rate": -3.5
+          "kream_sell": null
         },
         {
           "eu_size": "EU44",
@@ -965,11 +741,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 115881,
-          "kream_sell": 126000,
-          "sell_price": 126000,
-          "settlement": 121149,
-          "margin": 5268,
-          "margin_rate": 4.5
+          "kream_sell": null
         },
         {
           "eu_size": "EU44.5",
@@ -981,11 +753,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 114538,
-          "kream_sell": 129000,
-          "sell_price": 129000,
-          "settlement": 124033,
-          "margin": 9495,
-          "margin_rate": 8.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU45",
@@ -1009,16 +777,12 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 127519,
-          "kream_sell": 160000,
-          "sell_price": 160000,
-          "settlement": 153840,
-          "margin": 26321,
-          "margin_rate": 20.6
+          "kream_sell": null
         }
       ],
-      "avg_margin": -5.8,
-      "min_margin": -30.3,
-      "max_margin": 20.6
+      "avg_margin": null,
+      "min_margin": null,
+      "max_margin": null
     },
     "1203A714-020": {
       "name": "오니츠카 중국단독 A714",
@@ -1032,12 +796,8 @@
           "customs": 30142,
           "import_vat": 26200,
           "shipping": 8000,
-          "total_cost": 303157,
-          "kream_sell": 266000,
-          "sell_price": 266000,
-          "settlement": 255759,
-          "margin": -47398,
-          "margin_rate": -15.6
+          "total_cost": 246815,
+          "kream_sell": null
         },
         {
           "eu_size": "EU39",
@@ -1048,12 +808,8 @@
           "customs": 29887,
           "import_vat": 25979,
           "shipping": 8000,
-          "total_cost": 300667,
-          "kream_sell": 264000,
-          "sell_price": 264000,
-          "settlement": 253836,
-          "margin": -46831,
-          "margin_rate": -15.6
+          "total_cost": 244801,
+          "kream_sell": null
         },
         {
           "eu_size": "EU39.5",
@@ -1065,11 +821,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 218390,
-          "kream_sell": 233000,
-          "sell_price": 233000,
-          "settlement": 224029,
-          "margin": 5639,
-          "margin_rate": 2.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU40",
@@ -1081,11 +833,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 128415,
-          "kream_sell": 160000,
-          "sell_price": 160000,
-          "settlement": 153840,
-          "margin": 25425,
-          "margin_rate": 19.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU40.5",
@@ -1097,11 +845,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 126400,
-          "kream_sell": 134000,
-          "sell_price": 134000,
-          "settlement": 128841,
-          "margin": 2441,
-          "margin_rate": 1.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU41.5",
@@ -1113,11 +857,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 126624,
-          "kream_sell": 148000,
-          "sell_price": 148000,
-          "settlement": 142302,
-          "margin": 15678,
-          "margin_rate": 12.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU42",
@@ -1129,11 +869,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 126624,
-          "kream_sell": 140000,
-          "sell_price": 140000,
-          "settlement": 134610,
-          "margin": 7986,
-          "margin_rate": 6.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU42.5",
@@ -1144,12 +880,8 @@
           "customs": 40170,
           "import_vat": 34917,
           "shipping": 8000,
-          "total_cost": 401358,
-          "kream_sell": 127000,
-          "sell_price": 127000,
-          "settlement": 122111,
-          "margin": -279247,
-          "margin_rate": -69.6
+          "total_cost": 326271,
+          "kream_sell": null
         },
         {
           "eu_size": "EU43.5",
@@ -1161,11 +893,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 128415,
-          "kream_sell": 127000,
-          "sell_price": 127000,
-          "settlement": 122111,
-          "margin": -6304,
-          "margin_rate": -4.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU44",
@@ -1177,16 +905,12 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 164449,
-          "kream_sell": 202000,
-          "sell_price": 202000,
-          "settlement": 194223,
-          "margin": 29774,
-          "margin_rate": 18.1
+          "kream_sell": null
         }
       ],
-      "avg_margin": -4.5,
-      "min_margin": -69.6,
-      "max_margin": 19.8
+      "avg_margin": null,
+      "min_margin": null,
+      "max_margin": null
     },
     "D1GH241906": {
       "name": "미즈노 중국단독",
@@ -1201,11 +925,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 186608,
-          "kream_sell": 174000,
-          "sell_price": 174000,
-          "settlement": 167301,
-          "margin": -19307,
-          "margin_rate": -10.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU36.5",
@@ -1217,11 +937,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 178102,
-          "kream_sell": 176000,
-          "sell_price": 176000,
-          "settlement": 169224,
-          "margin": -8878,
-          "margin_rate": -5.0
+          "kream_sell": null
         },
         {
           "eu_size": "EU37",
@@ -1233,11 +949,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 153259,
-          "kream_sell": 152000,
-          "sell_price": 152000,
-          "settlement": 146148,
-          "margin": -7111,
-          "margin_rate": -4.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU38",
@@ -1249,11 +961,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 153259,
-          "kream_sell": 175000,
-          "sell_price": 175000,
-          "settlement": 168263,
-          "margin": 15004,
-          "margin_rate": 9.8
+          "kream_sell": null
         },
         {
           "eu_size": "EU38.5",
@@ -1265,11 +973,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 160197,
-          "kream_sell": 138000,
-          "sell_price": 138000,
-          "settlement": 132687,
-          "margin": -27510,
-          "margin_rate": -17.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU39",
@@ -1281,11 +985,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 157063,
-          "kream_sell": 139000,
-          "sell_price": 139000,
-          "settlement": 133649,
-          "margin": -23414,
-          "margin_rate": -14.9
+          "kream_sell": null
         },
         {
           "eu_size": "EU40",
@@ -1297,11 +997,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 132000,
-          "sell_price": 132000,
-          "settlement": 126918,
-          "margin": 9694,
-          "margin_rate": 8.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU40.5",
@@ -1313,11 +1009,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 138000,
-          "sell_price": 138000,
-          "settlement": 132687,
-          "margin": 15463,
-          "margin_rate": 13.2
+          "kream_sell": null
         },
         {
           "eu_size": "EU41",
@@ -1329,11 +1021,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 137000,
-          "sell_price": 137000,
-          "settlement": 131725,
-          "margin": 14501,
-          "margin_rate": 12.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU42",
@@ -1345,11 +1033,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 137000,
-          "sell_price": 137000,
-          "settlement": 131725,
-          "margin": 14501,
-          "margin_rate": 12.4
+          "kream_sell": null
         },
         {
           "eu_size": "EU42.5",
@@ -1361,11 +1045,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 136000,
-          "sell_price": 136000,
-          "settlement": 130764,
-          "margin": 13540,
-          "margin_rate": 11.6
+          "kream_sell": null
         },
         {
           "eu_size": "EU43",
@@ -1377,11 +1057,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 135000,
-          "sell_price": 135000,
-          "settlement": 129803,
-          "margin": 12579,
-          "margin_rate": 10.7
+          "kream_sell": null
         },
         {
           "eu_size": "EU44",
@@ -1393,11 +1069,7 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 126000,
-          "sell_price": 126000,
-          "settlement": 121149,
-          "margin": 3925,
-          "margin_rate": 3.3
+          "kream_sell": null
         },
         {
           "eu_size": "EU44.5",
@@ -1409,16 +1081,12 @@
           "import_vat": 0,
           "shipping": 8000,
           "total_cost": 117224,
-          "kream_sell": 138000,
-          "sell_price": 138000,
-          "settlement": 132687,
-          "margin": 15463,
-          "margin_rate": 13.2
+          "kream_sell": null
         }
       ],
-      "avg_margin": 3.1,
-      "min_margin": -17.2,
-      "max_margin": 13.2
+      "avg_margin": null,
+      "min_margin": null,
+      "max_margin": null
     }
   }
 }

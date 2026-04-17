@@ -336,16 +336,17 @@ function calcCost(cny, category, shipFee) {
   const usdEquiv = Math.round(cny * SETTINGS.cnyRate / SETTINGS.usdRate * 100) / 100;
   const overLimit = usdEquiv > SETTINGS.usdLimit;
   const tariff = (category === '가방') ? SETTINGS.tariffBag : SETTINGS.tariffShoe;
-  
+
+  // 관부가세는 고객 부담 → 원가에서 제외, 참고용으로만 계산
   let customs = 0, importVat = 0;
   if (overLimit) {
     customs = Math.round(cny * SETTINGS.cnyRate * tariff);
     importVat = Math.round((cny * SETTINGS.cnyRate + customs) * SETTINGS.vatRate);
   }
-  
+
   return {
     buyKRW, usdEquiv, overLimit, customs, importVat,
-    totalCost: buyKRW + customs + importVat + shipFee,
+    totalCost: buyKRW + shipFee,  // 관부가세 제외
     shipFee, tariff, cny, rate
   };
 }
@@ -503,17 +504,17 @@ function calculateMargin() {
       <div class="metric-sub">CNY ${cny} × ${Math.round(cost.rate)}원</div>
     </div>
     <div class="metric">
-      <div class="metric-label">관세 + 부가세</div>
-      <div class="metric-value">${cost.overLimit ? (cost.customs + cost.importVat).toLocaleString() + '원' : '면세'}</div>
-      <div class="metric-sub">${cost.usdEquiv}$ ${cost.overLimit ? '(150$ 초과)' : '(150$ 이하)'}</div>
-    </div>
-    <div class="metric">
       <div class="metric-label">해외 배송비</div>
       <div class="metric-value">${cost.shipFee.toLocaleString()}원</div>
     </div>
     <div class="metric metric-blue">
       <div class="metric-label">총 원가</div>
       <div class="metric-value">${cost.totalCost.toLocaleString()}원</div>
+    </div>
+    <div class="metric" style="opacity:0.6">
+      <div class="metric-label">고객 부담 관부가세 (참고)</div>
+      <div class="metric-value">${cost.overLimit ? (cost.customs + cost.importVat).toLocaleString() + '원' : '면세'}</div>
+      <div class="metric-sub">${cost.usdEquiv}$ ${cost.overLimit ? '(150$ 초과)' : '(150$ 이하)'}</div>
     </div>
   `;
   document.getElementById('margin-metrics').innerHTML = metricsHtml;
@@ -748,8 +749,9 @@ function executeRegister() {
             addHistory(gosiAlready ? '입찰' : '고시+입찰', productId, model, selectedPrice);
             const regSize = size || 'ONE SIZE';
             const regEntry = { productId, model, size: regSize, price: selectedPrice, date: new Date().toLocaleString('ko-KR'), source: 'placed' };
-            myBidsMap[`${productId}_${regSize}`] = regEntry;
-            myBidsLocal.bids = (myBidsLocal.bids||[]).filter(b => !(b.productId === productId && b.size === regSize));
+            const regKey = `${productId}_${regSize}`;
+            if (!myBidsMap[regKey]) myBidsMap[regKey] = [];
+            myBidsMap[regKey].push(regEntry);
             myBidsLocal.bids.push(regEntry);
             updateSyncStatus();
           } else if (task.status === 'error') {
@@ -914,7 +916,7 @@ function quickCalc() {
     <div class="metric metric-blue">
       <div class="metric-label">총 원가</div>
       <div class="metric-value">${cost.totalCost.toLocaleString()}원</div>
-      <div class="metric-sub">구매 ${cost.buyKRW.toLocaleString()} + 관부가세 ${(cost.customs+cost.importVat).toLocaleString()} + 배송 ${ship.toLocaleString()}</div>
+      <div class="metric-sub">구매 ${cost.buyKRW.toLocaleString()} + 배송 ${ship.toLocaleString()}${cost.overLimit ? ' | 고객부담 관부가세 '+(cost.customs+cost.importVat).toLocaleString()+'원' : ''}</div>
     </div>
     <div class="metric">
       <div class="metric-label">정산금액</div>
@@ -1952,14 +1954,56 @@ function discGoBid(pid, model) {
 
 // ═══ 내 입찰 현황 ═══
 let myBidsLocal = { bids: [], lastSync: null };
-let myBidsMap = {};  // key: `${productId}_${size}` → bid entry
+let myBidsMap = {};  // key: `${productId}_${size}` → [bid, bid, ...] (복수 입찰 지원)
 
 function myBidsRebuildMap() {
   myBidsMap = {};
   (myBidsLocal.bids || []).forEach(b => {
     const key = `${b.productId}_${b.size}`;
-    myBidsMap[key] = b;
+    if (!myBidsMap[key]) myBidsMap[key] = [];
+    myBidsMap[key].push(b);
   });
+}
+
+// 내 입찰 셀 HTML 렌더링 (순위 포함)
+function renderMyBidCell(productId, size) {
+  const key = `${productId}_${size}`;
+  const entries = myBidsMap[key];
+  if (!entries || entries.length === 0) return '<span class="text-muted">-</span>';
+  return entries.map(e => {
+    const rankText = e.rank ? ` (${e.rank}위)` : '';
+    const isFirst = e.rank === 1;
+    const bg = isFirst ? 'background:#e6f9e6;' : e.rank ? 'background:#fff3e0;' : '';
+    const color = isFirst ? 'color:#1a7a1a' : e.rank ? 'color:#e65100' : 'color:var(--blue)';
+    return `<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-weight:700;font-size:11px;${bg}${color}">${e.price.toLocaleString()}원${rankText}</span>`;
+  }).join('<br>');
+}
+
+// 경쟁력 분석 툴팁/배지 렌더링
+function renderCompBadge(comp) {
+  if (!comp || !comp.competitiveness) return '';
+  const cMap = {green:'#e6f9e6;color:#1a7a1a', yellow:'#fff8e0;color:#8a6d00', red:'#ffe6e6;color:#cc0000'};
+  const bg = cMap[comp.comp_color] || cMap.green;
+  const domLabel = comp.domestic_min ? `국내${comp.domestic_min.toLocaleString()}` : '국내없음';
+  const diff = comp.diff_vs_domestic ? (comp.diff_vs_domestic > 0 ? '+' : '') + comp.diff_vs_domestic.toLocaleString() + '원' : '';
+  const tip = `국내최저: ${comp.domestic_min ? comp.domestic_min.toLocaleString()+'원' : '없음'}\\n해외최저: ${comp.overseas_min ? comp.overseas_min.toLocaleString()+'원' : '없음'}\\n고객총액: ${comp.customer_total ? comp.customer_total.toLocaleString()+'원' : '-'}\\n(입찰가+배송3,000+관부가세${comp.customer_customs ? comp.customer_customs.toLocaleString() : '0'}+${comp.customer_vat ? comp.customer_vat.toLocaleString() : '0'})\\n국내대비: ${diff} (${comp.diff_pct||0}%)`;
+  return `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${bg};cursor:help;white-space:nowrap" title="${tip}">${comp.competitiveness}</span>`;
+}
+
+// 경쟁력 상세 행 (사이즈별 테이블 아래 표시)
+function renderCompDetail(comp) {
+  if (!comp || !comp.competitiveness) return '';
+  const parts = [];
+  if (comp.domestic_min) parts.push(`국내 <b>${comp.domestic_min.toLocaleString()}</b>`);
+  else parts.push(`<span style="color:#1a7a1a">국내없음</span>`);
+  if (comp.overseas_min) parts.push(`해외 <b>${comp.overseas_min.toLocaleString()}</b>`);
+  parts.push(`고객총액 <b>${(comp.customer_total||0).toLocaleString()}</b>`);
+  if (comp.domestic_min && comp.diff_vs_domestic !== 0) {
+    const d = comp.diff_vs_domestic;
+    const c = d <= 0 ? '#1a7a1a' : d / comp.domestic_min <= 0.2 ? '#8a6d00' : '#cc0000';
+    parts.push(`<span style="color:${c}">${d>0?'+':''}${d.toLocaleString()} (${comp.diff_pct}%)</span>`);
+  }
+  return `<span style="font-size:10px;color:var(--text3)">${parts.join(' | ')}</span>`;
 }
 
 function loadMyBidsLocal() {
@@ -2553,6 +2597,35 @@ function qToggleSortModel() {
 
 function roundUp1000(n) { return Math.ceil(n / 1000) * 1000; }
 
+// 사이즈별 해외배송 즉시구매가 조회 (정확한 사이즈 매칭)
+function _getSizeInstantBuy(item, sz) {
+  if (!item.result) return 0;
+  const r = item.result;
+
+  // 1순위: sizeMargins의 instantBuyPrice (서버에서 계산된 값)
+  if (sz && sz.instantBuyPrice) return sz.instantBuyPrice;
+
+  // 2순위: sizeDeliveryPrices에서 해당 사이즈 직접 검색
+  if (sz && r.sizeDeliveryPrices && r.sizeDeliveryPrices.length > 0) {
+    const szStr = String(sz.size).trim();
+    const szDigits = szStr.replace(/[^0-9.]/g, '');
+    const sdp = r.sizeDeliveryPrices.find(s => {
+      const sStr = String(s.size).trim();
+      return sStr === szStr || sStr.replace(/[^0-9.]/g, '') === szDigits;
+    });
+    if (sdp) {
+      // 해외배송 가격 우선 (우리는 해외배송 판매자)
+      return sdp.buyOverseas || sdp.buyPrice || sdp.buyNormal || 0;
+    }
+  }
+
+  // 3순위: 사이즈가 없는 경우 (ONE SIZE) → product-level
+  if (!sz) return r.instantBuyPrice || 0;
+
+  // 사이즈 상품인데 매칭 실패 → 0 (product-level로 대체하지 않음)
+  return 0;
+}
+
 function getBidPrice(item, sz) {
   const defStrategy = document.getElementById('q-default-margin').value;
   const strategy = item.bid_strategy || item.selectedMargin || defStrategy;
@@ -2565,24 +2638,9 @@ function getBidPrice(item, sz) {
     if (bidPrices[item.id] != null) return bidPrices[item.id];
   }
 
-  // 언더컷: 해당 사이즈의 즉시구매가 - 설정금액
+  // 언더컷: 해당 사이즈의 해외배송 즉시구매가 - 설정금액
   if (strategy === 'undercut' || strategy === 'undercut3k') {
-    let kp = 0;
-    if (sz && sz.instantBuyPrice) {
-      kp = sz.instantBuyPrice;
-    } else if (sz && item.result && item.result.sizeDeliveryPrices) {
-      // sizeDeliveryPrices에서 검색 (W215 ↔ 215 매칭)
-      const szStr = String(sz.size).trim();
-      const szDigits = szStr.replace(/[^0-9.]/g, '');
-      const sdp = item.result.sizeDeliveryPrices.find(s => {
-        const sStr = String(s.size).trim();
-        return sStr === szStr || sStr.replace(/[^0-9.]/g, '') === szDigits;
-      });
-      if (sdp) kp = sdp.buyPrice || sdp.buyNormal || 0;
-    }
-    if (!kp && item.result) {
-      kp = item.result.instantBuyPrice || 0;
-    }
+    let kp = _getSizeInstantBuy(item, sz);
     const uc = strategy === 'undercut3k' ? 3000 : (SETTINGS.undercutAmount || 1000);
     return kp > 0 ? roundUp1000(kp - uc) : 0;
   }
@@ -2676,19 +2734,16 @@ function queueBuildResults() {
                      : pi.profit < 10000 ? 'var(--warning-light)'
                      : '';
       const profitWarn = pi.profit < 5000 ? ' 마진부족' : '';
-      const myBidKey0 = `${r.productId}_${item.size || 'ONE SIZE'}`;
-      const myBidEntry0 = myBidsMap[myBidKey0];
-      const myBidCell0 = myBidEntry0
-        ? `<span style="color:var(--blue);font-weight:700">${myBidEntry0.price.toLocaleString()}원</span>`
-        : '<span class="text-muted">-</span>';
+      const myBidCell0 = renderMyBidCell(r.productId, item.size || 'ONE SIZE');
 
+      const compBadge0 = renderCompBadge(r.comp);
       html += `<tr>
         <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitOk ? 'checked' : ''}></td>
         <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a> ${marketBadge}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
         <td>${catDd}</td>
         <td style="font-size:12px">${(r.totalCost||0).toLocaleString()}</td>
-        <td style="font-size:12px">${kp ? kp.toLocaleString() : '-'}</td>
+        <td style="font-size:12px">${kp ? kp.toLocaleString() : '-'}<br>${compBadge0}</td>
         <td style="font-size:12px">${myBidCell0}</td>
         <td style="background:var(--accent-light)">
           <input type="number" class="form-input" value="${bp}" step="1000"
@@ -2748,24 +2803,16 @@ function queueBuildResults() {
                    : pi.profit < 10000 ? 'var(--warning-light)'
                    : '';
         const szWarn = pi.profit < 5000 ? ' 마진부족' : '';
-        // 사이즈별 즉시구매가 (W215 ↔ 215 매칭)
-        const _szDigits = String(sz.size).replace(/[^0-9.]/g, '');
-        const _sdpMatch = (r.sizeDeliveryPrices||[]).find(s => {
-          const sStr = String(s.size).trim();
-          return sStr === sz.size || sStr.replace(/[^0-9.]/g, '') === _szDigits;
-        });
-        const szKp = sz.instantBuyPrice || (_sdpMatch ? (_sdpMatch.buyPrice||_sdpMatch.buyNormal) : null) || kp;
-        const myBidKeySz = `${r.productId}_${sz.size}`;
-        const myBidEntrySz = myBidsMap[myBidKeySz];
-        const myBidCellSz = myBidEntrySz
-          ? `<span style="color:var(--blue);font-weight:700">${myBidEntrySz.price.toLocaleString()}원</span>`
-          : '<span class="text-muted">-</span>';
+        // 사이즈별 즉시구매가 (해외배송 우선, product-level fallback 안 함)
+        const szKp = _getSizeInstantBuy(item, sz);
+        const szCompBadge = renderCompBadge(sz.comp);
+        const myBidCellSz = renderMyBidCell(r.productId, sz.size);
         html += `<tr class="q-sz-row-${item.id}" style="display:none;font-size:12px">
           <td><input type="checkbox" class="q-sz-chk" data-id="${item.id}" data-size="${sz.size}" ${ok ? 'checked' : ''}></td>
           <td style="padding-left:24px;color:var(--text2)">${sz.size}</td>
           <td></td><td></td>
           <td>${sz.totalCost.toLocaleString()}</td>
-          <td>${szKp ? szKp.toLocaleString() : '-'}</td>
+          <td>${szKp ? szKp.toLocaleString() : '-'} ${szCompBadge}</td>
           <td style="font-size:11px">${myBidCellSz}</td>
           <td style="background:var(--accent-light)">
             <input type="number" class="form-input" value="${bp}" step="1000"
@@ -3101,10 +3148,9 @@ function _detailSingleBlock(item, r, tc, sz) {
     <div style="font-weight:600;margin-bottom:4px;font-size:12px">원가 분해</div>
     <div style="font-size:11px;line-height:1.9;background:var(--bg);border-radius:6px;padding:8px">
       <div>CNY ¥${cny||'?'} × ${SETTINGS.cnyRate} × ${SETTINGS.cnyMargin} = ${r.krwPrice ? r.krwPrice.toLocaleString() : '?'}원</div>
-      <div>관세: +${(r.customs||0).toLocaleString()}원</div>
-      <div>부가세: +${(r.importVat||0).toLocaleString()}원</div>
       <div>배송비: +${(item.shipping||0).toLocaleString()}원</div>
       <div style="font-weight:700;border-top:1px solid var(--border);padding-top:2px">총 원가: ${tc.toLocaleString()}원</div>
+      <div style="color:var(--text3);font-size:10px;margin-top:4px">고객 부담 관부가세 (참고): ${(r.customs||0)+(r.importVat||0) > 0 ? (r.customs+r.importVat).toLocaleString()+'원' : '면세'}</div>
     </div>
   </div>`;
 
@@ -3122,17 +3168,50 @@ function _detailSingleBlock(item, r, tc, sz) {
   </div>
   </div>`;
 
+  // ── 경쟁력 분석 ──
+  const _comp = sz ? (sz.comp || {}) : (r.comp || {});
+  if (_comp.competitiveness) {
+    const _cBg = {green:'#e6f9e6', yellow:'#fff8e0', red:'#ffe6e6'}[_comp.comp_color] || '#f0f0f0';
+    const _cColor = {green:'#1a7a1a', yellow:'#8a6d00', red:'#cc0000'}[_comp.comp_color] || '#888';
+    h += `<div style="margin-top:8px;padding:8px 14px;background:${_cBg};border-radius:6px;font-size:12px;border:1px solid ${_cColor}20">
+      <div style="font-weight:700;color:${_cColor};margin-bottom:4px">해외배송 경쟁력: ${_comp.competitiveness}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;line-height:1.8">
+        <div>
+          <div>국내 최저가 (빠른/일반): <strong>${_comp.domestic_min ? _comp.domestic_min.toLocaleString()+'원' : '없음'}</strong></div>
+          <div style="color:var(--text3)">빠른배송: ${_comp.domestic_fast ? _comp.domestic_fast.toLocaleString()+'원' : '-'} | 일반배송: ${_comp.domestic_normal ? _comp.domestic_normal.toLocaleString()+'원' : '-'}</div>
+        </div>
+        <div>
+          <div>해외 최저가 (경쟁자): <strong>${_comp.overseas_min ? _comp.overseas_min.toLocaleString()+'원' : '-'}</strong></div>
+        </div>
+        <div>
+          <div>해외 고객 총 결제금액: <strong style="color:${_cColor}">${(_comp.customer_total||0).toLocaleString()}원</strong></div>
+          <div style="color:var(--text3)">= 입찰가 ${(_comp.bid_price||0).toLocaleString()} + 배송 3,000 + 관부가세 ${((_comp.customer_customs||0)+(_comp.customer_vat||0)).toLocaleString()}</div>
+          <div style="color:var(--text3)">${_comp.customer_usd||0}$ ${_comp.customer_over_limit ? '(150$ 초과)' : '(150$ 이하, 면세)'}</div>
+        </div>
+        ${_comp.domestic_min ? `<div>
+          <div>국내 대비: <strong style="color:${_cColor}">${_comp.diff_vs_domestic>0?'+':''}${(_comp.diff_vs_domestic||0).toLocaleString()}원 (${_comp.diff_pct||0}%)</strong></div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }
+
   // ── 내 입찰 이력 ──
   const myBidLookupKey = sz ? `${r.productId}_${sz.size}` : `${r.productId}_${item.size || 'ONE SIZE'}`;
-  const myBidRecord = myBidsMap[myBidLookupKey];
-  if (myBidRecord) {
-    const myBidSrc = myBidRecord.source === 'sync' ? '판매자센터 동기화' : '대시보드 입찰';
-    h += `<div style="margin-top:8px;padding:8px 14px;background:var(--blue-light);border-radius:6px;font-size:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <span style="font-weight:700;color:var(--blue)">내 입찰가</span>
-      <span style="font-weight:800;color:var(--blue);font-size:14px">${myBidRecord.price.toLocaleString()}원</span>
-      <span style="color:var(--text3)">${myBidRecord.date}</span>
-      <span style="background:var(--blue);color:#fff;border-radius:10px;padding:1px 8px;font-size:10px">${myBidSrc}</span>
-    </div>`;
+  const myBidRecords = myBidsMap[myBidLookupKey] || [];
+  if (myBidRecords.length > 0) {
+    myBidRecords.forEach(myBidRecord => {
+      const myBidSrc = myBidRecord.source === 'sync' ? '판매자센터 동기화' : '대시보드 입찰';
+      const rankBadge = myBidRecord.rank ? (myBidRecord.rank === 1
+        ? `<span style="background:#1a7a1a;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px">${myBidRecord.rank}위</span>`
+        : `<span style="background:#e65100;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px">${myBidRecord.rank}위</span>`) : '';
+      h += `<div style="margin-top:8px;padding:8px 14px;background:var(--blue-light);border-radius:6px;font-size:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span style="font-weight:700;color:var(--blue)">내 입찰가</span>
+        <span style="font-weight:800;color:var(--blue);font-size:14px">${myBidRecord.price.toLocaleString()}원</span>
+        ${rankBadge}
+        <span style="color:var(--text3)">${myBidRecord.date}</span>
+        <span style="background:var(--blue);color:#fff;border-radius:10px;padding:1px 8px;font-size:10px">${myBidSrc}</span>
+      </div>`;
+    });
   }
 
   // ── 8. 마진 시뮬레이션 ──
@@ -3623,9 +3702,8 @@ function queueConfirmAutoBid() {
                   const key = `${res.productId}_${res.size}`;
                   const entry = { productId: res.productId, model: res.model||'', size: res.size,
                     price: res.price, date: new Date().toLocaleString('ko-KR'), source: 'placed' };
-                  myBidsMap[key] = entry;
-                  myBidsLocal.bids = (myBidsLocal.bids||[]).filter(
-                    b => !(b.productId === res.productId && b.size === res.size));
+                  if (!myBidsMap[key]) myBidsMap[key] = [];
+                  myBidsMap[key].push(entry);
                   myBidsLocal.bids.push(entry);
                 }
               });
@@ -3685,25 +3763,28 @@ async function _fetchMyBidsAndFilter(bidList, addLog) {
 
     addLog(`✓ 기존 입찰 ${myBids.length}건 확인`, 'log-success');
 
-    // myBidsMap 업데이트 (대시보드 표시용)
-    myBids.forEach(b => {
-      if (b.productId && b.size) {
-        const key = `${b.productId}_${b.size}`;
-        myBidsMap[key] = { productId: b.productId, model: b.model || '', size: b.size,
-          price: b.bidPrice, date: new Date().toLocaleString('ko-KR'), source: 'synced' };
-      }
-    });
+    // myBidsMap 업데이트 (대시보드 표시용) — 동기화 데이터로 교체
+    myBidsLocal.bids = myBids.map(b => ({
+      productId: String(b.productId), model: b.model || '', size: b.size || 'ONE SIZE',
+      price: b.bidPrice, rank: b.bidRank || null,
+      date: new Date().toLocaleString('ko-KR'), source: 'synced', orderId: b.orderId || '',
+    }));
+    myBidsRebuildMap();
 
-    // 중복 체크: 같은 productId + size
-    const existingSet = new Set(myBids.map(b => `${b.productId}_${b.size || 'ONE SIZE'}`));
+    // 중복 체크: 같은 productId + size + 같은 가격이면 스킵, 가격 다르면 허용
     const filtered = [];
     let skipped = 0;
     bidList.forEach(b => {
-      const key = `${b.productId}_${b.size || 'ONE SIZE'}`;
-      if (existingSet.has(key)) {
-        addLog(`  ⏭ ${b.model} ${b.size}: 이미 입찰 중 → 스킵`, 'log-warn');
+      const existingBids = myBidsMap[`${b.productId}_${b.size || 'ONE SIZE'}`] || [];
+      const samePriceBid = existingBids.find(e => e.price === b.price);
+      if (samePriceBid) {
+        addLog(`  ⏭ ${b.model} ${b.size}: 이미 동일가 ${b.price.toLocaleString()}원 입찰 중 → 스킵`, 'log-warn');
         skipped++;
       } else {
+        if (existingBids.length > 0) {
+          const oldPrices = existingBids.map(e => e.price.toLocaleString() + '원').join(', ');
+          addLog(`  ✓ ${b.model} ${b.size}: 기존 ${oldPrices} → 새 ${b.price.toLocaleString()}원 추가 입찰`, 'log-success');
+        }
         filtered.push({
           productId: b.productId, model: b.model, size: b.size, price: b.price,
           quantity: b.qty, gosi: b.gosi, category: b.category,
@@ -3713,7 +3794,7 @@ async function _fetchMyBidsAndFilter(bidList, addLog) {
       }
     });
 
-    addLog(`기존 입찰 ${myBids.length}건, 중복 ${skipped}건 스킵, 신규 ${filtered.length}건 입찰 진행`, 'log-info');
+    addLog(`기존 입찰 ${myBids.length}건, 동일가 ${skipped}건 스킵, 신규 ${filtered.length}건 입찰 진행`, 'log-info');
 
     if (filtered.length === 0) {
       addLog('모든 항목이 이미 입찰 중입니다. 추가 입찰 없음.', 'log-warn');

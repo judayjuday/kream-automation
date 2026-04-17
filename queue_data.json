@@ -1,16 +1,16 @@
 {
-  "counter": 84,
+  "counter": 90,
   "queue": [
     {
-      "id": 84,
-      "model": "1183B480-250",
+      "id": 90,
+      "model": "JQ4110",
       "cny": null,
       "category": "신발",
       "categoryAuto": false,
       "sizes": [
         {
-          "size": "225",
-          "cny_price": 532
+          "size": "215",
+          "cny_price": 375
         }
       ],
       "sizeSystem": "KR",
@@ -21,63 +21,64 @@
       "bid_strategy": "undercut",
       "status": "완료",
       "result": {
-        "productId": "319036",
-        "nameKr": "229명이 보고 있어요",
-        "nameEn": "Onitsuka Tiger Runspark Cream Light Blue",
-        "brand": "Onitsuka Tiger",
+        "productId": "467187",
+        "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙",
+        "nameEn": "(W) Adidas Ozgaia Triple Black",
+        "brand": "Adidas",
         "kreamSizes": [],
-        "totalCost": 126633,
+        "totalCost": 91461,
         "margins": {
           "margin_0": {
-            "sell_price": 139000,
-            "profit": 693
+            "sell_price": 101000,
+            "profit": 373
           },
           "margin_10": {
-            "sell_price": 152000,
-            "profit": 12835
+            "sell_price": 111000,
+            "profit": 9713
           },
           "margin_15": {
-            "sell_price": 159000,
-            "profit": 19373
+            "sell_price": 116000,
+            "profit": 14383
           },
           "margin_20": {
-            "sell_price": 166000,
-            "profit": 25911
+            "sell_price": 121000,
+            "profit": 19053
           }
         },
-        "krwPrice": 118633,
+        "krwPrice": 83461,
         "customs": 0,
         "importVat": 0,
         "sizeMargins": [
           {
-            "size": "225",
-            "cny": 532.0,
-            "totalCost": 126633,
+            "size": "215",
+            "cny": 375.0,
+            "totalCost": 91461,
             "margins": {
               "margin_0": {
-                "sell_price": 139000,
-                "profit": 693
+                "sell_price": 101000,
+                "profit": 373
               },
               "margin_10": {
-                "sell_price": 152000,
-                "profit": 12835
+                "sell_price": 111000,
+                "profit": 9713
               },
               "margin_15": {
-                "sell_price": 159000,
-                "profit": 19373
+                "sell_price": 116000,
+                "profit": 14383
               },
               "margin_20": {
-                "sell_price": 166000,
-                "profit": 25911
+                "sell_price": 121000,
+                "profit": 19053
               }
             },
-            "instantBuyPrice": 145000
+            "instantBuyPrice": 0,
+            "comp": {}
           }
         ],
         "gosi": {
-          "manufacturer": "Onitsuka Tiger",
+          "manufacturer": "Adidas",
           "type": "가방",
-          "color": "블루, 크림",
+          "color": "블랙",
           "material": "상품별 상이",
           "size": "상품별 상이",
           "foot_length": "사이즈별 상이",
@@ -85,429 +86,31 @@
           "hs_code": "6404.11",
           "tariff": 13
         },
-        "instantBuyPrice": 110000,
-        "instantSellPrice": 120000,
-        "recentTradePrice": 120000,
-        "totalTrades": 1780,
-        "sellBids": [
+        "instantBuyPrice": 84000,
+        "instantSellPrice": null,
+        "recentTradePrice": 90000,
+        "totalTrades": 3043,
+        "sellBids": [],
+        "buyBids": [],
+        "sizeDeliveryPrices": [],
+        "marketType": "데이터 부족",
+        "marketColor": "gray",
+        "avgMarginRate": null,
+        "profitableCount": 0,
+        "marketTotalCount": 1,
+        "marketDetails": [
           {
-            "price": 145000,
-            "size": "225",
-            "quantity": 1
-          },
-          {
-            "price": 110000,
-            "size": "230",
-            "quantity": 1
-          },
-          {
-            "price": 121000,
-            "size": "235",
-            "quantity": 1
-          },
-          {
-            "price": 163000,
-            "size": "240",
-            "quantity": 1
-          },
-          {
-            "price": 121000,
-            "size": "245",
-            "quantity": 1
-          },
-          {
-            "price": 146000,
-            "size": "250",
-            "quantity": 1
-          },
-          {
-            "price": 142000,
-            "size": "252.5",
-            "quantity": 1
-          },
-          {
-            "price": 143000,
-            "size": "255",
-            "quantity": 1
-          },
-          {
-            "price": 140000,
-            "size": "260",
-            "quantity": 1
-          },
-          {
-            "price": 120000,
-            "size": "265",
-            "quantity": 1
-          },
-          {
-            "price": 142000,
-            "size": "270",
-            "quantity": 1
-          },
-          {
-            "price": 156000,
-            "size": "275",
-            "quantity": 1
-          },
-          {
-            "price": 147000,
-            "size": "280",
-            "quantity": 1
-          },
-          {
-            "price": 214000,
-            "size": "285",
-            "quantity": 1
-          },
-          {
-            "price": 221000,
-            "size": "290",
-            "quantity": 1
+            "size": "215",
+            "margin_rate": null,
+            "profitable": false
           }
         ],
-        "buyBids": [
-          {
-            "price": 90000,
-            "size": "220",
-            "quantity": 1
-          },
-          {
-            "price": 100000,
-            "size": "225",
-            "quantity": 1
-          },
-          {
-            "price": 80000,
-            "size": "230",
-            "quantity": 1
-          },
-          {
-            "price": 115000,
-            "size": "235",
-            "quantity": 1
-          },
-          {
-            "price": 102000,
-            "size": "245",
-            "quantity": 1
-          },
-          {
-            "price": 100000,
-            "size": "250",
-            "quantity": 1
-          },
-          {
-            "price": 120000,
-            "size": "252.5",
-            "quantity": 1
-          },
-          {
-            "price": 82000,
-            "size": "255",
-            "quantity": 1
-          },
-          {
-            "price": 98000,
-            "size": "260",
-            "quantity": 1
-          },
-          {
-            "price": 103000,
-            "size": "265",
-            "quantity": 1
-          },
-          {
-            "price": 94000,
-            "size": "270",
-            "quantity": 1
-          },
-          {
-            "price": 110000,
-            "size": "275",
-            "quantity": 1
-          },
-          {
-            "price": 110000,
-            "size": "280",
-            "quantity": 1
-          },
-          {
-            "price": 70000,
-            "size": "282.5",
-            "quantity": 1
-          },
-          {
-            "price": 43000,
-            "size": "285",
-            "quantity": 1
-          },
-          {
-            "price": 60000,
-            "size": "290",
-            "quantity": 1
-          }
-        ],
-        "sizeDeliveryPrices": [
-          {
-            "size": "220",
-            "buyPrice": null,
-            "sellPrice": 90000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "225",
-            "buyPrice": 145000,
-            "sellPrice": 100000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": 145000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "230",
-            "buyPrice": 110000,
-            "sellPrice": 80000,
-            "buyFast": 110000,
-            "buyNormal": 146000,
-            "buyOverseas": 143000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "235",
-            "buyPrice": 121000,
-            "sellPrice": 115000,
-            "buyFast": 122000,
-            "buyNormal": 121000,
-            "buyOverseas": 163000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "240",
-            "buyPrice": 163000,
-            "sellPrice": null,
-            "buyFast": 180000,
-            "buyNormal": 179000,
-            "buyOverseas": 163000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "245",
-            "buyPrice": 121000,
-            "sellPrice": 102000,
-            "buyFast": 121000,
-            "buyNormal": 121000,
-            "buyOverseas": 145000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "250",
-            "buyPrice": 146000,
-            "sellPrice": 100000,
-            "buyFast": 160000,
-            "buyNormal": 159000,
-            "buyOverseas": 146000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "252.5",
-            "buyPrice": 142000,
-            "sellPrice": 120000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": 142000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "255",
-            "buyPrice": 143000,
-            "sellPrice": 82000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": 143000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "260",
-            "buyPrice": 140000,
-            "sellPrice": 98000,
-            "buyFast": 140000,
-            "buyNormal": 158000,
-            "buyOverseas": 140000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "265",
-            "buyPrice": 120000,
-            "sellPrice": 103000,
-            "buyFast": 140000,
-            "buyNormal": 120000,
-            "buyOverseas": 141000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "270",
-            "buyPrice": 142000,
-            "sellPrice": 94000,
-            "buyFast": 186000,
-            "buyNormal": 142000,
-            "buyOverseas": 143000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "275",
-            "buyPrice": 156000,
-            "sellPrice": 110000,
-            "buyFast": null,
-            "buyNormal": 194000,
-            "buyOverseas": 156000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "280",
-            "buyPrice": 147000,
-            "sellPrice": 110000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": 147000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "282.5",
-            "buyPrice": null,
-            "sellPrice": 70000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "285",
-            "buyPrice": 214000,
-            "sellPrice": 43000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": 214000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "290",
-            "buyPrice": 221000,
-            "sellPrice": 60000,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": 221000,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "295",
-            "buyPrice": null,
-            "sellPrice": null,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "300",
-            "buyPrice": null,
-            "sellPrice": null,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "305",
-            "buyPrice": null,
-            "sellPrice": null,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "310",
-            "buyPrice": null,
-            "sellPrice": null,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "315",
-            "buyPrice": null,
-            "sellPrice": null,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          },
-          {
-            "size": "320",
-            "buyPrice": null,
-            "sellPrice": null,
-            "buyFast": null,
-            "buyNormal": null,
-            "buyOverseas": null,
-            "sellFast": null,
-            "sellNormal": null,
-            "sellOverseas": null
-          }
-        ]
+        "comp": {}
       },
       "gosi": {
-        "manufacturer": "Onitsuka Tiger",
+        "manufacturer": "Adidas",
         "type": "가방",
-        "color": "블루, 크림",
+        "color": "블랙",
         "material": "상품별 상이",
         "size": "상품별 상이",
         "foot_length": "사이즈별 상이",
