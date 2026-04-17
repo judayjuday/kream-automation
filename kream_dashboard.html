@@ -2639,9 +2639,9 @@ function getBidPrice(item, sz) {
   }
 
   // 언더컷: 해당 사이즈의 해외배송 즉시구매가 - 설정금액
-  if (strategy === 'undercut' || strategy === 'undercut3k') {
+  if (strategy === 'undercut') {
     let kp = _getSizeInstantBuy(item, sz);
-    const uc = strategy === 'undercut3k' ? 3000 : (SETTINGS.undercutAmount || 1000);
+    const uc = SETTINGS.undercutAmount || 1000;
     return kp > 0 ? roundUp1000(kp - uc) : 0;
   }
 
@@ -2694,8 +2694,7 @@ function queueBuildResults() {
       <option value="10" ${s==='10'?'selected':''}>마진10%</option>
       <option value="15" ${s==='15'?'selected':''}>마진15%</option>
       <option value="20" ${s==='20'?'selected':''}>마진20%</option>
-      <option value="undercut" ${s==='undercut'?'selected':''}>언더컷 -1,000</option>
-      <option value="undercut3k" ${s==='undercut3k'?'selected':''}>언더컷 -3,000</option>
+      <option value="undercut" ${s==='undercut'?'selected':''}>언더컷 -${(SETTINGS.undercutAmount||1000).toLocaleString()}</option>
     </select>`;
   };
 
@@ -3312,7 +3311,6 @@ function qModalOpen(id) {
       <label><input type="radio" name="qm-margin" value="15" ${(item.bid_strategy||item.selectedMargin||'undercut')==='15'?'checked':''}> 마진15%</label>
       <label><input type="radio" name="qm-margin" value="20" ${(item.bid_strategy||item.selectedMargin||'undercut')==='20'?'checked':''}> 마진20%</label>
       <label><input type="radio" name="qm-margin" value="undercut" ${(item.bid_strategy||item.selectedMargin||'undercut')==='undercut'?'checked':''}> 언더컷 -${(SETTINGS.undercutAmount||1000).toLocaleString()}원</label>
-      <label><input type="radio" name="qm-margin" value="undercut3k" ${(item.bid_strategy||item.selectedMargin)==='undercut3k'?'checked':''}> 언더컷 -3,000원</label>
       <label><input type="radio" name="qm-margin" value="custom" ${bidPrices[item.id]!=null?'checked':''}> 직접 입력</label>
     </div>
     <div style="display:flex;gap:8px;align-items:center;font-size:13px">
@@ -3326,9 +3324,9 @@ function qModalOpen(id) {
   // 라디오 변경 시 입찰가 자동 업데이트
   document.querySelectorAll('input[name="qm-margin"]').forEach(radio => {
     radio.addEventListener('change', () => {
-      if (radio.value === 'undercut' || radio.value === 'undercut3k') {
+      if (radio.value === 'undercut') {
         const kp = r.instantBuyPrice || 0;
-        const uc = radio.value === 'undercut3k' ? 3000 : (SETTINGS.undercutAmount || 1000);
+        const uc = SETTINGS.undercutAmount || 1000;
         document.getElementById('qm-bid-price').value = Math.max(0, roundUp1000(kp - uc));
       } else if (radio.value !== 'custom') {
         const mg = (r.margins || {})[`margin_${radio.value}`];
@@ -3374,7 +3372,7 @@ function qModalSave() {
     shipping: parseInt(document.getElementById('qm-ship').value) || 8000,
     quantity: parseInt(document.getElementById('qm-qty').value) || 1,
     bid_strategy: marginRadio,
-    selectedMargin: (marginRadio !== 'custom' && marginRadio !== 'undercut' && marginRadio !== 'undercut3k') ? marginRadio : '15',
+    selectedMargin: (marginRadio !== 'custom' && marginRadio !== 'undercut') ? marginRadio : '15',
     gosi: {
       type: document.getElementById('qm-gosi-type').value,
       material: document.getElementById('qm-gosi-material').value,
