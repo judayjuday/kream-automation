@@ -41,6 +41,38 @@
           </div>
         </div>
 
+        <!-- 재입찰 추천 -->
+        <div class="card" id="rebid-card" style="display:none">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">🔄</span> 재입찰 추천</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button class="btn btn-outline btn-sm" onclick="loadRebidRecommendations()">새로고침</button>
+              <button class="btn btn-outline btn-sm" onclick="dismissSalesAlerts()" style="color:var(--text3)">알림 확인</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="rebid-all" onchange="rebidToggleAll(this)"></th>
+                  <th>모델</th>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>체결 금액</th>
+                  <th>거래일</th>
+                  <th style="width:100px">액션</th>
+                </tr>
+              </thead>
+              <tbody id="rebid-tbody">
+                <tr><td colspan="7" class="text-muted">추천 항목 없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:8px">
+            <button class="btn btn-primary btn-sm" onclick="rebidSelected()">선택 항목 재입찰 큐에 추가</button>
+          </div>
+        </div>
+
         <!-- 실행 이력 -->
         <div class="card">
           <div class="card-title" style="justify-content:space-between">

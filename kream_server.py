@@ -3775,11 +3775,12 @@ def api_email_test():
 # ═══════════════════════════════════════════
 
 def _save_shipments_to_db(shipments):
-    """발송관리 수집 결과를 DB에 저장, 새로 추가된 건수 반환"""
+    """발송관리 수집 결과를 DB에 저장, (새로 추가된 건수, 새 건 목록) 반환"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect(str(PRICE_DB))
     c = conn.cursor()
     new_count = 0
+    new_items = []
     for s in shipments:
         try:
             c.execute(
@@ -3795,11 +3796,17 @@ def _save_shipments_to_db(shipments):
             )
             if c.rowcount > 0:
                 new_count += 1
+                new_items.append(s)
         except Exception:
             pass
     conn.commit()
     conn.close()
-    return new_count
+    return new_count, new_items
+
+
+# 새 체결건 알림 (대시보드 폴링용)
+_new_sales_alerts = []
+_new_sales_lock = threading.Lock()
 
 
 def _run_sales_sync():
@@ -3825,14 +3832,23 @@ def _run_sales_sync():
                 await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
                 await browser.close()
 
-                new_count = _save_shipments_to_db(shipments)
+                new_count, new_items = _save_shipments_to_db(shipments)
                 with _sales_lock:
                     sales_scheduler_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                     sales_scheduler_state["total_syncs"] += 1
                     sales_scheduler_state["last_new_count"] = new_count
 
+                # 새 체결건 알림 추가
+                if new_items:
+                    with _new_sales_lock:
+                        for item in new_items:
+                            _new_sales_alerts.append({
+                                **item,
+                                "detected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            })
+
                 print(f"[판매수집] 완료: 총 {len(shipments)}건 수집, 신규 {new_count}건")
-                return {"ok": True, "total": len(shipments), "new_count": new_count}
+                return {"ok": True, "total": len(shipments), "new_count": new_count, "new_items": new_items}
         except Exception as e:
             print(f"[판매수집] 오류: {e}")
             traceback.print_exc()
@@ -3977,6 +3993,54 @@ def api_sales_scheduler_stop():
         _sales_timer.cancel()
         _sales_timer = None
     return jsonify({"ok": True, "msg": "스케줄러 중지됨"})
+
+
+@app.route("/api/sales/alerts")
+def api_sales_alerts():
+    """새 체결건 알림 조회 (폴링용)"""
+    with _new_sales_lock:
+        alerts = list(_new_sales_alerts)
+    return jsonify({"ok": True, "alerts": alerts, "count": len(alerts)})
+
+
+@app.route("/api/sales/alerts/dismiss", methods=["POST"])
+def api_sales_alerts_dismiss():
+    """알림 전체 확인 (클리어)"""
+    with _new_sales_lock:
+        _new_sales_alerts.clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/sales/rebid-recommendations")
+def api_sales_rebid_recommendations():
+    """재입찰 추천 목록 — 최근 판매 건 중 재입찰 가능한 항목"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    # 최근 30일 판매 중 모델번호가 있는 건
+    month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    c.execute("""
+        SELECT * FROM sales_history
+        WHERE model != '' AND trade_date >= ?
+        ORDER BY trade_date DESC LIMIT 50
+    """, (month_ago,))
+    sales = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    # 각 건에 대해 현재 시장 가격 정보 추가 (price_history에서 조회)
+    recommendations = []
+    for s in sales:
+        rec = {
+            "order_id": s["order_id"],
+            "model": s["model"],
+            "product_info": s["product_info"],
+            "size": s["size"],
+            "sale_price": s["sale_price"],
+            "trade_date": s["trade_date"],
+        }
+        recommendations.append(rec)
+
+    return jsonify({"ok": True, "recommendations": recommendations})
 
 
 # ═══════════════════════════════════════════

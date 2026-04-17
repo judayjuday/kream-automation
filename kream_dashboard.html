@@ -302,7 +302,7 @@ function _loadTab(id, tabEl) {
 
 function _onTabShown(id) {
   if (id === 'margin') { try { quickCalc(); } catch(e) {} }
-  if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); } catch(e) {} }
+  if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); } catch(e) {} }
   if (id === 'register' && typeof queueRender === 'function') {
     try {
       qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
@@ -880,6 +880,108 @@ function salesSchedulerToggle() {
     loadSalesSchedulerStatus();
   }).catch(() => {});
 }
+
+// ═══ 재입찰 추천 + 알림 폴링 ═══
+let rebidData = [];
+
+function loadRebidRecommendations() {
+  fetch('/api/sales/rebid-recommendations').then(r => r.json()).then(data => {
+    if (!data.ok) return;
+    rebidData = data.recommendations || [];
+    const card = document.getElementById('rebid-card');
+    if (rebidData.length > 0) {
+      card.style.display = '';
+      let html = '';
+      rebidData.forEach((r, i) => {
+        html += `<tr>
+          <td><input type="checkbox" class="rebid-check" data-idx="${i}"></td>
+          <td><strong>${r.model}</strong></td>
+          <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product_info || '-'}</td>
+          <td>${r.size || '-'}</td>
+          <td style="font-weight:600">${r.sale_price ? r.sale_price.toLocaleString() + '원' : '-'}</td>
+          <td style="font-size:12px">${r.trade_date || '-'}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="rebidOne(${i})">큐에 추가</button></td>
+        </tr>`;
+      });
+      document.getElementById('rebid-tbody').innerHTML = html;
+    } else {
+      card.style.display = 'none';
+    }
+  }).catch(() => {});
+}
+
+function rebidToggleAll(el) {
+  document.querySelectorAll('.rebid-check').forEach(cb => cb.checked = el.checked);
+}
+
+function rebidOne(idx) {
+  const r = rebidData[idx];
+  if (!r) return;
+  // 큐에 추가 요청
+  fetch('/api/queue', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      model: r.model,
+      sizes: [{ size: r.size, cny: '' }],
+      bid_strategy: 'undercut',
+      quantity: 1,
+    })
+  }).then(res => res.json()).then(data => {
+    if (data.ok) {
+      alert(`${r.model} ${r.size} 큐에 추가 완료`);
+    } else {
+      alert('추가 실패: ' + (data.error || ''));
+    }
+  }).catch(e => alert('요청 실패: ' + e));
+}
+
+function rebidSelected() {
+  const checked = document.querySelectorAll('.rebid-check:checked');
+  if (checked.length === 0) { alert('선택된 항목이 없습니다'); return; }
+  let added = 0;
+  const promises = [];
+  checked.forEach(cb => {
+    const idx = parseInt(cb.dataset.idx);
+    const r = rebidData[idx];
+    if (!r) return;
+    promises.push(
+      fetch('/api/queue', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          model: r.model,
+          sizes: [{ size: r.size, cny: '' }],
+          bid_strategy: 'undercut',
+          quantity: 1,
+        })
+      }).then(res => res.json()).then(d => { if (d.ok) added++; })
+    );
+  });
+  Promise.all(promises).then(() => {
+    alert(`${added}건 큐에 추가 완료`);
+  });
+}
+
+function dismissSalesAlerts() {
+  fetch('/api/sales/alerts/dismiss', {method:'POST'}).then(() => {
+    const badge = document.getElementById('sales-badge');
+    if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+  });
+}
+
+// 새 판매 알림 폴링 (30초마다)
+function pollSalesAlerts() {
+  fetch('/api/sales/alerts').then(r => r.json()).then(data => {
+    if (!data.ok) return;
+    const badge = document.getElementById('sales-badge');
+    if (data.count > 0 && badge) {
+      badge.style.display = 'inline';
+      badge.textContent = `새 판매 ${data.count}건`;
+    }
+  }).catch(() => {});
+}
+setInterval(pollSalesAlerts, 30000);
 
 // ═══ 실행 이력 (batch 단위) ═══
 let batchHistoryData = [];
