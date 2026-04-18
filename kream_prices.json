@@ -15,15 +15,15 @@
       "trade_history": [
         {
           "price": 82000,
-          "size": "3시간 전"
+          "size": "4시간 전"
         },
         {
           "price": 90000,
           "size": "4시간 전"
         },
         {
-          "price": 82000,
-          "size": "4시간 전"
+          "price": 90000,
+          "size": "5시간 전"
         },
         {
           "price": 86000,
@@ -164,7 +164,7 @@
           "quantity": 1
         }
       ],
-      "collected_at": "2026-04-19T02:18:58.360001",
+      "collected_at": "2026-04-19T02:29:34.336816",
       "source": "kream.co.kr",
       "size_delivery_prices": [
         {

@@ -2467,7 +2467,6 @@ def calculate_margin_for_queue(cny_price, category, shipping_krw=8000):
     }
 
 
-@app.route("/api/queue/add", methods=["POST"])
 @app.route("/api/queue/verify-model", methods=["POST"])
 def api_queue_verify_model():
     """모델번호로 KREAM에 상품 존재 여부를 빠르게 확인 (큐 추가 전)"""
