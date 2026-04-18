@@ -354,6 +354,7 @@ tr.selected td { background: var(--accent-light); }
                 </select>
               </label>
               <button class="btn btn-outline btn-sm" onclick="queueExportExcel()">CSV 다운로드</button>
+              <button class="btn btn-outline btn-sm" onclick="qDeleteSelectedResults()" style="color:var(--danger);border-color:var(--danger)">선택 삭제</button>
               <button class="btn btn-outline btn-sm" onclick="qDeleteAllResults()" style="color:var(--danger);border-color:var(--danger)">전체 결과 삭제</button>
             </div>
           </div>
@@ -3551,6 +3552,27 @@ function queueBuildResults() {
   if (avgMarginRate > 0) summary += `<span>평균 ${avgMarginRate}%</span>`;
   summary += `</div>`;
   document.getElementById('q-result-summary').innerHTML = summary;
+}
+
+function qDeleteSelectedResults() {
+  const checked = Array.from(document.querySelectorAll('.q-res-chk:checked'));
+  if (checked.length === 0) { alert('삭제할 항목을 선택하세요'); return; }
+  const ids = [...new Set(checked.map(c => parseInt(c.dataset.id)))];
+  if (!confirm(`선택된 ${ids.length}건을 삭제하시겠습니까?`)) return;
+  ids.forEach(id => {
+    delete bidPrices[id];
+    const item = queueData.find(q => q.id === id);
+    if (item && item.result && item.result.sizeMargins) {
+      item.result.sizeMargins.forEach(sz => delete bidPrices[`${id}_${sz.size}`]);
+    }
+    fetch('/api/queue/' + id, { method: 'DELETE' });
+  });
+  queueData = queueData.filter(q => !ids.includes(q.id));
+  queueRender();
+  queueBuildResults();
+  if (queueData.filter(q => q.status === '완료' && q.result).length === 0) {
+    document.getElementById('q-result-card').style.display = 'none';
+  }
 }
 
 function qDeleteResult(id) {
