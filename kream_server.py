@@ -623,6 +623,38 @@ def finish_task(tid, result=None, error=None):
 
 
 # ═══════════════════════════════════════════
+# Cloudflare 잔여 코드 자동 정리
+# ═══════════════════════════════════════════
+
+def _cleanup_cloudflare():
+    """서버 시작 시 HTML 파일에서 Cloudflare 이메일 보호 코드 자동 제거"""
+    patterns = [
+        (r'<script[^>]*email-decode[^>]*></script>', ''),
+        (r'<script[^>]*cfasync[^>]*src="[^"]*cloudflare[^"]*"[^>]*></script>', ''),
+        (r'<a[^>]*class="__cf_email__"[^>]*>\[email[^<]*\]</a>', ''),
+        (r'<a[^>]*href="/cdn-cgi/l/email-protection"[^>]*>[^<]*</a>', ''),
+    ]
+    files = [BASE_DIR / "kream_dashboard.html"] + list((BASE_DIR / "tabs").glob("*.html"))
+    for fpath in files:
+        try:
+            content = fpath.read_text(encoding="utf-8")
+            changed = False
+            for pattern, replacement in patterns:
+                new_content = re.sub(pattern, replacement, content)
+                if new_content != content:
+                    content = new_content
+                    changed = True
+            if changed:
+                fpath.write_text(content, encoding="utf-8")
+                print(f"[Cloudflare 정리] {fpath.name}: 잔여 코드 제거됨")
+        except Exception as e:
+            print(f"[Cloudflare 정리] {fpath.name}: 오류 {e}")
+
+
+_cleanup_cloudflare()
+
+
+# ═══════════════════════════════════════════
 # 페이지 서빙
 # ═══════════════════════════════════════════
 

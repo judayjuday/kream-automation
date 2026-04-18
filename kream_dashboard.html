@@ -281,17 +281,27 @@ function _loadTab(id, tabEl) {
     _onTabShown(id);
     return;
   }
-  fetch(`/tabs/tab_${id}.html`)
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+
+  // 10초 타임아웃
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  tabEl.innerHTML = '<div class="text-muted" style="padding:40px;text-align:center">탭 로딩 중...</div>';
+
+  fetch(`/tabs/tab_${id}.html`, { signal: controller.signal, cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
     .then(html => {
-      // 외곽 div 태그 제거 (첫 줄: <div id="tab-xxx"...>, 마지막 줄: </div>)
+      clearTimeout(timeout);
+      // Cloudflare 이메일 보호 코드 자동 제거
+      html = html.replace(/<script[^>]*email-decode[^>]*><\/script>/g, '');
+      html = html.replace(/<a[^>]*__cf_email__[^>]*>[^<]*<\/a>/g, '');
+
+      // 외곽 div 태그 제거
       const lines = html.split('\n');
-      // 첫 줄에서 <div id="tab-xxx" ...> 찾아서 제거
       let startIdx = 0, endIdx = lines.length;
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes('id="tab-' + id + '"')) { startIdx = i + 1; break; }
       }
-      // 마지막 </div> 제거
       for (let i = lines.length - 1; i >= 0; i--) {
         if (lines[i].trim() === '</div>') { endIdx = i; break; }
       }
@@ -302,7 +312,14 @@ function _loadTab(id, tabEl) {
       _onTabShown(id);
     })
     .catch(e => {
-      tabEl.innerHTML = `<div style="color:var(--danger);padding:20px">탭 로드 실패: ${e.message}</div>`;
+      clearTimeout(timeout);
+      const msg = e.name === 'AbortError' ? '타임아웃 (10초)' : e.message;
+      tabEl.innerHTML = `<div style="color:var(--danger);padding:20px;text-align:center">
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">탭 로드 실패</div>
+        <div style="font-size:13px;margin-bottom:12px">${msg}</div>
+        <button class="btn btn-outline" onclick="_tabCache['${id}']=null;_tabLoaded.delete('${id}');_loadTab('${id}',document.getElementById('tab-${id}'))">다시 시도</button>
+        <button class="btn btn-outline" onclick="location.reload()" style="margin-left:8px">새로고침</button>
+      </div>`;
     });
 }
 
