@@ -2956,14 +2956,11 @@ function _getSizeInstantBuy(item, sz) {
     }
   }
 
-  // 3순위: 사이즈가 없는 경우 (ONE SIZE) → product-level
+  // 3순위: 개별 사이즈 항목 (sizes=[], size="225") → product-level의 instantBuyPrice
+  // 이 경우 서버에서 이미 해당 사이즈의 즉시구매가를 instant_buy에 매칭했으므로 사용
   if (!sz) return r.instantBuyPrice || 0;
 
-  // 사이즈별 매칭 실패 → API 캡처 실패 가능성 → product-level fallback
-  // (sizeDeliveryPrices가 비어있으면 사이즈별 데이터를 못 가져온 것)
-  if (!r.sizeDeliveryPrices || r.sizeDeliveryPrices.length === 0) {
-    return r.instantBuyPrice || 0;
-  }
+  // 사이즈 매칭 실패 → 0 반환 (product-level로 대체하면 모든 사이즈 동일 가격 오류 발생)
   return 0;
 }
 

@@ -1,6 +1,241 @@
 {
   "history": [
     {
+      "executed_at": "2026-04-18T20:45:59",
+      "type": "검색+마진계산",
+      "total": 3,
+      "success": 3,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 121000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-18T20:42:17",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-18T20:40:47",
+      "type": "검색+마진계산",
+      "total": 3,
+      "success": 3,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-18T20:30:00",
+      "type": "검색+마진계산",
+      "total": 10,
+      "success": 10,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "240",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "245",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "240",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "245",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-18T20:28:01",
+      "type": "검색+마진계산",
+      "total": 2,
+      "success": 2,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "215",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 82000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 82000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
       "executed_at": "2026-04-18T20:10:06",
       "type": "검색+마진계산",
       "total": 2,
@@ -625,187 +860,6 @@
           "cost": 52764,
           "instant_buy": 187000,
           "margin": "+8,248 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T18:39:45",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T18:15:17",
-      "type": "자동입찰",
-      "total": 7,
-      "success": 7,
-      "failed": 0,
-      "items": [
-        {
-          "model": "IX7694",
-          "name": "Adidas Always Original Denim Shoulder Bag Black",
-          "size": "ONE SIZE",
-          "bid_price": 77000,
-          "margin": "+12,178 (21.3%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "KA9271",
-          "name": "Adidas Originals Cloud Shoulder Bag Crinkle Version Large Size Black",
-          "size": "ONE SIZE",
-          "bid_price": 78000,
-          "margin": "+16,469 (30.6%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "KA9266",
-          "name": "Adidas Crinkle Version Cloud Shoulder Bag Small Black",
-          "size": "ONE SIZE",
-          "bid_price": 86000,
-          "margin": "+28,417 (57.5%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JE3208",
-          "name": "Adidas Always Original Polyurethane Leather Shoulder Bag Black",
-          "size": "ONE SIZE",
-          "bid_price": 149000,
-          "margin": "+48,091 (54.3%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JE3209",
-          "name": "Adidas Always Original Polyurethane Leather Shoulder Bag White",
-          "size": "ONE SIZE",
-          "bid_price": 149000,
-          "margin": "+48,091 (54.3%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "KA9266",
-          "name": "Adidas Crinkle Version Cloud Shoulder Bag Small Black",
-          "size": "ONE SIZE",
-          "bid_price": 83000,
-          "margin": "+25,615 (51.8%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "KA9271",
-          "name": "Adidas Originals Cloud Shoulder Bag Crinkle Version Large Size Black",
-          "size": "ONE SIZE",
-          "bid_price": 76000,
-          "margin": "+14,601 (27.1%)",
-          "status": "입찰완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T18:03:13",
-      "type": "검색+마진계산",
-      "total": 5,
-      "success": 5,
-      "failed": 0,
-      "items": [
-        {
-          "model": "IX7694",
-          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 57240,
-          "instant_buy": 80000,
-          "margin": "+9,376 (0.0%)",
-          "status": "완료"
-        },
-        {
-          "model": "KA9271",
-          "name": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 53883,
-          "instant_buy": 81000,
-          "margin": "+8,997 (0.0%)",
-          "status": "완료"
-        },
-        {
-          "model": "KA9266",
-          "name": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 49407,
-          "instant_buy": 89000,
-          "margin": "+7,869 (0.0%)",
-          "status": "완료"
-        },
-        {
-          "model": "JE3208",
-          "name": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 블랙",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 88575,
-          "instant_buy": 188000,
-          "margin": "+13,533 (0.0%)",
-          "status": "완료"
-        },
-        {
-          "model": "JE3209",
-          "name": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 화이트",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 88575,
-          "instant_buy": 198000,
-          "margin": "+13,533 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T17:54:29",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "IX7694",
-          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 30382,
-          "instant_buy": 80000,
-          "margin": "+5,412 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T17:53:48",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "IX7694",
-          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
-          "size": "ONE SIZE",
-          "bid_price": null,
-          "cost": 30382,
-          "instant_buy": 80000,
-          "margin": "+5,412 (0.0%)",
           "status": "완료"
         }
       ]

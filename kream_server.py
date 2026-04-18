@@ -2809,9 +2809,9 @@ def api_queue_execute():
                                 or sz_sdp.get("buyPrice")
                                 or sdp_map.get(sz_name, 0)
                             )
-                            # API 캡처 실패 시 product-level 즉시구매가를 fallback으로
-                            if not sz_instant_buy and instant_buy:
-                                sz_instant_buy = instant_buy
+                            add_log(tid, "info",
+                                f"  사이즈 {sz_name}: 즉시구매가={sz_instant_buy or '매칭실패'}"
+                                f" (sdp_map keys: {list(sdp_map.keys())[:10]})")
                             sz_comp = {}
                             if sz_instant_buy and sz_sdp:
                                 sz_comp = analyze_competitiveness(
@@ -2836,14 +2836,20 @@ def api_queue_execute():
                         margin_info = calculate_margin_for_queue(
                             item["cny"], item["category"], item["shipping"]
                         )
-                        # 개별 사이즈 항목이면 해당 사이즈의 즉시구매가 매칭
+                        # 개별 사이즈 항목: 해당 사이즈의 즉시구매가 매칭
                         item_size = str(item.get("size", "")).strip()
                         if item_size and sdp_map:
                             sz_buy = sdp_map.get(item_size, 0)
                             if sz_buy:
                                 instant_buy = sz_buy
-                            elif not sz_buy and instant_buy:
-                                pass  # product-level fallback 유지
+                                add_log(tid, "info",
+                                    f"  사이즈 {item_size}: sdp_map에서 즉시구매가={sz_buy}원 매칭")
+                            else:
+                                add_log(tid, "info",
+                                    f"  사이즈 {item_size}: sdp_map에 없음 (keys: {list(sdp_map.keys())[:10]})")
+                        elif item_size:
+                            add_log(tid, "info",
+                                f"  사이즈 {item_size}: sdp_map 비어있음 (sizeDeliveryPrices 수집 실패)")
 
                     # ONE SIZE / 개별 사이즈 경쟁력 분석
                     one_size_comp = {}

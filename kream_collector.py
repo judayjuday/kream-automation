@@ -569,6 +569,31 @@ async def collect_from_kream(page: Page, product_id: str) -> dict:
         except Exception as e:
             print(f"  API 사이즈 수집 실패: {e}")
 
+        # ── 6-B) API 실패 시 DOM 기반 사이즈별 즉시구매가 수집 ──
+        if not result.get("size_delivery_prices"):
+            print(f"  [DOM fallback] API 사이즈 데이터 없음 → 사이즈 선택 패널에서 수집")
+            try:
+                dom_sizes = await _collect_sizes_from_dom(page, product_id)
+                if dom_sizes:
+                    result["size_delivery_prices"] = dom_sizes
+                    print(f"  [DOM fallback] {len(dom_sizes)}개 사이즈 수집 완료")
+                    # 즉시구매가 재설정
+                    buy_prices_dom = [s["buyPrice"] for s in dom_sizes if s.get("buyPrice")]
+                    if buy_prices_dom:
+                        result["instant_buy_price"] = min(buy_prices_dom)
+                        print(f"  즉시구매가 (DOM 재설정): {result['instant_buy_price']}원")
+                    # sell_bids도 설정 (사이즈별 최저 판매입찰)
+                    dom_sell_bids = [
+                        {"price": s["buyPrice"], "size": s["size"], "quantity": 1}
+                        for s in dom_sizes if s.get("buyPrice")
+                    ]
+                    if dom_sell_bids:
+                        result["sell_bids"] = dom_sell_bids
+                else:
+                    print(f"  [DOM fallback] 사이즈 수집 실패")
+            except Exception as e:
+                print(f"  [DOM fallback] 오류: {e}")
+
         # ── 7) 사이즈별 가격 계산 (sell_bids/buy_bids에서 파생) ──
         sell_bids = result.get("sell_bids", [])
         buy_bids = result.get("buy_bids", [])
@@ -786,6 +811,106 @@ async def collect_size_prices_via_api(page: Page, product_id: str, pre_captured:
         print(f"  [API] 사이즈별 가격: {[(r['size'], r['buyPrice'], r['sellPrice']) for r in result]}")
 
     return result
+
+
+async def _collect_sizes_from_dom(page: Page, product_id: str) -> list:
+    """API 캡처 실패 시 DOM에서 사이즈별 즉시구매가 수집.
+    KREAM 상품 페이지의 '즉시 구매' 버튼 클릭 → 사이즈 선택 패널에서 가격 읽기.
+    각 사이즈 버튼에 사이즈명과 가격이 함께 표시됨.
+    """
+    sizes = []
+    try:
+        # 방법 1: 즉시 구매 버튼 클릭 → 사이즈 선택 모달
+        buy_btn = page.locator('a[href*="/buy/"], button:has-text("구매"), a:has-text("즉시 구매")')
+        if await buy_btn.count() > 0:
+            await buy_btn.first.click()
+            await page.wait_for_timeout(2000)
+
+        # 사이즈 선택 패널에서 사이즈×가격 수집
+        sizes = await page.evaluate(r"""() => {
+            const result = [];
+            const seen = new Set();
+
+            // KREAM 사이즈 선택 패널: 각 버튼/a 태그에 사이즈명과 가격 표시
+            // 구조: <a class="select_item"> → <span>사이즈</span> <span>가격</span>
+            // 또는: <div class="select_area"> 내부
+            const selectors = [
+                '.select_item', '.size_item', '[class*="select_item"]',
+                '[class*="size_item"]', '[class*="SelectItem"]',
+                'a[class*="item"]', 'button[class*="item"]',
+            ];
+
+            for (const sel of selectors) {
+                const items = document.querySelectorAll(sel);
+                for (const item of items) {
+                    const text = item.innerText.trim();
+                    if (!text) continue;
+
+                    const lines = text.split('\n').map(s => s.trim()).filter(s => s);
+                    if (lines.length < 1) continue;
+
+                    let size = null, price = null;
+
+                    for (const line of lines) {
+                        // 사이즈 패턴: "225", "W225", "260", "ONE SIZE", "S", "M", "L" 등
+                        if (!size) {
+                            const sm = line.match(/^[WM]?(\d{2,3}(?:\.\d)?)$/);
+                            if (sm) { size = line; continue; }
+                            if (/^(ONE SIZE|OS|XXS|XS|S|M|L|XL|XXL|XXXL)$/i.test(line)) {
+                                size = line; continue;
+                            }
+                        }
+                        // 가격 패턴: "105,000원", "105000", "105,000"
+                        if (!price) {
+                            const pm = line.match(/^([0-9,]+)\s*원?$/);
+                            if (pm) {
+                                const v = parseInt(pm[1].replace(/,/g, ''));
+                                if (v >= 10000 && v <= 99999999) { price = v; continue; }
+                            }
+                        }
+                    }
+
+                    if (size && !seen.has(size)) {
+                        seen.add(size);
+                        result.push({
+                            size: size,
+                            buyPrice: price,    // 즉시구매가 (해당 사이즈)
+                            sellPrice: null,
+                            buyNormal: price,
+                            buyOverseas: null,
+                            buyFast: null,
+                            sellNormal: null,
+                            sellOverseas: null,
+                            sellFast: null,
+                        });
+                    }
+                }
+                if (result.length > 0) break;  // 첫 번째 성공한 셀렉터 사용
+            }
+            return result;
+        }""")
+
+        # 모달 닫기
+        try:
+            close_btn = page.locator('[class*="close"], button:has-text("닫기"), [aria-label="close"]')
+            if await close_btn.count() > 0:
+                await close_btn.first.click()
+                await page.wait_for_timeout(500)
+            else:
+                await page.keyboard.press("Escape")
+                await page.wait_for_timeout(500)
+        except Exception:
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(300)
+
+        if sizes:
+            for s in sizes:
+                print(f"    [DOM] {s['size']}: buyPrice={s.get('buyPrice')}")
+
+    except Exception as e:
+        print(f"  [DOM 사이즈 수집] 오류: {e}")
+
+    return sizes
 
 
 async def parse_bid_section(page: Page) -> list:
