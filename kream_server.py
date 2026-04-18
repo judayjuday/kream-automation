@@ -161,6 +161,40 @@ def _init_sales_history_table():
 
 _init_sales_history_table()
 
+
+# ── 알림 센터 DB ──
+def _init_notifications_table():
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT,
+        action_url TEXT,
+        is_read INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(is_read)")
+    conn.commit()
+    conn.close()
+
+
+_init_notifications_table()
+
+
+def add_notification(ntype, title, message="", action_url=""):
+    """알림 추가 (서버 내부에서 호출)"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO notifications (type, title, message, action_url, created_at) VALUES (?,?,?,?,?)",
+        (ntype, title, message, action_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    conn.commit()
+    conn.close()
+
+
 # 판매 수집 스케줄러 상태
 sales_scheduler_state = {
     "running": False,
@@ -2000,6 +2034,48 @@ def _check_session_file(path, token_prefix="_token."):
     return False
 
 
+@app.route("/api/notifications/unread")
+def api_notifications_unread():
+    """미확인 알림 목록"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM notifications WHERE is_read=0 ORDER BY created_at DESC LIMIT 50")
+    items = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify({"ok": True, "notifications": items, "count": len(items)})
+
+
+@app.route("/api/notifications/recent")
+def api_notifications_recent():
+    """최근 알림 (읽음 포함)"""
+    limit = request.args.get("limit", 30, type=int)
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?", (limit,))
+    items = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify({"ok": True, "notifications": items})
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+def api_notifications_read():
+    """알림 읽음 처리"""
+    data = request.json or {}
+    ids = data.get("ids", [])
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    if ids:
+        placeholders = ",".join("?" * len(ids))
+        c.execute(f"UPDATE notifications SET is_read=1 WHERE id IN ({placeholders})", ids)
+    else:
+        c.execute("UPDATE notifications SET is_read=1 WHERE is_read=0")
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/session/status")
 def api_session_status():
     """KREAM + 판매자센터 세션 상태 확인"""
@@ -3822,6 +3898,17 @@ def _run_monitor_check():
             monitor_state["total_adjustments"] += len(pending)
 
         print(f"[모니터] 완료: {len(bids)}건 중 순위 밀림 {len(adjustments)}건, 조정 대상 {len(pending)}건")
+
+        # 순위 변동 알림 추가
+        if pending:
+            for adj in pending[:5]:  # 최대 5건
+                name = adj.get("name_kr") or adj.get("model", "")
+                add_notification(
+                    "rank_change",
+                    f"{name} {adj.get('size','')}: 순위 변동",
+                    f"현재가 {adj['old_price']:,}원 → 경쟁자 {adj['competitor_price']:,}원, 추천가 {adj['new_price']:,}원",
+                    "/api/adjust/pending"
+                )
     except Exception as e:
         print(f"[모니터] 오류: {e}")
         traceback.print_exc()

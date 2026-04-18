@@ -222,7 +222,24 @@ tr.selected td { background: var(--accent-light); }
   <div class="main">
     <div class="header">
       <h1 id="page-title">상품 등록 / 입찰</h1>
-      <div class="header-info">judaykream@gmail.com</div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <!-- 알림 벨 -->
+        <div style="position:relative;cursor:pointer" onclick="toggleNotifPanel()">
+          <span style="font-size:20px">🔔</span>
+          <span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center"></span>
+        </div>
+        <div class="header-info">judaykream@gmail.com</div>
+      </div>
+    </div>
+    <!-- 알림 드롭다운 -->
+    <div id="notif-panel" style="display:none;position:absolute;right:20px;top:52px;width:380px;max-height:400px;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:1000;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong style="font-size:14px">알림</strong>
+        <button class="btn btn-outline btn-sm" onclick="markAllNotifRead()" style="font-size:11px">모두 읽음</button>
+      </div>
+      <div id="notif-list" style="font-size:12px">
+        <div class="text-muted" style="padding:16px;text-align:center">알림 없음</div>
+      </div>
     </div>
 
     <!-- 세션 경고 배너 -->
@@ -5640,6 +5657,77 @@ function triggerRelogin() {
       alert('재로그인 요청 실패: ' + e);
     });
 }
+
+// ── 알림 센터 ──
+let _notifPanelOpen = false;
+
+function toggleNotifPanel() {
+  _notifPanelOpen = !_notifPanelOpen;
+  document.getElementById('notif-panel').style.display = _notifPanelOpen ? 'block' : 'none';
+  if (_notifPanelOpen) loadNotifications();
+}
+
+function loadNotifications() {
+  fetch('/api/notifications/recent?limit=20').then(r => r.json()).then(data => {
+    const list = document.getElementById('notif-list');
+    if (!data.notifications || data.notifications.length === 0) {
+      list.innerHTML = '<div class="text-muted" style="padding:16px;text-align:center">알림 없음</div>';
+      return;
+    }
+    const typeIcons = {rank_change:'📉', new_sale:'💰', session:'🔐', exchange:'💱', system:'⚙️'};
+    list.innerHTML = data.notifications.map(n => {
+      const icon = typeIcons[n.type] || '📌';
+      const unread = !n.is_read ? 'border-left:3px solid var(--accent);' : '';
+      const time = n.created_at ? n.created_at.substring(5, 16) : '';
+      return `<div style="padding:8px;margin-bottom:4px;border-radius:6px;background:var(--bg);${unread}cursor:pointer" onclick="notifAction('${n.type}',${n.id})">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>${icon} <strong>${n.title}</strong></span>
+          <span style="font-size:10px;color:var(--text3)">${time}</span>
+        </div>
+        ${n.message ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${n.message}</div>` : ''}
+      </div>`;
+    }).join('');
+  }).catch(() => {});
+}
+
+function notifAction(type, id) {
+  // 읽음 처리
+  fetch('/api/notifications/read', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:[id]})});
+  // 타입별 액션
+  if (type === 'rank_change') showTab('adjust');
+  else if (type === 'new_sale') showTab('history');
+  else if (type === 'session') triggerRelogin();
+  toggleNotifPanel();
+  pollNotifications();
+}
+
+function markAllNotifRead() {
+  fetch('/api/notifications/read', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})})
+    .then(() => { loadNotifications(); pollNotifications(); });
+}
+
+function pollNotifications() {
+  fetch('/api/notifications/unread').then(r => r.json()).then(data => {
+    const badge = document.getElementById('notif-badge');
+    if (data.count > 0) {
+      badge.style.display = 'inline';
+      badge.textContent = data.count > 99 ? '99+' : data.count;
+    } else {
+      badge.style.display = 'none';
+    }
+  }).catch(() => {});
+}
+pollNotifications();
+setInterval(pollNotifications, 10000); // 10초마다
+
+// 패널 외부 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('notif-panel');
+  if (_notifPanelOpen && !panel.contains(e.target) && !e.target.closest('[onclick="toggleNotifPanel()"]')) {
+    _notifPanelOpen = false;
+    panel.style.display = 'none';
+  }
+});
 
 // ── 초기 탭(register) — 인라인이므로 fetch 불필요, onTabShown만 호출 ──
 _onTabShown('register');
