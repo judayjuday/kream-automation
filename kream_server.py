@@ -1951,6 +1951,33 @@ def api_discovery_auto_scan():
 # API: 설정
 # ═══════════════════════════════════════════
 
+@app.route("/api/session/status")
+def api_session_status():
+    """KREAM 세션 상태 확인"""
+    from kream_collector import STATE_FILE_KREAM
+    partner_ok = Path(STATE_FILE).exists()
+    kream_ok = Path(STATE_FILE_KREAM).exists()
+    kream_valid = False
+    if kream_ok:
+        try:
+            data = json.loads(Path(STATE_FILE_KREAM).read_text())
+            origins = data.get("origins", [])
+            for o in origins:
+                for item in o.get("localStorage", []):
+                    if item.get("name", "").startswith("_token.") and item.get("value", "") not in ("false", ""):
+                        kream_valid = True
+                        break
+        except Exception:
+            pass
+    return jsonify({
+        "ok": True,
+        "partner": partner_ok,
+        "kream": kream_ok,
+        "kream_valid": kream_valid,
+        "warning": None if kream_valid else "KREAM 세션 만료 — 사이즈별 즉시구매가 수집 불가",
+    })
+
+
 @app.route("/api/settings", methods=["GET"])
 def api_get_settings():
     if SETTINGS_FILE.exists():
@@ -2896,6 +2923,8 @@ def api_queue_execute():
                         "sellBids": kream.get("sell_bids", []),
                         "buyBids": kream.get("buy_bids", []),
                         "sizeDeliveryPrices": kream.get("size_delivery_prices", []),
+                        # 수집 실패 플래그
+                        "collectFailed": not bool(kream.get("size_delivery_prices")),
                         # 시장 분류
                         "marketType": market_info["market_type"],
                         "marketColor": market_info["market_color"],

@@ -200,6 +200,12 @@ tr.selected td { background: var(--accent-light); }
       <div class="header-info">judaykream@gmail.com</div>
     </div>
 
+    <!-- 세션 경고 배너 -->
+    <div id="session-warning" style="display:none; background:#fee; border:1px solid #c00; color:#c00; padding:10px 16px; border-radius:8px; margin:0 0 12px; font-size:13px; font-weight:600">
+      <span id="session-warning-text"></span>
+      <button onclick="document.getElementById('session-warning').style.display='none'" style="float:right; background:none; border:none; color:#c00; cursor:pointer; font-size:16px">&times;</button>
+    </div>
+
     <div class="content">
 
       <div id="tab-register" class="tab-view active" data-tab-title="상품 등록 / 입찰"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
@@ -3062,32 +3068,46 @@ function queueBuildResults() {
     }
 
     if (!hasSizes) {
-      const bp = getBidPrice(item);
-      const pi = calcProfitForPrice(bp, r.totalCost || 0);
-      const profitOk = pi.profit > 0;
+      // 즉시구매가 수집 실패 판별: collectFailed이거나 kp가 0
+      const priceFailed = r.collectFailed && !kp;
+      const bp = priceFailed ? 0 : getBidPrice(item);
+      const pi = priceFailed ? {profit: 0, marginRate: 0, settlement: 0, totalFee: 0} : calcProfitForPrice(bp, r.totalCost || 0);
+      const profitOk = !priceFailed && pi.profit > 0;
       const profitColor = profitOk ? 'var(--accent)' : 'var(--danger)';
-      const profitBg = pi.profit < 0 ? 'var(--danger);color:#fff'
+      const profitBg = priceFailed ? ''
+                     : pi.profit < 0 ? 'var(--danger);color:#fff'
                      : pi.profit < 5000 ? 'var(--danger-light)'
                      : pi.profit < 10000 ? 'var(--warning-light)'
                      : '';
-      const profitWarn = pi.profit < 5000 ? ' 마진부족' : '';
+      const profitWarn = priceFailed ? '' : pi.profit < 5000 ? ' 마진부족' : '';
       const myBidCell0 = renderMyBidCell(r.productId, item.size || 'ONE SIZE');
-
       const compBadge0 = renderCompBadge(r.comp);
       const sizeLabel0 = item.size ? ` <span style="color:var(--text2);font-weight:400;font-size:11px">${item.size}</span>` : '';
+
+      // 즉시구매가 셀: 수집 실패 시 빨간 텍스트
+      const kpCell = priceFailed
+        ? '<span style="color:var(--danger);font-weight:600">수집 실패</span>'
+        : `${kp ? kp.toLocaleString() : '-'}<br>${compBadge0}`;
+      // 입찰 예정가: 수집 실패 시 비워두기
+      const bidCell = priceFailed
+        ? '<span style="color:var(--text3);font-size:11px">-</span>'
+        : `<input type="number" class="form-input" value="${bp}" step="1000"
+            style="width:80px;height:26px;font-size:12px;font-weight:700;text-align:right"
+            onchange="qSetBidPrice(${item.id},null,this.value)">`;
+      // 마진 셀: 수집 실패 시 "계산 불가"
+      const profitCell = priceFailed
+        ? '<span style="color:var(--text3)">계산 불가</span>'
+        : `<span style="color:${profitBg?'#fff':profitColor};font-weight:600">${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)${profitWarn}</span>`;
+
       html += `<tr>
         <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitOk ? 'checked' : ''}></td>
         <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a>${sizeLabel0} ${marketBadge}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
         <td>${catDd}</td>
         <td style="font-size:12px">${(r.totalCost||0).toLocaleString()}</td>
-        <td style="font-size:12px">${kp ? kp.toLocaleString() : '-'}<br>${compBadge0}</td>
+        <td style="font-size:12px">${kpCell}</td>
         <td style="font-size:12px">${myBidCell0}</td>
-        <td style="background:var(--accent-light)">
-          <input type="number" class="form-input" value="${bp}" step="1000"
-            style="width:80px;height:26px;font-size:12px;font-weight:700;text-align:right"
-            onchange="qSetBidPrice(${item.id},null,this.value)">
-        </td>
+        <td style="background:var(--accent-light)">${bidCell}</td>
         <td>${strategyDd(item.id, item.bid_strategy)}</td>
         <td>
           <input type="number" min="1" value="${item.quantity||1}"
@@ -3095,7 +3115,7 @@ function queueBuildResults() {
             onchange="qSaveResultQty(${item.id}, this.value)"
             onkeydown="if(event.key==='Enter')this.blur()">
         </td>
-        <td style="color:${profitBg?'#fff':profitColor};font-weight:600;font-size:12px;${profitBg?'background:'+profitBg:''}">${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)${profitWarn}</td>
+        <td style="font-size:12px;${profitBg?'background:'+profitBg:''}">${profitCell}</td>
         <td style="font-size:11px">${gosiLabel}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-outline btn-sm" onclick="qShowDetail(${item.id})" style="padding:1px 5px;font-size:11px" title="상세 분석">&#x1f4ca;</button>
@@ -3132,34 +3152,42 @@ function queueBuildResults() {
       </tr>`;
       // 사이즈별 행
       r.sizeMargins.forEach(sz => {
-        const bp = getBidPrice(item, sz);
-        const pi = calcProfitForPrice(bp, sz.totalCost);
-        const ok = pi.profit > 0;
+        const szKp = _getSizeInstantBuy(item, sz);
+        const szFailed = !szKp || szKp === 0;
+        const bp = szFailed ? 0 : getBidPrice(item, sz);
+        const pi = szFailed ? {profit:0,marginRate:0} : calcProfitForPrice(bp, sz.totalCost);
+        const ok = !szFailed && pi.profit > 0;
         const pc = ok ? 'var(--accent)' : 'var(--danger)';
-        const szBg = pi.profit < 0 ? 'var(--danger);color:#fff'
+        const szBg = szFailed ? ''
+                   : pi.profit < 0 ? 'var(--danger);color:#fff'
                    : pi.profit < 5000 ? 'var(--danger-light)'
                    : pi.profit < 10000 ? 'var(--warning-light)'
                    : '';
-        const szWarn = pi.profit < 5000 ? ' 마진부족' : '';
-        // 사이즈별 즉시구매가 (해외배송 우선, product-level fallback 안 함)
-        const szKp = _getSizeInstantBuy(item, sz);
+        const szWarn = szFailed ? '' : pi.profit < 5000 ? ' 마진부족' : '';
         const szCompBadge = renderCompBadge(sz.comp);
         const myBidCellSz = renderMyBidCell(r.productId, sz.size);
+        const szKpCell = szFailed
+          ? '<span style="color:var(--danger);font-size:11px">수집 실패</span>'
+          : `${szKp.toLocaleString()} ${szCompBadge}`;
+        const szBidCell = szFailed
+          ? '<span style="color:var(--text3);font-size:10px">-</span>'
+          : `<input type="number" class="form-input" value="${bp}" step="1000"
+              style="width:76px;height:24px;font-size:11px;font-weight:700;text-align:right"
+              onchange="qSetBidPrice(${item.id},'${sz.size}',this.value)">`;
+        const szProfitCell = szFailed
+          ? '<span style="color:var(--text3);font-size:11px">계산 불가</span>'
+          : `${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)${szWarn}`;
         html += `<tr class="q-sz-row-${item.id}" style="font-size:12px">
           <td><input type="checkbox" class="q-sz-chk" data-id="${item.id}" data-size="${sz.size}" ${ok ? 'checked' : ''}></td>
           <td style="padding-left:24px;color:var(--text2)">${sz.size}${sz.cny ? ` <span style="color:var(--text3);font-size:10px">¥${sz.cny}</span>` : ''}</td>
           <td></td><td></td>
           <td>${sz.totalCost.toLocaleString()}</td>
-          <td>${szKp ? szKp.toLocaleString() : '-'} ${szCompBadge}</td>
+          <td>${szKpCell}</td>
           <td style="font-size:11px">${myBidCellSz}</td>
-          <td style="background:var(--accent-light)">
-            <input type="number" class="form-input" value="${bp}" step="1000"
-              style="width:76px;height:24px;font-size:11px;font-weight:700;text-align:right"
-              onchange="qSetBidPrice(${item.id},'${sz.size}',this.value)">
-          </td>
+          <td style="background:var(--accent-light)">${szBidCell}</td>
           <td></td>
           <td></td>
-          <td style="color:${szBg?'#fff':pc};font-weight:600;${szBg?'background:'+szBg:''}">${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)${szWarn}</td>
+          <td style="color:${szBg?'#fff':pc};font-weight:600;${szBg?'background:'+szBg:''}">${szProfitCell}</td>
           <td></td><td></td>
         </tr>`;
       });
@@ -3777,7 +3805,7 @@ function _buildBidList() {
     }
   });
 
-  if (bidList.length === 0) { alert('등록 가능한 상품이 없습니다'); return null; }
+  if (bidList.length === 0) { alert('등록 가능한 상품이 없습니다.\n즉시구매가 수집 실패 항목은 자동 제외됩니다.'); return null; }
   return bidList;
 }
 
@@ -5147,6 +5175,22 @@ function showQuickProductInfo(k) {
 
 loadSettings();
 loadHistory();
+
+// ── 세션 상태 확인 ──
+function checkSessionStatus() {
+  fetch('/api/session/status').then(r => r.json()).then(data => {
+    const banner = document.getElementById('session-warning');
+    const text = document.getElementById('session-warning-text');
+    if (data.warning) {
+      banner.style.display = 'block';
+      text.textContent = '⚠ ' + data.warning;
+    } else {
+      banner.style.display = 'none';
+    }
+  }).catch(() => {});
+}
+checkSessionStatus();
+setInterval(checkSessionStatus, 300000); // 5분마다
 
 // ── 초기 탭(register) 동적 로드 ──
 _loadTab('register', document.getElementById('tab-register'));
