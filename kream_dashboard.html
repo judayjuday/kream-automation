@@ -2679,20 +2679,12 @@ function queueRender() {
     }
     const sc = statusColors[item.status] || 'var(--text3)';
 
-    // 사이즈/가격 표시
+    // 사이즈/가격 표시 — 항상 사이즈별 개별 표시
     let sizeLabel, cnyLabel;
     if (item.sizes && item.sizes.length > 0) {
       const szList = item.sizes.map(s => s.size);
-      const prices = item.sizes.map(s => s.cny_price);
-      const allSame = prices.every(p => p === prices[0]);
-      if (allSame) {
-        sizeLabel = `${szList[0]}~${szList[szList.length-1]} (${szList.length}사이즈)`;
-        cnyLabel = `¥${prices[0]}`;
-      } else {
-        // 개별 가격이 다를 때: 사이즈별로 표시
-        sizeLabel = `${szList[0]}~${szList[szList.length-1]} (${szList.length}사이즈)`;
-        cnyLabel = `<div style="font-size:11px;line-height:1.6">${item.sizes.map(s => `${s.size}: ¥${s.cny_price}`).join('<br>')}</div>`;
-      }
+      sizeLabel = `<div style="font-size:11px;line-height:1.6">${item.sizes.map(s => s.size).join('<br>')}</div>`;
+      cnyLabel = `<div style="font-size:11px;line-height:1.6">${item.sizes.map(s => `¥${s.cny_price}`).join('<br>')}</div>`;
     } else {
       sizeLabel = item.size || '<span class="text-muted">ONE SIZE</span>';
       cnyLabel = item.cny != null ? `¥${item.cny}` : '-';
@@ -2935,7 +2927,11 @@ function _getSizeInstantBuy(item, sz) {
   // 3순위: 사이즈가 없는 경우 (ONE SIZE) → product-level
   if (!sz) return r.instantBuyPrice || 0;
 
-  // 사이즈 상품인데 매칭 실패 → 0 (product-level로 대체하지 않음)
+  // 사이즈별 매칭 실패 → API 캡처 실패 가능성 → product-level fallback
+  // (sizeDeliveryPrices가 비어있으면 사이즈별 데이터를 못 가져온 것)
+  if (!r.sizeDeliveryPrices || r.sizeDeliveryPrices.length === 0) {
+    return r.instantBuyPrice || 0;
+  }
   return 0;
 }
 

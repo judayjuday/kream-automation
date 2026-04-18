@@ -2628,7 +2628,8 @@ def api_queue_update(item_id):
         if not item:
             return jsonify({"error": "항목 없음"}), 404
         for key in ["model", "cny", "category", "size", "shipping", "quantity",
-                     "sizes", "sizeSystem", "gosi", "selectedMargin", "bid_strategy", "bid_days"]:
+                     "sizes", "sizeSystem", "gosi", "selectedMargin", "bid_strategy", "bid_days",
+                     "status", "result", "categoryAuto"]:
             if key in data:
                 item[key] = data[key]
         if "model" in data:
@@ -2800,6 +2801,9 @@ def api_queue_execute():
                                 or sz_sdp.get("buyPrice")
                                 or sdp_map.get(sz_name, 0)
                             )
+                            # API 캡처 실패 시 product-level 즉시구매가를 fallback으로
+                            if not sz_instant_buy and instant_buy:
+                                sz_instant_buy = instant_buy
                             sz_comp = {}
                             if sz_instant_buy and sz_sdp:
                                 sz_comp = analyze_competitiveness(
