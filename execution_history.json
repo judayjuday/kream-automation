@@ -1,5 +1,59 @@
 [
   {
+    "date": "2026/04/19 02:20",
+    "type": "입찰",
+    "productId": "94616",
+    "price": 112000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/19 02:20",
+    "type": "입찰",
+    "productId": "94616",
+    "price": 117000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/19 02:20",
+    "type": "입찰",
+    "productId": "94616",
+    "price": 122000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/19 02:20",
+    "type": "입찰",
+    "productId": "94616",
+    "price": 105000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/19 02:20",
+    "type": "입찰",
+    "productId": "94616",
+    "price": 119000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
+    "date": "2026/04/19 02:20",
+    "type": "입찰",
+    "productId": "94616",
+    "price": 104000,
+    "quantity": 1,
+    "success": 1,
+    "fail": 0
+  },
+  {
     "date": "2026/04/17 11:50",
     "type": "입찰",
     "productId": "220480",

@@ -2468,6 +2468,53 @@ def calculate_margin_for_queue(cny_price, category, shipping_krw=8000):
 
 
 @app.route("/api/queue/add", methods=["POST"])
+@app.route("/api/queue/verify-model", methods=["POST"])
+def api_queue_verify_model():
+    """모델번호로 KREAM에 상품 존재 여부를 빠르게 확인 (큐 추가 전)"""
+    data = request.json or {}
+    model = str(data.get("model", "")).strip().upper()
+    if not model:
+        return jsonify({"error": "model 필요"}), 400
+
+    # 큐에 이미 같은 모델로 완료된 결과가 있으면 재활용
+    for q in product_queue:
+        if q.get("model", "").upper() == model and q.get("status") == "완료" and q.get("result"):
+            r = q["result"]
+            return jsonify({
+                "ok": True, "exists": True, "cached": True,
+                "productId": r.get("productId"),
+                "nameKr": r.get("nameKr") or r.get("nameEn", ""),
+                "brand": r.get("brand", ""),
+            })
+
+    # KREAM 검색 (비동기)
+    tid = new_task()
+    add_log(tid, "info", f"모델 확인: {model}")
+
+    def run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(search_by_model(model))
+            loop.close()
+            if result:
+                kream = result[0].get("kream", {})
+                pid = kream.get("product_id")
+                name = kream.get("product_name", "") or kream.get("product_name_en", "")
+                finish_task(tid, result={
+                    "exists": bool(pid), "productId": pid,
+                    "nameKr": name, "brand": kream.get("brand", ""),
+                })
+            else:
+                finish_task(tid, result={"exists": False})
+        except Exception as e:
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
+
+
+@app.route("/api/queue/add", methods=["POST"])
 def api_queue_add():
     """큐에 상품 추가.
     가방/의류: {"model":"IX7694", "cny":220}

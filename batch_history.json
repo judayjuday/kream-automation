@@ -1,6 +1,92 @@
 {
   "history": [
     {
+      "executed_at": "2026-04-19T02:20:29",
+      "type": "자동입찰",
+      "total": 6,
+      "success": 6,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1203A243-021",
+          "name": "Asics Gel-1090 Blue Grey",
+          "size": "225",
+          "bid_price": 104000,
+          "margin": "+4,113 (4.5%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "Asics Gel-1090 Blue Grey",
+          "size": "230",
+          "bid_price": 119000,
+          "margin": "+18,123 (20.0%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "Asics Gel-1090 Blue Grey",
+          "size": "235",
+          "bid_price": 105000,
+          "margin": "+5,047 (5.6%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "Asics Gel-1090 Blue Grey",
+          "size": "240",
+          "bid_price": 122000,
+          "margin": "+20,925 (23.1%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "Asics Gel-1090 Blue Grey",
+          "size": "245",
+          "bid_price": 117000,
+          "margin": "+16,255 (18.0%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "Asics Gel-1090 Blue Grey",
+          "size": "250",
+          "bid_price": 112000,
+          "margin": "+11,585 (12.8%)",
+          "status": "입찰완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-19T02:19:09",
+      "type": "검색+마진계산",
+      "total": 2,
+      "success": 2,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "215",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 128000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 109000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
       "executed_at": "2026-04-19T02:16:46",
       "type": "검색+마진계산",
       "total": 6,
@@ -872,44 +958,6 @@
           "cost": 41573,
           "instant_buy": 85000,
           "margin": "+6,363 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T19:44:24",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T18:46:52",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
           "status": "완료"
         }
       ]

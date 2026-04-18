@@ -223,7 +223,8 @@ tr.selected td { background: var(--accent-light); }
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end">
             <div>
               <div style="font-size:11px; color:var(--text3); margin-bottom:4px">모델번호/품번 *</div>
-              <input type="text" class="form-input" id="q-model" placeholder="IX7694" style="width:160px" onkeydown="if(event.key==='Enter')queueAdd()">
+              <input type="text" class="form-input" id="q-model" placeholder="IX7694" style="width:160px" onkeydown="if(event.key==='Enter')queueAdd()" onblur="verifyModel()">
+              <div id="q-model-status" style="font-size:11px; margin-top:2px; min-height:14px"></div>
             </div>
             <div>
               <div style="font-size:11px; color:var(--text3); margin-bottom:4px">카테고리</div>
@@ -2813,9 +2814,59 @@ function marketCheck() {
 }
 
 // ── 큐 추가 ──
+// KREAM 모델 확인 캐시 (model → {exists, nameKr, productId})
+const _modelVerifyCache = {};
+
+function verifyModel() {
+  const model = (document.getElementById('q-model').value || '').trim().toUpperCase();
+  const statusEl = document.getElementById('q-model-status');
+  if (!model || model.length < 3) { statusEl.innerHTML = ''; return; }
+  if (_modelVerifyCache[model]) {
+    const c = _modelVerifyCache[model];
+    statusEl.innerHTML = c.exists
+      ? `<span style="color:var(--accent)">${c.nameKr || c.productId}</span>`
+      : `<span style="color:var(--danger)">KREAM 미등록</span>`;
+    return;
+  }
+  statusEl.innerHTML = '<span style="color:var(--text3)">확인 중...</span>';
+  fetch('/api/queue/verify-model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model})})
+    .then(r => r.json()).then(data => {
+      if (data.exists !== undefined) {
+        // 즉시 응답 (캐시 히트)
+        _modelVerifyCache[model] = data;
+        statusEl.innerHTML = data.exists
+          ? `<span style="color:var(--accent)">${data.nameKr || data.productId}</span>`
+          : `<span style="color:var(--danger)">KREAM 미등록</span>`;
+      } else if (data.taskId) {
+        // 비동기 — 폴링
+        const poll = setInterval(() => {
+          fetch('/api/task/' + data.taskId).then(r => r.json()).then(t => {
+            if (t.status === 'done') {
+              clearInterval(poll);
+              const r = t.result || {};
+              _modelVerifyCache[model] = r;
+              statusEl.innerHTML = r.exists
+                ? `<span style="color:var(--accent)">${r.nameKr || r.productId}</span>`
+                : `<span style="color:var(--danger)">KREAM 미등록</span>`;
+            } else if (t.status === 'error') {
+              clearInterval(poll);
+              statusEl.innerHTML = '<span style="color:var(--text3)">확인 실패</span>';
+            }
+          });
+        }, 2000);
+      }
+    }).catch(() => { statusEl.innerHTML = ''; });
+}
+
 function queueAdd() {
-  const model = document.getElementById('q-model').value.trim();
+  const model = document.getElementById('q-model').value.trim().toUpperCase();
   if (!model) { alert('모델번호를 입력하세요'); document.getElementById('q-model').focus(); return; }
+
+  // 캐시에 "존재하지 않음"으로 확인된 모델이면 차단
+  if (_modelVerifyCache[model] && _modelVerifyCache[model].exists === false) {
+    alert(`KREAM에 등록되지 않은 모델번호입니다: ${model}`);
+    return;
+  }
 
   // DOM에서 최신 사이즈 값 읽기
   document.querySelectorAll('#q-sizes-tbody input').forEach(el => {

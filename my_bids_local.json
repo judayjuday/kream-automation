@@ -1,4 +1,235 @@
 {
-  "bids": [],
-  "lastSync": "2026/04/18 02:33"
+  "bids": [
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 106000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-SN159014392",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    },
+    {
+      "productId": "220480",
+      "model": "JE3209",
+      "size": "ONE SIZE",
+      "price": 146000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC159858839",
+      "nameKr": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 화이트"
+    },
+    {
+      "productId": "220481",
+      "model": "JE3208",
+      "size": "ONE SIZE",
+      "price": 146000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC159858449",
+      "nameKr": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 블랙"
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 130000,
+      "rank": 2,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-SN159858116",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 128000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-SN159853258",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 119000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-SN159014394",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    },
+    {
+      "productId": "490300",
+      "model": "KA9271",
+      "size": "ONE SIZE",
+      "price": 78000,
+      "rank": 2,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158962195",
+      "nameKr": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙"
+    },
+    {
+      "productId": "490299",
+      "model": "KA9266",
+      "size": "ONE SIZE",
+      "price": 81000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158961024",
+      "nameKr": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙"
+    },
+    {
+      "productId": "490299",
+      "model": "KA9266",
+      "size": "ONE SIZE",
+      "price": 83000,
+      "rank": 3,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158961907",
+      "nameKr": "아디다스 크링클 버전 클라우드 숄더백 스몰 블랙"
+    },
+    {
+      "productId": "220480",
+      "model": "JE3209",
+      "size": "ONE SIZE",
+      "price": 149000,
+      "rank": 2,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158961582",
+      "nameKr": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 화이트"
+    },
+    {
+      "productId": "220481",
+      "model": "JE3208",
+      "size": "ONE SIZE",
+      "price": 149000,
+      "rank": 2,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158961270",
+      "nameKr": "아디다스 올웨이즈 오리지널 폴리우레탄 레더 숄더백 블랙"
+    },
+    {
+      "productId": "490300",
+      "model": "KA9271",
+      "size": "ONE SIZE",
+      "price": 78000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158960806",
+      "nameKr": "아디다스 오리지널스 클라우드 숄더백 크링클 버전 라지 블랙"
+    },
+    {
+      "productId": "299955",
+      "model": "IX7694",
+      "size": "ONE SIZE",
+      "price": 77000,
+      "rank": 2,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158960599",
+      "nameKr": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙"
+    },
+    {
+      "productId": "299955",
+      "model": "IX7694",
+      "size": "ONE SIZE",
+      "price": 76000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158953985",
+      "nameKr": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙"
+    },
+    {
+      "productId": "125755",
+      "model": "IC8349",
+      "size": "ONE SIZE",
+      "price": 119000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158822669",
+      "nameKr": "아디다스 올웨이즈 오리지널 숄더백 블랙"
+    },
+    {
+      "productId": "299954",
+      "model": "IX7693",
+      "size": "ONE SIZE",
+      "price": 77000,
+      "rank": 1,
+      "date": "2026/04/19 02:20",
+      "source": "sync",
+      "orderId": "A-AC158171875",
+      "nameKr": "아디다스 올웨이즈 오리지널 데님 숄더백 블루"
+    },
+    {
+      "productId": "94616",
+      "model": "1203A243-021",
+      "size": "225",
+      "price": 104000,
+      "date": "2026/04/19 02:20",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "94616",
+      "model": "1203A243-021",
+      "size": "230",
+      "price": 119000,
+      "date": "2026/04/19 02:20",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "94616",
+      "model": "1203A243-021",
+      "size": "235",
+      "price": 105000,
+      "date": "2026/04/19 02:20",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "94616",
+      "model": "1203A243-021",
+      "size": "240",
+      "price": 122000,
+      "date": "2026/04/19 02:20",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "94616",
+      "model": "1203A243-021",
+      "size": "245",
+      "price": 117000,
+      "date": "2026/04/19 02:20",
+      "source": "placed",
+      "orderId": null
+    },
+    {
+      "productId": "94616",
+      "model": "1203A243-021",
+      "size": "250",
+      "price": 112000,
+      "date": "2026/04/19 02:20",
+      "source": "placed",
+      "orderId": null
+    }
+  ],
+  "lastSync": "2026/04/19 02:20"
 }
