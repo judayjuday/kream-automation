@@ -3162,16 +3162,22 @@ function queueClear() {
 function queueExecute() {
   const pending = queueData.filter(q => q.status === '대기' || q.status === '실패');
   if (pending.length === 0) { alert('실행할 대기 항목이 없습니다'); return; }
-
-  // 미분류 경고 (카테고리를 사용자가 직접 입력한 경우는 무관, 비어있는 것만)
-  // 일괄 실행 후 자동 판별 실패 시 "미분류"가 되므로, 여기서는 pass
+  const totalPending = pending.length;
 
   const btn = document.getElementById('q-exec-btn');
   btn.disabled = true; btn.textContent = '실행 중...';
 
   const logArea = document.getElementById('q-log');
   logArea.style.display = 'block';
-  logArea.innerHTML = '<div class="text-muted">일괄 실행 시작...</div>';
+  logArea.innerHTML = `<div style="margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+      <span id="q-progress-text">0/${totalPending} (0%)</span>
+      <span id="q-progress-model" style="color:var(--text3);font-size:12px"></span>
+    </div>
+    <div style="background:var(--border);border-radius:4px;height:6px;margin-top:4px;overflow:hidden">
+      <div id="q-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s"></div>
+    </div>
+  </div>`;
 
   fetch('/api/queue/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
   .then(r => r.json())
@@ -3179,13 +3185,36 @@ function queueExecute() {
     if (!res.taskId) { btn.disabled = false; btn.textContent = '일괄 실행 (KREAM 검색 + 마진 계산)'; alert(res.error || 'API 오류'); return; }
 
     const poll = setInterval(() => {
-      fetch('/api/queue/list').then(r => r.json()).then(qr => { queueData = qr.queue || []; queueRender(); });
+      fetch('/api/queue/list').then(r => r.json()).then(qr => {
+        queueData = qr.queue || [];
+        queueRender();
+        // 진행률 업데이트
+        const done = queueData.filter(q => q.status === '완료' || q.status === '실패').length;
+        const total = queueData.length;
+        const pendingNow = queueData.filter(q => q.status === '검색 중' || q.status === '계산 중');
+        const pct = totalPending > 0 ? Math.round((done / total) * 100) : 0;
+        const pEl = document.getElementById('q-progress-text');
+        const bar = document.getElementById('q-progress-bar');
+        const mEl = document.getElementById('q-progress-model');
+        if (pEl) pEl.textContent = `${done}/${total} 완료 (${pct}%)`;
+        if (bar) bar.style.width = pct + '%';
+        if (mEl && pendingNow.length > 0) mEl.textContent = pendingNow[0].model + ' 처리 중...';
+        else if (mEl) mEl.textContent = '';
+      });
       fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+        // 로그는 프로그레스바 아래에 추가
         if (task.logs) {
-          logArea.innerHTML = task.logs.map(l => {
+          const logsHtml = task.logs.map(l => {
             const c = l.level === 'error' ? 'var(--danger)' : l.level === 'success' ? 'var(--accent)' : 'var(--text2)';
             return `<div style="color:${c}"><span style="color:var(--text3);font-size:11px">${l.time}</span> ${l.msg}</div>`;
           }).join('');
+          // 프로그레스바 유지 + 로그 추가
+          const progressDiv = logArea.querySelector('[id="q-progress-text"]')?.parentElement?.parentElement;
+          if (progressDiv) {
+            const logContainer = logArea.querySelector('#q-exec-logs');
+            if (logContainer) { logContainer.innerHTML = logsHtml; }
+            else { logArea.innerHTML = progressDiv.outerHTML + `<div id="q-exec-logs">${logsHtml}</div>`; }
+          }
           logArea.scrollTop = logArea.scrollHeight;
         }
         if (task.status === 'done' || task.status === 'error') {
