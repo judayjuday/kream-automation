@@ -433,7 +433,7 @@ def classify_market(size_margins_with_dewu):
             settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
-    fee_rate = float(settings.get("feeRate", 0.035))
+    fee_rate = float(settings.get("feeRate", 0.06))
     fixed_fee = int(settings.get("fixedFee", 2500))
     vat_rate = float(settings.get("vatRate", 0.10))
 
@@ -1961,7 +1961,15 @@ def api_get_settings():
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():
     data = request.json or {}
-    SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    # 기존 설정과 머지 (덮어쓰기 방지)
+    existing = {}
+    if SETTINGS_FILE.exists():
+        try:
+            existing = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    existing.update(data)
+    SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
     return jsonify({"ok": True})
 
 
@@ -2271,7 +2279,7 @@ def _calc_profit_simple(sell_price, total_cost):
             settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
-    fee_rate = float(settings.get("feeRate", 0.035))
+    fee_rate = float(settings.get("feeRate", 0.06))
     fixed_fee = int(settings.get("fixedFee", 2500))
     vat_rate = float(settings.get("vatRate", 0.10))
     effective_rate = 1 - fee_rate * (1 + vat_rate)
@@ -2294,7 +2302,7 @@ def calculate_margin_for_queue(cny_price, category, shipping_krw=8000):
 
     cny_rate = float(settings.get("cnyRate", 218.12))
     usd_rate = float(settings.get("usdRate", 1495.76))
-    fee_rate = float(settings.get("feeRate", 0.035))
+    fee_rate = float(settings.get("feeRate", 0.06))
     fixed_fee = int(settings.get("fixedFee", 2500))
     cny_margin = float(settings.get("cnyMargin", 1.03))
     vat_rate = float(settings.get("vatRate", 0.10))
@@ -3526,7 +3534,7 @@ def _calc_settlement_for_monitor(sell_price):
             settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
-    fee_rate = float(settings.get("feeRate", 0.035))
+    fee_rate = float(settings.get("feeRate", 0.06))
     fixed_fee = int(settings.get("fixedFee", 2500))
     vat_rate = float(settings.get("vatRate", 0.10))
     return round(sell_price * (1 - fee_rate * (1 + vat_rate)) - fixed_fee)

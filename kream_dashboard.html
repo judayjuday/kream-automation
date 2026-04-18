@@ -221,7 +221,7 @@ tr.selected td { background: var(--accent-light); }
 let SETTINGS = {
   cnyRate: 218.12,
   usdRate: 1495.76,
-  feeRate: 0.035,
+  feeRate: 0.06,
   fixedFee: 2500,
   defaultShip: 8000,
   targetMargin: 15,
@@ -1173,7 +1173,7 @@ function saveSettings() {
   const prevCny = SETTINGS.cnyRate;
   SETTINGS.cnyRate = parseFloat(document.getElementById('set-cny-rate').value) || 218.12;
   SETTINGS.usdRate = parseFloat(document.getElementById('set-usd-rate').value) || 1495.76;
-  SETTINGS.feeRate = parseFloat(document.getElementById('set-fee').value) || 0.035;
+  SETTINGS.feeRate = parseFloat(document.getElementById('set-fee').value) || 0.06;
   SETTINGS.fixedFee = parseFloat(document.getElementById('set-fixed').value) || 2500;
   SETTINGS.defaultShip = parseFloat(document.getElementById('set-ship').value) || 8000;
   SETTINGS.targetMargin = parseFloat(document.getElementById('set-target').value) || 15;
@@ -1193,7 +1193,7 @@ function saveSettings() {
   // 서버에도 저장 (headless 설정은 서버에서 읽음)
   fetch('/api/settings', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({headless: SETTINGS.headless})
+    body: JSON.stringify({headless: SETTINGS.headless, feeRate: SETTINGS.feeRate})
   });
 
   // 환율 변경 시 큐 원가 재계산
@@ -1208,7 +1208,7 @@ function loadSettings() {
   if (saved) {
     Object.assign(SETTINGS, JSON.parse(saved));
     // 이전 캐시에서 잘못된 기본값 보정
-    if (SETTINGS.feeRate >= 0.06) SETTINGS.feeRate = 0.035;
+    // feeRate는 settings.json/localStorage에서 로드 (기본 6%)
     if (!SETTINGS.undercutAmount || SETTINGS.undercutAmount >= 3000) SETTINGS.undercutAmount = 1000;
     document.getElementById('set-cny-rate').value = SETTINGS.cnyRate;
     document.getElementById('set-usd-rate').value = SETTINGS.usdRate;
