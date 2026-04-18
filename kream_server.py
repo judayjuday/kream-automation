@@ -3946,9 +3946,64 @@ def _run_monitor_check():
             _check_conditional_bids()
         except Exception as ce:
             print(f"[모니터] 조건부 입찰 체크 오류: {ce}")
+
+        # 만료 임박 체크
+        try:
+            _check_expiring_bids(bids)
+        except Exception as ee:
+            print(f"[모니터] 만료 임박 체크 오류: {ee}")
     except Exception as e:
         print(f"[모니터] 오류: {e}")
         traceback.print_exc()
+
+
+def _check_expiring_bids(bids):
+    """만료일 3일 이내 입찰 감지 → 알림"""
+    from datetime import timedelta
+    now = datetime.now()
+    threshold = now + timedelta(days=3)
+    expiring = []
+
+    for bid in bids:
+        deadline_str = bid.get("deadline")
+        if not deadline_str:
+            continue
+        try:
+            deadline = datetime.strptime(deadline_str, "%Y-%m-%d")
+        except ValueError:
+            continue
+        if deadline <= threshold:
+            days_left = (deadline - now).days
+            expiring.append({
+                "orderId": bid.get("orderId", ""),
+                "productId": bid.get("productId", ""),
+                "model": bid.get("model", ""),
+                "nameKr": bid.get("nameKr", ""),
+                "size": bid.get("size", "ONE SIZE"),
+                "bidPrice": bid.get("bidPrice", 0),
+                "deadline": deadline_str,
+                "daysLeft": max(0, days_left),
+            })
+
+    if expiring:
+        print(f"[모니터] 만료 임박 {len(expiring)}건 감지")
+        # my_bids_local.json에 만료 정보 저장
+        local_file = BASE_DIR / "my_bids_local.json"
+        try:
+            local_data = json.loads(local_file.read_text()) if local_file.exists() else {}
+        except Exception:
+            local_data = {}
+        local_data["expiring"] = expiring
+        local_file.write_text(json.dumps(local_data, ensure_ascii=False, indent=2))
+
+        for eb in expiring[:5]:
+            name = eb.get("nameKr") or eb.get("model", "")
+            add_notification(
+                "bid_expiry",
+                f"입찰 만료 임박: {name} {eb['size']}",
+                f"{eb['bidPrice']:,}원 입찰이 {eb['daysLeft']}일 후 만료됩니다",
+                "/api/expiring-bids"
+            )
 
 
 def _save_adjustments(adjustments):
@@ -4398,6 +4453,91 @@ def _check_conditional_bids():
                     print(f"[조건부입찰] {name} {cb['size']} 입찰 실패")
             except Exception as e:
                 print(f"[조건부입찰] 입찰 오류: {e}")
+
+
+# ═══════════════════════════════════════════
+# 입찰 만료 관련 API
+# ═══════════════════════════════════════════
+
+@app.route("/api/expiring-bids")
+def api_expiring_bids():
+    """만료 임박 입찰 목록"""
+    local_file = BASE_DIR / "my_bids_local.json"
+    try:
+        data = json.loads(local_file.read_text()) if local_file.exists() else {}
+    except Exception:
+        data = {}
+    expiring = data.get("expiring", [])
+    return jsonify({"expiring": expiring, "count": len(expiring)})
+
+
+@app.route("/api/expiring-bids/renew", methods=["POST"])
+def api_renew_bids():
+    """만료 임박 입찰 갱신 (동일 가격 재입찰)"""
+    data = request.json or {}
+    order_ids = data.get("order_ids", [])
+    if not order_ids:
+        return jsonify({"error": "order_ids 필요"}), 400
+
+    # 설정에서 자동 갱신 허용 여부 확인
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    if not settings.get("autoRenewBids", False):
+        return jsonify({"error": "자동 갱신이 비활성화되어 있습니다. 설정에서 활성화해주세요."}), 400
+
+    tid = new_task()
+    add_log(tid, "info", f"입찰 갱신 시작: {len(order_ids)}건")
+
+    def run():
+        try:
+            # my_bids_local에서 해당 입찰 정보 찾기
+            local_file = BASE_DIR / "my_bids_local.json"
+            local_data = json.loads(local_file.read_text()) if local_file.exists() else {}
+            expiring = local_data.get("expiring", [])
+
+            targets = [e for e in expiring if e.get("orderId") in order_ids]
+            if not targets:
+                add_log(tid, "error", "갱신 대상 없음")
+                finish_task(tid, error="갱신 대상 없음")
+                return
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            results = []
+            for t in targets:
+                pid = t["productId"]
+                price = t["bidPrice"]
+                size = t["size"]
+                name = t.get("nameKr") or t.get("model", "")
+                add_log(tid, "info", f"{name} {size} {price:,}원 재입찰 중...")
+
+                try:
+                    from kream_bot import run_bid
+                    ok = loop.run_until_complete(run_bid(pid, price, size, 1, tid))
+                    results.append({"orderId": t["orderId"], "success": bool(ok)})
+                    if ok:
+                        add_log(tid, "success", f"{name} {size} 갱신 완료")
+                    else:
+                        add_log(tid, "error", f"{name} {size} 갱신 실패")
+                except Exception as e:
+                    add_log(tid, "error", f"{name} {size} 오류: {e}")
+                    results.append({"orderId": t["orderId"], "success": False})
+
+            loop.close()
+            success_cnt = sum(1 for r in results if r["success"])
+            add_log(tid, "success", f"완료: {success_cnt}/{len(targets)}건")
+            finish_task(tid, result={"results": results, "success": success_cnt})
+        except Exception as e:
+            traceback.print_exc()
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
 
 
 # ═══════════════════════════════════════════

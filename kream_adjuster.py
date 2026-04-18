@@ -193,6 +193,14 @@ async def parse_asks_page(page: Page) -> list:
             else if (chunk.includes('\uC77C\uBC18')) bid.saleType = '일반';
             else bid.saleType = '기타';
 
+            // 만료일 (YYYY/MM/DD 또는 YY/MM/DD 패턴)
+            const deadlineMatch = chunk.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s*\uB9CC\uB8CC/) ||
+                                  chunk.match(/\uB9CC\uB8CC[:\s]*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/) ||
+                                  chunk.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s*\uAE4C\uC9C0/);
+            if (deadlineMatch) {
+                bid.deadline = `${deadlineMatch[1]}-${deadlineMatch[2].padStart(2,'0')}-${deadlineMatch[3].padStart(2,'0')}`;
+            }
+
             if (bid.productId && bid.bidPrice) {
                 results.push(bid);
             }
