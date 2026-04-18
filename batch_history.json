@@ -1,6 +1,75 @@
 {
   "history": [
     {
+      "executed_at": "2026-04-19T02:16:46",
+      "type": "검색+마진계산",
+      "total": 6,
+      "success": 6,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 121000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 106000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "240",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 126000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "245",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 120000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-021",
+          "name": "아식스 젤 1090 블루 그레이",
+          "size": "250",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 114000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
       "executed_at": "2026-04-18T20:45:59",
       "type": "검색+마진계산",
       "total": 3,
@@ -841,25 +910,6 @@
           "cost": 90813,
           "instant_buy": 85000,
           "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T18:44:04",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "1183C431-020",
-          "name": "오니츠카 타이거 토쿠텐 피드몬트 그레이 메트로폴리스",
-          "size": "",
-          "bid_price": null,
-          "cost": 52764,
-          "instant_buy": 187000,
-          "margin": "+8,248 (0.0%)",
           "status": "완료"
         }
       ]

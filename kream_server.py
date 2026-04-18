@@ -1983,31 +1983,92 @@ def api_discovery_auto_scan():
 # API: 설정
 # ═══════════════════════════════════════════
 
+def _check_session_file(path, token_prefix="_token."):
+    """세션 파일에서 유효한 토큰이 있는지 확인"""
+    if not Path(path).exists():
+        return False
+    try:
+        data = json.loads(Path(path).read_text())
+        for o in data.get("origins", []):
+            for item in o.get("localStorage", []):
+                name = item.get("name", "")
+                val = item.get("value", "")
+                if name.startswith(token_prefix) and val not in ("false", "", "null"):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 @app.route("/api/session/status")
 def api_session_status():
-    """KREAM 세션 상태 확인"""
+    """KREAM + 판매자센터 세션 상태 확인"""
     from kream_collector import STATE_FILE_KREAM
-    partner_ok = Path(STATE_FILE).exists()
-    kream_ok = Path(STATE_FILE_KREAM).exists()
-    kream_valid = False
-    if kream_ok:
-        try:
-            data = json.loads(Path(STATE_FILE_KREAM).read_text())
-            origins = data.get("origins", [])
-            for o in origins:
-                for item in o.get("localStorage", []):
-                    if item.get("name", "").startswith("_token.") and item.get("value", "") not in ("false", ""):
-                        kream_valid = True
-                        break
-        except Exception:
-            pass
+    partner_valid = _check_session_file(STATE_FILE, "accessToken") or _check_session_file(STATE_FILE, "_token.")
+    kream_valid = _check_session_file(STATE_FILE_KREAM, "_token.")
+
+    warnings = []
+    if not partner_valid:
+        warnings.append("판매자센터 세션 만료 — 고시정보/입찰 불가")
+    if not kream_valid:
+        warnings.append("KREAM 세션 만료 — 사이즈별 즉시구매가 수집 불가")
+
     return jsonify({
         "ok": True,
-        "partner": partner_ok,
-        "kream": kream_ok,
+        "partner": Path(STATE_FILE).exists(),
+        "partner_valid": partner_valid,
+        "kream": Path(STATE_FILE_KREAM).exists(),
         "kream_valid": kream_valid,
-        "warning": None if kream_valid else "KREAM 세션 만료 — 사이즈별 즉시구매가 수집 불가",
+        "warning": " | ".join(warnings) if warnings else None,
     })
+
+
+@app.route("/api/session/relogin", methods=["POST"])
+def api_session_relogin():
+    """자동 재로그인 트리거"""
+    data = request.json or {}
+    target = data.get("target", "both")  # "partner", "kream", "both"
+    tid = new_task()
+    add_log(tid, "info", f"자동 재로그인 시작: {target}")
+
+    def run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            results = {}
+
+            async def _do_relogin():
+                from kream_bot import login_auto_partner as _lap, login_auto_kream as _lak
+                async with async_playwright() as pw:
+                    if target in ("partner", "both"):
+                        add_log(tid, "info", "판매자센터 재로그인...")
+                        try:
+                            await _lap(pw)
+                            results["partner"] = True
+                            add_log(tid, "success", "판매자센터 로그인 성공")
+                        except Exception as e:
+                            results["partner"] = False
+                            add_log(tid, "error", f"판매자센터 로그인 실패: {e}")
+                    if target in ("kream", "both"):
+                        add_log(tid, "info", "KREAM 재로그인...")
+                        try:
+                            await _lak(pw)
+                            results["kream"] = True
+                            add_log(tid, "success", "KREAM 로그인 성공")
+                        except Exception as e:
+                            results["kream"] = False
+                            add_log(tid, "error", f"KREAM 로그인 실패: {e}")
+
+            loop.run_until_complete(_do_relogin())
+
+            loop.close()
+            finish_task(tid, result=results)
+        except Exception as e:
+            traceback.print_exc()
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
 
 
 @app.route("/api/settings", methods=["GET"])

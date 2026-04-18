@@ -203,6 +203,7 @@ tr.selected td { background: var(--accent-light); }
     <!-- 세션 경고 배너 -->
     <div id="session-warning" style="display:none; background:#fee; border:1px solid #c00; color:#c00; padding:10px 16px; border-radius:8px; margin:0 0 12px; font-size:13px; font-weight:600">
       <span id="session-warning-text"></span>
+      <button class="btn btn-outline btn-sm" onclick="triggerRelogin()" style="margin-left:12px;border-color:#c00;color:#c00;font-size:11px">자동 재로그인</button>
       <button onclick="document.getElementById('session-warning').style.display='none'" style="float:right; background:none; border:none; color:#c00; cursor:pointer; font-size:16px">&times;</button>
     </div>
 
@@ -5412,6 +5413,34 @@ function checkSessionStatus() {
 }
 checkSessionStatus();
 setInterval(checkSessionStatus, 300000); // 5분마다
+
+function triggerRelogin() {
+  const btn = document.querySelector('[onclick="triggerRelogin()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '재로그인 중...'; }
+  fetch('/api/session/relogin', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({target:'both'})})
+    .then(r => r.json()).then(data => {
+      if (!data.taskId) { alert('재로그인 시작 실패'); return; }
+      const poll = setInterval(() => {
+        fetch('/api/task/' + data.taskId).then(r => r.json()).then(t => {
+          if (t.status === 'done' || t.status === 'error') {
+            clearInterval(poll);
+            if (btn) { btn.disabled = false; btn.textContent = '자동 재로그인'; }
+            checkSessionStatus();
+            const r = t.result || {};
+            const msgs = [];
+            if (r.partner === true) msgs.push('판매자센터 OK');
+            if (r.partner === false) msgs.push('판매자센터 실패');
+            if (r.kream === true) msgs.push('KREAM OK');
+            if (r.kream === false) msgs.push('KREAM 실패');
+            alert('재로그인 결과: ' + msgs.join(', '));
+          }
+        });
+      }, 3000);
+    }).catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = '자동 재로그인'; }
+      alert('재로그인 요청 실패: ' + e);
+    });
+}
 
 // ── 초기 탭(register) — 인라인이므로 fetch 불필요, onTabShown만 호출 ──
 _onTabShown('register');
