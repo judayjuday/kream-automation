@@ -433,7 +433,7 @@ def classify_market(size_margins_with_dewu):
             settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
-    fee_rate = float(settings.get("feeRate", 0.06))
+    fee_rate = float(settings.get("feeRate", 0.035))
     fixed_fee = int(settings.get("fixedFee", 2500))
     vat_rate = float(settings.get("vatRate", 0.10))
 
@@ -2271,7 +2271,7 @@ def _calc_profit_simple(sell_price, total_cost):
             settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
-    fee_rate = float(settings.get("feeRate", 0.06))
+    fee_rate = float(settings.get("feeRate", 0.035))
     fixed_fee = int(settings.get("fixedFee", 2500))
     vat_rate = float(settings.get("vatRate", 0.10))
     effective_rate = 1 - fee_rate * (1 + vat_rate)
@@ -2294,7 +2294,7 @@ def calculate_margin_for_queue(cny_price, category, shipping_krw=8000):
 
     cny_rate = float(settings.get("cnyRate", 218.12))
     usd_rate = float(settings.get("usdRate", 1495.76))
-    fee_rate = float(settings.get("feeRate", 0.06))
+    fee_rate = float(settings.get("feeRate", 0.035))
     fixed_fee = int(settings.get("fixedFee", 2500))
     cny_margin = float(settings.get("cnyMargin", 1.03))
     vat_rate = float(settings.get("vatRate", 0.10))
@@ -2828,11 +2828,19 @@ def api_queue_execute():
                         margin_info = calculate_margin_for_queue(
                             item["cny"], item["category"], item["shipping"]
                         )
+                        # 개별 사이즈 항목이면 해당 사이즈의 즉시구매가 매칭
+                        item_size = str(item.get("size", "")).strip()
+                        if item_size and sdp_map:
+                            sz_buy = sdp_map.get(item_size, 0)
+                            if sz_buy:
+                                instant_buy = sz_buy
+                            elif not sz_buy and instant_buy:
+                                pass  # product-level fallback 유지
 
-                    # ONE SIZE 경쟁력 분석 (사이즈 없는 경우)
+                    # ONE SIZE / 개별 사이즈 경쟁력 분석
                     one_size_comp = {}
                     if not size_margins and instant_buy:
-                        os_key = item.get("size", "ONE SIZE")
+                        os_key = item.get("size", "") or "ONE SIZE"
                         os_sdp = sdp_full_map.get(os_key, {})
                         if not os_sdp and sdp_full_map:
                             os_sdp = next(iter(sdp_full_map.values()), {})
@@ -3518,7 +3526,7 @@ def _calc_settlement_for_monitor(sell_price):
             settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
-    fee_rate = float(settings.get("feeRate", 0.06))
+    fee_rate = float(settings.get("feeRate", 0.035))
     fixed_fee = int(settings.get("fixedFee", 2500))
     vat_rate = float(settings.get("vatRate", 0.10))
     return round(sell_price * (1 - fee_rate * (1 + vat_rate)) - fixed_fee)

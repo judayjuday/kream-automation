@@ -221,7 +221,7 @@ tr.selected td { background: var(--accent-light); }
 let SETTINGS = {
   cnyRate: 218.12,
   usdRate: 1495.76,
-  feeRate: 0.06,
+  feeRate: 0.035,
   fixedFee: 2500,
   defaultShip: 8000,
   targetMargin: 15,
@@ -1173,7 +1173,7 @@ function saveSettings() {
   const prevCny = SETTINGS.cnyRate;
   SETTINGS.cnyRate = parseFloat(document.getElementById('set-cny-rate').value) || 218.12;
   SETTINGS.usdRate = parseFloat(document.getElementById('set-usd-rate').value) || 1495.76;
-  SETTINGS.feeRate = parseFloat(document.getElementById('set-fee').value) || 0.06;
+  SETTINGS.feeRate = parseFloat(document.getElementById('set-fee').value) || 0.035;
   SETTINGS.fixedFee = parseFloat(document.getElementById('set-fixed').value) || 2500;
   SETTINGS.defaultShip = parseFloat(document.getElementById('set-ship').value) || 8000;
   SETTINGS.targetMargin = parseFloat(document.getElementById('set-target').value) || 15;
@@ -1207,6 +1207,9 @@ function loadSettings() {
   const saved = localStorage.getItem('kream_settings');
   if (saved) {
     Object.assign(SETTINGS, JSON.parse(saved));
+    // 이전 캐시에서 잘못된 기본값 보정
+    if (SETTINGS.feeRate >= 0.06) SETTINGS.feeRate = 0.035;
+    if (!SETTINGS.undercutAmount || SETTINGS.undercutAmount >= 3000) SETTINGS.undercutAmount = 1000;
     document.getElementById('set-cny-rate').value = SETTINGS.cnyRate;
     document.getElementById('set-usd-rate').value = SETTINGS.usdRate;
     document.getElementById('set-fee').value = SETTINGS.feeRate;
@@ -2608,9 +2611,39 @@ function queueAdd() {
   if (isShoeMode) {
     const sizes = qBuildSizesFromInput();
     if (!sizes || sizes.length === 0) { alert('사이즈와 가격을 입력하세요'); return; }
-    payload.sizes = sizes;
-    payload.sizeSystem = 'KR';
-    payload.category = '신발';
+    // 각 사이즈를 개별 큐 항목으로 추가
+    const promises = sizes.map(sz => {
+      const p = { ...payload, cny: sz.cny_price, size: sz.size, category: payload.category || '신발' };
+      return fetch('/api/queue/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p)
+      }).then(r => r.json());
+    });
+    Promise.all(promises).then(results => {
+      let added = 0;
+      results.forEach(res => {
+        if (res.ok) { queueData.push(res.item); added++; }
+      });
+      if (added > 0) {
+        queueRender();
+        document.getElementById('q-model').value = '';
+        document.getElementById('q-cny').value = '';
+        document.getElementById('q-category').value = '';
+        document.getElementById('q-bid-strategy').value = 'undercut';
+        document.getElementById('q-cny-wrap').style.display = '';
+        document.getElementById('q-same-price').checked = false;
+        document.getElementById('q-same-price-area').style.display = 'none';
+        document.getElementById('q-sizes-table-area').style.display = 'block';
+        qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
+        qRenderSizeRows();
+        document.getElementById('q-model').focus();
+        triggerAutoExecIfEnabled();
+      } else {
+        alert('추가 실패');
+      }
+    });
+    return;
   } else {
     const cny = parseFloat(document.getElementById('q-cny').value);
     if (!cny || cny <= 0) { alert('중국 구매가(CNY)를 입력하세요'); return; }
@@ -2627,7 +2660,6 @@ function queueAdd() {
     if (res.ok) {
       queueData.push(res.item);
       queueRender();
-      // 폼 초기화
       document.getElementById('q-model').value = '';
       document.getElementById('q-cny').value = '';
       document.getElementById('q-category').value = '';
@@ -3045,9 +3077,10 @@ function queueBuildResults() {
       const myBidCell0 = renderMyBidCell(r.productId, item.size || 'ONE SIZE');
 
       const compBadge0 = renderCompBadge(r.comp);
+      const sizeLabel0 = item.size ? ` <span style="color:var(--text2);font-weight:400;font-size:11px">${item.size}</span>` : '';
       html += `<tr>
         <td><input type="checkbox" class="q-res-chk" data-id="${item.id}" ${profitOk ? 'checked' : ''}></td>
-        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a> ${marketBadge}</td>
+        <td><a href="#" onclick="qShowDetail(${item.id});return false" style="color:var(--blue);font-weight:700;text-decoration:none" title="클릭하여 상세 보기">${item.model}</a>${sizeLabel0} ${marketBadge}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
         <td>${catDd}</td>
         <td style="font-size:12px">${(r.totalCost||0).toLocaleString()}</td>

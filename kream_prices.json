@@ -6,37 +6,37 @@
       "product_name": "(W) 아디다스 오즈가이아 트리플 블랙",
       "product_name_en": "(W) Adidas Ozgaia Triple Black",
       "model_number": "JQ4110",
-      "display_price": 83000,
-      "instant_buy_price": 83000,
+      "display_price": 82000,
+      "instant_buy_price": 82000,
       "instant_sell_price": null,
-      "recent_trade_price": 83000,
+      "recent_trade_price": 86000,
       "price_change": null,
-      "total_trades": 3051,
+      "total_trades": 3053,
       "trade_history": [
         {
-          "price": 83000,
-          "size": "24분 전"
-        },
-        {
-          "price": 93000,
-          "size": "56분 전"
-        },
-        {
-          "price": 84000,
-          "size": "2시간 전"
+          "price": 86000,
+          "size": "18분 전"
         },
         {
           "price": 90000,
+          "size": "42분 전"
+        },
+        {
+          "price": 83000,
           "size": "4시간 전"
         },
         {
-          "price": 87000,
+          "price": 93000,
           "size": "4시간 전"
+        },
+        {
+          "price": 84000,
+          "size": "6시간 전"
         }
       ],
       "sell_bids": [],
       "buy_bids": [],
-      "collected_at": "2026-04-18T16:28:10.683962",
+      "collected_at": "2026-04-18T20:09:22.124023",
       "source": "kream.co.kr"
     }
   }
