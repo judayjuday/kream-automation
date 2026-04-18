@@ -6,6 +6,7 @@
             <span class="form-label">모델번호(품번)</span>
             <input type="text" class="form-input form-input-lg" id="quick-model" placeholder="1183C431-020, IX7693 등" onkeydown="if(event.key==='Enter')quickSearchByModel()">
             <button class="btn btn-primary" onclick="quickSearchByModel()" style="margin-left:8px">KREAM 검색</button>
+            <button class="btn btn-outline" onclick="quickLoadMarketPrice()" style="margin-left:4px; font-size:12px" title="KREAM 시세를 조회하여 판매가 자동 입력">시세 로드</button>
           </div>
           <div class="form-row">
             <span class="form-label">상품번호</span>
@@ -18,7 +19,14 @@
 
         <!-- 마진 계산 -->
         <div class="card" style="margin-top:16px">
-          <div class="card-title"><span class="icon">💰</span> 마진 계산</div>
+          <div class="card-title"><span class="icon">💰</span> 마진 시뮬레이터</div>
+          <!-- 한눈에 결과 -->
+          <div id="quick-summary" style="display:none; background:var(--bg2); border-radius:10px; padding:16px; margin-bottom:16px; text-align:center">
+            <div style="font-size:14px; color:var(--text2)">이 가격에 팔면</div>
+            <div id="quick-summary-text" style="font-size:28px; font-weight:800; margin:4px 0"></div>
+            <div id="quick-summary-sub" style="font-size:12px; color:var(--text3)"></div>
+          </div>
+
           <div style="display:flex; gap:24px; flex-wrap:wrap">
             <div style="flex:1; min-width:280px">
               <div class="form-row">
@@ -42,12 +50,20 @@
                 <span class="form-label">KREAM 판매가 (원)</span>
                 <input type="number" class="form-input form-input-sm" id="quick-sell" value="76000" oninput="quickCalc()">
               </div>
+              <!-- 목표 마진 역계산 -->
+              <div class="form-row" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border)">
+                <span class="form-label">목표 마진 (원)</span>
+                <input type="number" class="form-input form-input-sm" id="quick-target-profit" placeholder="10000" oninput="quickReverseByProfit()">
+                <span id="quick-target-result" style="font-size:12px; color:var(--accent); margin-left:8px; font-weight:600"></span>
+              </div>
             </div>
-            <!-- 최소 판매가 역계산 -->
+            <!-- 최소 판매가 역계산 + 관부가세 -->
             <div style="flex:1; min-width:280px; background:var(--bg); border-radius:8px; padding:16px">
               <div style="font-weight:600; margin-bottom:8px">최소 판매가 역계산</div>
               <div id="quick-reverse" style="font-size:13px; line-height:2">
                 <div>CNY 가격을 입력하면 자동 계산됩니다.</div>
+              </div>
+              <div id="quick-customs-info" style="display:none; margin-top:12px; padding:8px; background:var(--bg2); border-radius:6px; font-size:12px">
               </div>
             </div>
           </div>

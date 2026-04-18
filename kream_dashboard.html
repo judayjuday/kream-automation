@@ -1395,6 +1395,19 @@ function quickCalc() {
     document.getElementById('quick-cny-krw').textContent = `= ${cost.buyKRW.toLocaleString()}원 (${cost.usdEquiv}$)`;
   }
 
+  // 한눈에 요약
+  const sumEl = document.getElementById('quick-summary');
+  const sumText = document.getElementById('quick-summary-text');
+  const sumSub = document.getElementById('quick-summary-sub');
+  if (sumEl && cny > 0 && sell > 0) {
+    sumEl.style.display = '';
+    const marginColor = m.margin >= 0 ? 'var(--accent)' : 'var(--danger)';
+    sumText.innerHTML = `<span style="color:${marginColor}">마진 ${m.margin >= 0 ? '+' : ''}${m.margin.toLocaleString()}원 (${m.marginRate}%)</span>`;
+    sumSub.textContent = `판매가 ${sell.toLocaleString()}원 → 정산 ${s.settlement.toLocaleString()}원 - 원가 ${cost.totalCost.toLocaleString()}원`;
+  } else if (sumEl) {
+    sumEl.style.display = 'none';
+  }
+
   // 메인 메트릭
   document.getElementById('quick-metrics').innerHTML = `
     <div class="metric metric-blue">
@@ -1418,6 +1431,18 @@ function quickCalc() {
       <div class="metric-sub">목표: ${SETTINGS.targetMargin}% 이상</div>
     </div>
   `;
+
+  // 관부가세 참고 표시
+  const customsInfo = document.getElementById('quick-customs-info');
+  if (customsInfo && cny > 0) {
+    const usdVal = parseFloat(cost.usdEquiv) || 0;
+    customsInfo.style.display = '';
+    if (usdVal > 150) {
+      customsInfo.innerHTML = `<span style="color:var(--danger); font-weight:600">$${usdVal.toFixed(0)} > $150</span> — 고객 부담 관부가세 발생<br>관세 ${cost.customs?.toLocaleString() || 0}원 + 부가세 ${cost.importVat?.toLocaleString() || 0}원 = <b>${((cost.customs||0) + (cost.importVat||0)).toLocaleString()}원</b>`;
+    } else {
+      customsInfo.innerHTML = `<span style="color:var(--accent)">$${usdVal.toFixed(0)} ≤ $150</span> — 관부가세 면제 구간`;
+    }
+  }
 
   // 최소 판매가 역계산
   if (cny > 0 && cost.totalCost > 0) {
@@ -1448,6 +1473,90 @@ function quickCalc() {
   } else {
     document.getElementById('quick-reverse').innerHTML = '<div>CNY 가격을 입력하면 자동 계산됩니다.</div>';
   }
+}
+
+// 목표 마진(원) 역계산: "마진 X원 남기려면 최소 판매가 Y원"
+function quickReverseByProfit() {
+  const targetProfit = parseInt(document.getElementById('quick-target-profit').value) || 0;
+  const resultEl = document.getElementById('quick-target-result');
+  if (!resultEl || targetProfit <= 0) { if (resultEl) resultEl.textContent = ''; return; }
+
+  const cny = parseFloat(document.getElementById('quick-cny').value) || 0;
+  const tariff = parseFloat(document.getElementById('quick-cat').value);
+  const ship = parseFloat(document.getElementById('quick-ship').value) || 0;
+  const cat = tariff === 0.08 ? '가방' : '신발';
+  const cost = calcCost(cny, cat, ship);
+
+  if (cost.totalCost <= 0) { resultEl.textContent = 'CNY 입력 필요'; return; }
+
+  // 역계산: 정산액 = 원가 + 목표마진 → 판매가 역산
+  const neededSettlement = cost.totalCost + targetProfit;
+  // settlement = sell * (1 - feeRate * 1.1) - fixedFee → sell = (settlement + fixedFee) / (1 - feeRate * 1.1)
+  const feeRate = SETTINGS.feeRate || 0.06;
+  const fixedFee = SETTINGS.fixedFee || 2500;
+  const minSell = Math.ceil((neededSettlement + fixedFee) / (1 - feeRate * 1.1) / 1000) * 1000;
+  const actualMargin = calcSettlement(minSell).settlement - cost.totalCost;
+
+  resultEl.innerHTML = `최소 판매가: <span style="font-size:14px">${minSell.toLocaleString()}원</span> (실제 마진: ${actualMargin.toLocaleString()}원)`;
+}
+
+// KREAM 시세 자동 로드 → 판매가에 입력
+function quickLoadMarketPrice() {
+  const model = document.getElementById('quick-model').value.trim();
+  if (!model) { alert('모델번호를 먼저 입력하세요'); return; }
+
+  const status = document.getElementById('quick-search-status');
+  if (status) status.textContent = '시세 조회 중...';
+
+  // 먼저 모델번호로 검색해서 productId 확보
+  fetch('/api/keyword-search', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({keyword: model})
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.taskId) {
+      // 태스크 폴링
+      const poll = setInterval(() => {
+        fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
+          if (task.status === 'done' && task.result) {
+            clearInterval(poll);
+            const items = task.result.items || [];
+            if (items.length > 0) {
+              const item = items[0];
+              const pid = item.productId || item.product_id;
+              if (pid) {
+                document.getElementById('quick-pid').value = pid;
+                // price_history에서 최신 가격 조회
+                fetch(`/api/price-history/${pid}`).then(r => r.json()).then(ph => {
+                  const prices = ph.prices || [];
+                  if (prices.length > 0) {
+                    const latest = prices[0];
+                    const sellPrice = latest.sell_now_price || latest.recent_trade_price || 0;
+                    if (sellPrice > 0) {
+                      document.getElementById('quick-sell').value = sellPrice;
+                      if (status) status.textContent = `시세 로드 완료: ${sellPrice.toLocaleString()}원`;
+                      quickCalc();
+                    } else {
+                      if (status) status.textContent = '가격 데이터 없음 — 가격 조회 버튼 클릭';
+                    }
+                  } else {
+                    if (status) status.textContent = '시세 없음 — 가격 조회 버튼으로 수집';
+                  }
+                }).catch(() => { if (status) status.textContent = '시세 조회 실패'; });
+              }
+            } else {
+              if (status) status.textContent = '검색 결과 없음';
+            }
+          } else if (task.status === 'error') {
+            clearInterval(poll);
+            if (status) status.textContent = '검색 실패';
+          }
+        }).catch(() => clearInterval(poll));
+      }, 1500);
+    }
+  })
+  .catch(() => { if (status) status.textContent = '검색 요청 실패'; });
 }
 
 // ═══ 설정 저장/로드 ═══
