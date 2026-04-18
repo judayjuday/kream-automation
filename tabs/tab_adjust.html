@@ -92,6 +92,70 @@
 
         <div class="divider"></div>
 
+        <!-- 조건부 입찰 -->
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🎯</span> 조건부 입찰 (<span id="cond-bid-count">0</span>건)</span>
+            <button class="btn btn-outline" onclick="loadConditionalBids()" style="font-size:12px; padding:4px 12px">새로고침</button>
+          </div>
+          <p class="text-muted" style="margin-bottom:10px; font-size:12px">
+            시장 가격이 설정한 조건을 충족하면 자동으로 입찰합니다. 모니터링 스케줄(2시간마다)에서 체크합니다.
+          </p>
+          <!-- 조건 추가 폼 -->
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; padding:12px; background:var(--bg2); border-radius:8px">
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">상품 ID</label>
+              <input type="text" id="cond-product-id" class="form-input" style="width:100px" placeholder="상품ID">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">모델번호</label>
+              <input type="text" id="cond-model" class="form-input" style="width:120px" placeholder="모델번호">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">사이즈</label>
+              <input type="text" id="cond-size" class="form-input" style="width:80px" placeholder="ONE SIZE" value="ONE SIZE">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">조건</label>
+              <select id="cond-type" class="form-input" style="width:180px">
+                <option value="price_below">즉시구매가 ≤ X원이면</option>
+                <option value="competitor_above">경쟁자최저가 ≥ X원이면</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">조건 가격</label>
+              <input type="number" id="cond-value" class="form-input" style="width:110px" placeholder="150000">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">입찰가</label>
+              <input type="number" id="cond-bid-price" class="form-input" style="width:110px" placeholder="130000">
+            </div>
+            <button class="btn btn-primary" onclick="addConditionalBid()" style="padding:8px 16px">조건 추가</button>
+          </div>
+          <!-- 조건 목록 -->
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>조건</th>
+                  <th>조건 가격</th>
+                  <th>입찰가</th>
+                  <th>상태</th>
+                  <th>생성일</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="cond-bid-table-body">
+                <tr><td colspan="8" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
         <!-- 이메일 설정 -->
         <div class="card">
           <div class="card-title"><span class="icon">📧</span> 이메일 알림 설정</div>

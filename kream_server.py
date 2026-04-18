@@ -135,6 +135,30 @@ def _init_adjustments_table():
 _init_adjustments_table()
 
 
+# ── 조건부 입찰 (conditional_bids) DB ──
+def _init_conditional_bids_table():
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS conditional_bids (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT NOT NULL,
+        model TEXT,
+        size TEXT DEFAULT 'ONE SIZE',
+        condition_type TEXT NOT NULL,
+        condition_value INTEGER NOT NULL,
+        bid_price INTEGER NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        triggered_at TEXT
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cb_status ON conditional_bids(status)")
+    conn.commit()
+    conn.close()
+
+
+_init_conditional_bids_table()
+
+
 # ── 판매 이력 (sales_history) DB ──
 def _init_sales_history_table():
     """sales_history 테이블 생성"""
@@ -3916,6 +3940,12 @@ def _run_monitor_check():
                     f"현재가 {adj['old_price']:,}원 → 경쟁자 {adj['competitor_price']:,}원, 추천가 {adj['new_price']:,}원",
                     "/api/adjust/pending"
                 )
+
+        # 조건부 입찰 체크
+        try:
+            _check_conditional_bids()
+        except Exception as ce:
+            print(f"[모니터] 조건부 입찰 체크 오류: {ce}")
     except Exception as e:
         print(f"[모니터] 오류: {e}")
         traceback.print_exc()
@@ -4218,6 +4248,156 @@ def api_email_test():
     }]
     _send_adjustment_email(test_data)
     return jsonify({"ok": True, "msg": "테스트 이메일 발송 시도 완료"})
+
+
+# ═══════════════════════════════════════════
+# 조건부 입찰 API
+# ═══════════════════════════════════════════
+
+@app.route("/api/conditional-bids", methods=["GET"])
+def api_conditional_bids_list():
+    """조건부 입찰 목록"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM conditional_bids ORDER BY created_at DESC LIMIT 200"
+    ).fetchall()
+    conn.close()
+    return jsonify({"bids": [dict(r) for r in rows]})
+
+
+@app.route("/api/conditional-bids", methods=["POST"])
+def api_conditional_bids_add():
+    """조건부 입찰 추가"""
+    data = request.json or {}
+    required = ["product_id", "condition_type", "condition_value", "bid_price"]
+    for f in required:
+        if not data.get(f):
+            return jsonify({"error": f"{f} 필요"}), 400
+    if data["condition_type"] not in ("price_below", "competitor_above"):
+        return jsonify({"error": "condition_type은 price_below 또는 competitor_above"}), 400
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        """INSERT INTO conditional_bids
+        (product_id, model, size, condition_type, condition_value, bid_price, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'active', ?)""",
+        (
+            str(data["product_id"]),
+            data.get("model", ""),
+            data.get("size", "ONE SIZE"),
+            data["condition_type"],
+            int(data["condition_value"]),
+            int(data["bid_price"]),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/conditional-bids/<int:bid_id>", methods=["DELETE"])
+def api_conditional_bids_delete(bid_id):
+    """조건부 입찰 삭제"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute("DELETE FROM conditional_bids WHERE id=?", (bid_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/conditional-bids/<int:bid_id>/cancel", methods=["POST"])
+def api_conditional_bids_cancel(bid_id):
+    """조건부 입찰 비활성화"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute("UPDATE conditional_bids SET status='expired' WHERE id=?", (bid_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+def _check_conditional_bids():
+    """조건부 입찰 조건 체크 → 충족 시 자동 입찰 실행"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    active = conn.execute(
+        "SELECT * FROM conditional_bids WHERE status='active'"
+    ).fetchall()
+    conn.close()
+
+    if not active:
+        return
+
+    print(f"[조건부입찰] {len(active)}건 조건 체크 중...")
+
+    for cb in active:
+        cb = dict(cb)
+        pid = cb["product_id"]
+        ctype = cb["condition_type"]
+        cval = cb["condition_value"]
+
+        # price_history에서 최신 시세 조회
+        conn2 = sqlite3.connect(str(PRICE_DB))
+        conn2.row_factory = sqlite3.Row
+        row = conn2.execute(
+            "SELECT sell_now_price, recent_trade_price FROM price_history WHERE product_id=? ORDER BY collected_at DESC LIMIT 1",
+            (pid,)
+        ).fetchone()
+        conn2.close()
+
+        if not row:
+            continue
+
+        triggered = False
+        if ctype == "price_below":
+            # 즉시구매가가 X원 이하
+            sell_price = row["sell_now_price"] or 0
+            if sell_price > 0 and sell_price <= cval:
+                triggered = True
+                print(f"[조건부입찰] {cb['model']} {cb['size']}: 즉시구매가 {sell_price:,}원 <= {cval:,}원 → 조건 충족!")
+        elif ctype == "competitor_above":
+            # 경쟁자 최저가가 X원 이상
+            sell_price = row["sell_now_price"] or 0
+            if sell_price > 0 and sell_price >= cval:
+                triggered = True
+                print(f"[조건부입찰] {cb['model']} {cb['size']}: 경쟁자최저가 {sell_price:,}원 >= {cval:,}원 → 조건 충족!")
+
+        if triggered:
+            # 상태 업데이트
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            conn3 = sqlite3.connect(str(PRICE_DB))
+            conn3.execute(
+                "UPDATE conditional_bids SET status='triggered', triggered_at=? WHERE id=?",
+                (now_str, cb["id"])
+            )
+            conn3.commit()
+            conn3.close()
+
+            # 알림 추가
+            name = cb.get("model") or f"#{pid}"
+            add_notification(
+                "conditional_bid",
+                f"조건부 입찰 조건 충족: {name} {cb['size']}",
+                f"조건: {'즉시구매가 ≤' if ctype == 'price_below' else '경쟁자최저가 ≥'} {cval:,}원 → 입찰가 {cb['bid_price']:,}원",
+                f"/api/conditional-bids"
+            )
+
+            # 자동 입찰 실행
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                from kream_bot import place_sell_bid
+                ok = loop.run_until_complete(
+                    place_sell_bid(pid, cb["bid_price"], cb["size"], 1, headless=True)
+                )
+                loop.close()
+                if ok:
+                    print(f"[조건부입찰] {name} {cb['size']} {cb['bid_price']:,}원 입찰 성공")
+                else:
+                    print(f"[조건부입찰] {name} {cb['size']} 입찰 실패")
+            except Exception as e:
+                print(f"[조건부입찰] 입찰 오류: {e}")
 
 
 # ═══════════════════════════════════════════

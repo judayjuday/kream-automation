@@ -594,7 +594,7 @@ function _onTabShown(id) {
     } catch(e) {}
   }
   if (id === 'settings') { try { loadSettings(); } catch(e) {} }
-  if (id === 'adjust') { try { loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadEmailPassword(); } catch(e) {} }
+  if (id === 'adjust') { try { loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadEmailPassword(); } catch(e) {} }
 }
 
 // ═══ 스텝 전환 ═══
@@ -2045,6 +2045,91 @@ function loadAdjustHistory() {
     tbody.innerHTML = html;
   })
   .catch(() => {});
+}
+
+// ═══ 조건부 입찰 ═══
+
+function loadConditionalBids() {
+  fetch('/api/conditional-bids')
+  .then(r => r.json())
+  .then(data => {
+    const bids = data.bids || [];
+    const countEl = document.getElementById('cond-bid-count');
+    if (countEl) countEl.textContent = bids.filter(b => b.status === 'active').length;
+    const tbody = document.getElementById('cond-bid-table-body');
+    if (!tbody) return;
+    if (bids.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-muted">조건부 입찰 없음</td></tr>';
+      return;
+    }
+    let html = '';
+    bids.forEach(b => {
+      const condLabel = b.condition_type === 'price_below' ? '즉시구매가 ≤' : '경쟁자최저가 ≥';
+      const statusMap = {active:'<span class="badge badge-ok">활성</span>', triggered:'<span class="badge badge-good">발동됨</span>', expired:'<span class="badge" style="background:var(--bg2);color:var(--text3)">취소</span>'};
+      html += `<tr style="${b.status !== 'active' ? 'opacity:0.5' : ''}">
+        <td style="text-align:left"><div style="font-weight:600;font-size:12px">${b.model || '#'+b.product_id}</div><div style="color:var(--text3);font-size:11px">#${b.product_id}</div></td>
+        <td>${b.size}</td>
+        <td>${condLabel}</td>
+        <td style="font-weight:600">${b.condition_value.toLocaleString()}원</td>
+        <td style="color:var(--accent);font-weight:700">${b.bid_price.toLocaleString()}원</td>
+        <td>${statusMap[b.status] || b.status}</td>
+        <td style="font-size:11px;color:var(--text3)">${b.created_at || ''}</td>
+        <td>
+          ${b.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cancelConditionalBid(${b.id})">취소</button>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="deleteConditionalBid(${b.id})" style="margin-left:4px;color:var(--danger)">삭제</button>
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+  })
+  .catch(() => {});
+}
+
+function addConditionalBid() {
+  const productId = document.getElementById('cond-product-id').value.trim();
+  const model = document.getElementById('cond-model').value.trim();
+  const size = document.getElementById('cond-size').value.trim() || 'ONE SIZE';
+  const condType = document.getElementById('cond-type').value;
+  const condValue = parseInt(document.getElementById('cond-value').value);
+  const bidPrice = parseInt(document.getElementById('cond-bid-price').value);
+
+  if (!productId) { alert('상품 ID를 입력하세요'); return; }
+  if (!condValue || condValue <= 0) { alert('조건 가격을 입력하세요'); return; }
+  if (!bidPrice || bidPrice <= 0) { alert('입찰가를 입력하세요'); return; }
+
+  fetch('/api/conditional-bids', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ product_id: productId, model, size, condition_type: condType, condition_value: condValue, bid_price: bidPrice })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.ok) {
+      adjLog('success', `조건부 입찰 추가: ${model||productId} ${size}`);
+      loadConditionalBids();
+      // 입력 폼 초기화
+      document.getElementById('cond-product-id').value = '';
+      document.getElementById('cond-model').value = '';
+      document.getElementById('cond-value').value = '';
+      document.getElementById('cond-bid-price').value = '';
+    } else {
+      alert(res.error || '추가 실패');
+    }
+  });
+}
+
+function cancelConditionalBid(id) {
+  if (!confirm('이 조건부 입찰을 취소하시겠습니까?')) return;
+  fetch(`/api/conditional-bids/${id}/cancel`, { method:'POST' })
+  .then(r => r.json())
+  .then(() => loadConditionalBids());
+}
+
+function deleteConditionalBid(id) {
+  if (!confirm('이 조건부 입찰을 삭제하시겠습니까?')) return;
+  fetch(`/api/conditional-bids/${id}`, { method:'DELETE' })
+  .then(r => r.json())
+  .then(() => loadConditionalBids());
 }
 
 // ═══ 이메일 설정 ═══
