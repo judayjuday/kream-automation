@@ -73,6 +73,34 @@
           </div>
         </div>
 
+        <!-- 수정 이력 -->
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 수정 이력</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <input type="date" id="edit-log-date" class="form-input" style="width:150px; font-size:12px" onchange="loadEditLog()">
+              <button class="btn btn-outline btn-sm" onclick="loadEditLog()">조회</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>시간</th>
+                  <th>구분</th>
+                  <th>항목</th>
+                  <th>필드</th>
+                  <th>변경 전</th>
+                  <th>변경 후</th>
+                </tr>
+              </thead>
+              <tbody id="edit-log-tbody">
+                <tr><td colspan="6" class="text-muted">수정 이력 없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- 실행 이력 -->
         <div class="card">
           <div class="card-title" style="justify-content:space-between">

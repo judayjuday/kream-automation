@@ -584,7 +584,7 @@ function _loadTab(id, tabEl) {
 
 function _onTabShown(id) {
   if (id === 'margin') { try { quickCalc(); } catch(e) {} }
-  if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); } catch(e) {} }
+  if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); loadEditLog(); } catch(e) {} }
   if (id === 'register' && typeof queueRender === 'function') {
     try {
       qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
@@ -1267,6 +1267,37 @@ setInterval(pollSalesAlerts, 30000);
 
 // ═══ 실행 이력 (batch 단위) ═══
 let batchHistoryData = [];
+
+function loadEditLog() {
+  const dateEl = document.getElementById('edit-log-date');
+  const dateFilter = dateEl ? dateEl.value : '';
+  const url = dateFilter ? `/api/edit-log?date=${dateFilter}` : '/api/edit-log';
+  fetch(url)
+  .then(r => r.json())
+  .then(data => {
+    const logs = data.logs || [];
+    const tbody = document.getElementById('edit-log-tbody');
+    if (!tbody) return;
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">수정 이력 없음</td></tr>';
+      return;
+    }
+    const typeMap = {queue:'큐', result:'결과', bid:'입찰'};
+    let html = '';
+    logs.forEach(l => {
+      html += `<tr>
+        <td style="font-size:11px; color:var(--text3); white-space:nowrap">${l.edited_at || ''}</td>
+        <td><span class="badge">${typeMap[l.item_type] || l.item_type}</span></td>
+        <td style="font-weight:600; font-size:12px">${l.item_id}</td>
+        <td style="font-size:12px">${l.field_name}</td>
+        <td style="color:var(--danger); font-size:12px">${l.old_value}</td>
+        <td style="color:var(--accent); font-size:12px; font-weight:600">${l.new_value}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+  })
+  .catch(() => {});
+}
 
 function loadBatchHistory() {
   fetch('/api/batch-history').then(r => r.json()).then(data => {
@@ -3970,10 +4001,20 @@ function qDeleteAllResults() {
 function qSetBidPrice(id, size, val) {
   const price = parseInt(val) || 0;
   const key = size ? `${id}_${size}` : id;
+  const oldPrice = bidPrices[key] || 0;
   if (price <= 0) {
     delete bidPrices[key]; // 0 또는 미입력 시 자동 계산으로 복귀
   } else {
     bidPrices[key] = price;
+  }
+  // 수정 이력 기록
+  if (oldPrice !== price && (oldPrice > 0 || price > 0)) {
+    const item = queueData.find(q => q.id === id);
+    const label = (item?.model || id) + (size ? ' ' + size : '');
+    fetch('/api/edit-log', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({item_type:'result', item_id: label, field_name:'입찰예정가', old_value: oldPrice || '자동', new_value: price || '자동'})
+    }).catch(() => {});
   }
   queueBuildResults(); // 마진 실시간 재계산
 }

@@ -159,6 +159,41 @@ def _init_conditional_bids_table():
 _init_conditional_bids_table()
 
 
+# ── 수정 이력 (edit_log) DB ──
+def _init_edit_log_table():
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS edit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_type TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        field_name TEXT NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        edited_at TEXT NOT NULL
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_el_edited ON edit_log(edited_at)")
+    conn.commit()
+    conn.close()
+
+
+_init_edit_log_table()
+
+
+def save_edit_log(item_type, item_id, field_name, old_value, new_value):
+    """수정 이력 저장"""
+    if str(old_value) == str(new_value):
+        return
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        "INSERT INTO edit_log (item_type, item_id, field_name, old_value, new_value, edited_at) VALUES (?,?,?,?,?,?)",
+        (item_type, str(item_id), field_name, str(old_value), str(new_value),
+         datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    conn.commit()
+    conn.close()
+
+
 # ── 판매 이력 (sales_history) DB ──
 def _init_sales_history_table():
     """sales_history 테이블 생성"""
@@ -2901,10 +2936,13 @@ def api_queue_update(item_id):
         item = next((q for q in product_queue if q["id"] == item_id), None)
         if not item:
             return jsonify({"error": "항목 없음"}), 404
+        tracked_fields = ["cny", "quantity", "bid_strategy", "selectedMargin", "bid_days", "shipping"]
         for key in ["model", "cny", "category", "size", "shipping", "quantity",
                      "sizes", "sizeSystem", "gosi", "selectedMargin", "bid_strategy", "bid_days",
                      "status", "result", "categoryAuto"]:
             if key in data:
+                if key in tracked_fields and item.get(key) != data[key]:
+                    save_edit_log("queue", f"{item.get('model','')}", key, item.get(key), data[key])
                 item[key] = data[key]
         if "model" in data:
             item["model"] = str(data["model"]).upper()
@@ -4453,6 +4491,42 @@ def _check_conditional_bids():
                     print(f"[조건부입찰] {name} {cb['size']} 입찰 실패")
             except Exception as e:
                 print(f"[조건부입찰] 입찰 오류: {e}")
+
+
+# ═══════════════════════════════════════════
+# 수정 이력 API
+# ═══════════════════════════════════════════
+
+@app.route("/api/edit-log")
+def api_edit_log():
+    """수정 이력 조회"""
+    date = request.args.get("date", "")
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    if date:
+        rows = conn.execute(
+            "SELECT * FROM edit_log WHERE edited_at LIKE ? ORDER BY edited_at DESC LIMIT 200",
+            (date + "%",)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM edit_log ORDER BY edited_at DESC LIMIT 200"
+        ).fetchall()
+    conn.close()
+    return jsonify({"logs": [dict(r) for r in rows]})
+
+
+@app.route("/api/edit-log", methods=["POST"])
+def api_edit_log_add():
+    """수정 이력 추가 (프론트엔드에서 직접 기록)"""
+    data = request.json or {}
+    required = ["item_type", "item_id", "field_name", "old_value", "new_value"]
+    for f in required:
+        if f not in data:
+            return jsonify({"error": f"{f} 필요"}), 400
+    save_edit_log(data["item_type"], data["item_id"], data["field_name"],
+                  data["old_value"], data["new_value"])
+    return jsonify({"ok": True})
 
 
 # ═══════════════════════════════════════════
