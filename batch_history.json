@@ -1,6 +1,571 @@
 {
   "history": [
     {
+      "executed_at": "2026-04-19T02:55:23",
+      "type": "검색+마진계산",
+      "total": 12,
+      "success": 12,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "225",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 145000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "230",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 153000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "235",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 149000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "240",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 149000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "250",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 159000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "255",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 137000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "260",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 132000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "265",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 130000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "270",
+          "bid_price": null,
+          "cost": 148513,
+          "instant_buy": 159000,
+          "margin": "+22,711 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "275",
+          "bid_price": null,
+          "cost": 150743,
+          "instant_buy": 156000,
+          "margin": "+23,283 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "280",
+          "bid_price": null,
+          "cost": 164125,
+          "instant_buy": 167000,
+          "margin": "+24,845 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183A907-300",
+          "name": "오니츠카 타이거 토쿠텐 번트 그린",
+          "size": "245",
+          "bid_price": null,
+          "cost": 152974,
+          "instant_buy": 160000,
+          "margin": "+23,854 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-19T02:53:14",
+      "type": "자동입찰",
+      "total": 15,
+      "success": 15,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) Adidas Ozgaia Triple Black",
+          "size": "220",
+          "bid_price": 108000,
+          "margin": "+7,849 (8.7%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "Asics Gel-1090 White Silver",
+          "size": "225",
+          "bid_price": 128000,
+          "margin": "+26,529 (29.3%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "Asics Gel-1090 White Silver",
+          "size": "230",
+          "bid_price": 104000,
+          "margin": "+4,113 (4.5%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "Asics Gel-1090 White Silver",
+          "size": "235",
+          "bid_price": 135000,
+          "margin": "+33,067 (36.5%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "Asics Gel-1090 White Silver",
+          "size": "240",
+          "bid_price": 128000,
+          "margin": "+26,529 (29.3%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "Asics Gel-1090 White Silver",
+          "size": "245",
+          "bid_price": 114000,
+          "margin": "+13,453 (14.9%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "Asics Gel-1090 White Silver",
+          "size": "250",
+          "bid_price": 113000,
+          "margin": "+12,519 (13.8%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "225",
+          "bid_price": 182000,
+          "margin": "+23,436 (16.3%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "230",
+          "bid_price": 187000,
+          "margin": "+28,106 (19.5%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "235",
+          "bid_price": 168000,
+          "margin": "+10,360 (7.2%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "240",
+          "bid_price": 164000,
+          "margin": "+6,624 (4.6%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "245",
+          "bid_price": 163000,
+          "margin": "+5,690 (3.9%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "250",
+          "bid_price": 172000,
+          "margin": "+14,096 (9.8%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "255",
+          "bid_price": 170000,
+          "margin": "+12,228 (8.5%)",
+          "status": "입찰완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "Onitsuka Tiger Tokuten White Black",
+          "size": "260",
+          "bid_price": 168000,
+          "margin": "+10,360 (7.2%)",
+          "status": "입찰완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-19T02:44:48",
+      "type": "검색+마진계산",
+      "total": 12,
+      "success": 12,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "225",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 183000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "230",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 188000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "235",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 169000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "240",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 165000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "250",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 173000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "255",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 171000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "260",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 169000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "265",
+          "bid_price": null,
+          "cost": 139591,
+          "instant_buy": 173000,
+          "margin": "+21,359 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "270",
+          "bid_price": null,
+          "cost": 148513,
+          "instant_buy": 178000,
+          "margin": "+22,711 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "275",
+          "bid_price": null,
+          "cost": 150743,
+          "instant_buy": 179000,
+          "margin": "+23,283 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "280",
+          "bid_price": null,
+          "cost": 164125,
+          "instant_buy": 191000,
+          "margin": "+24,845 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 152974,
+          "instant_buy": 164000,
+          "margin": "+23,854 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-19T02:42:48",
+      "type": "검색+마진계산",
+      "total": 8,
+      "success": 8,
+      "failed": 0,
+      "items": [
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "225",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 183000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "230",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 188000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "235",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 169000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "240",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 165000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "245",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 164000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "250",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 173000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "255",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 171000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1183B938-100",
+          "name": "오니츠카 타이거 토쿠텐 화이트 블랙",
+          "size": "260",
+          "bid_price": null,
+          "cost": 144052,
+          "instant_buy": 169000,
+          "margin": "+22,502 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-04-19T02:40:07",
+      "type": "검색+마진계산",
+      "total": 8,
+      "success": 7,
+      "failed": 1,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "-",
+          "size": "220",
+          "bid_price": null,
+          "cost": null,
+          "instant_buy": null,
+          "margin": null,
+          "status": "실패"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 109000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 129000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 105000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 136000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "240",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 129000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "245",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 115000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "1203A243-100",
+          "name": "아식스 젤 1090 화이트 실버",
+          "size": "250",
+          "bid_price": null,
+          "cost": 90523,
+          "instant_buy": 114000,
+          "margin": "+14,387 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
       "executed_at": "2026-04-19T02:20:29",
       "type": "자동입찰",
       "total": 6,
@@ -864,101 +1429,6 @@
           "bid_price": 139000,
           "margin": "+36,513 (40.2%)",
           "status": "입찰완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T22:51:02",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T22:37:16",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T22:15:00",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 41573,
-          "instant_buy": 85000,
-          "margin": "+6,363 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T22:04:41",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T20:07:32",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 41573,
-          "instant_buy": 85000,
-          "margin": "+6,363 (0.0%)",
-          "status": "완료"
         }
       ]
     }

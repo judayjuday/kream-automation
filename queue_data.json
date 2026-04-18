@@ -1,15 +1,15 @@
 {
-  "counter": 125,
+  "counter": 167,
   "queue": [
     {
-      "id": 125,
-      "model": "JQ4110",
-      "cny": 370.0,
-      "category": "신발",
+      "id": 167,
+      "model": "TEST_VERIFY",
+      "cny": 100.0,
+      "category": "",
       "categoryAuto": false,
       "sizes": [],
       "sizeSystem": "",
-      "size": "220",
+      "size": "",
       "shipping": 8000,
       "quantity": 1,
       "bid_days": 30,
