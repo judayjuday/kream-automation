@@ -3651,14 +3651,35 @@ function _getDeliveryTarget(sdp, sizeFilter) {
 }
 
 function _deliveryOneLine(sdp, sizeFilter) {
-  const t = _getDeliveryTarget(sdp, sizeFilter);
-  if (!t) return '';
-  const parts = [];
-  if (t.sellFast != null) parts.push(`<span style="color:var(--warning)">빠른</span> ${t.sellFast.toLocaleString()}`);
-  if (t.sellNormal != null) parts.push(`<span style="color:var(--text2)">일반</span> ${t.sellNormal.toLocaleString()}`);
-  if (t.sellOverseas != null) parts.push(`<span style="color:var(--blue)">해외</span> ${t.sellOverseas.toLocaleString()}`);
-  if (parts.length === 0) return '';
-  return `<div style="margin-top:4px;padding:4px 8px;background:#f0f7ff;border-radius:4px;font-size:11px"><strong>배송별:</strong> ${parts.join(' <span style="color:var(--border)">|</span> ')}</div>`;
+  if (!sdp || sdp.length === 0) return '<div style="margin-top:4px;font-size:11px;color:var(--text3)">배송타입별 데이터 없음 (세션 확인 필요)</div>';
+
+  // sizeFilter가 있으면 해당 사이즈만, 없으면 전체 요약
+  const targets = sizeFilter
+    ? sdp.filter(s => String(s.size).replace(/[^0-9.]/g,'') === String(sizeFilter).replace(/[^0-9.]/g,''))
+    : sdp.slice(0, 5);  // 최대 5개
+
+  if (targets.length === 0) return '';
+
+  let h = `<div style="margin-top:6px;font-size:11px">
+    <strong>배송타입별 가격:</strong>
+    <table style="width:100%;font-size:11px;margin-top:4px;border-collapse:collapse">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:2px 6px;text-align:left">사이즈</th>
+      <th style="padding:2px 6px;color:var(--warning)">빠른배송</th>
+      <th style="padding:2px 6px">일반배송</th>
+      <th style="padding:2px 6px;color:var(--blue)">해외배송</th>
+    </tr></thead><tbody>`;
+  targets.forEach(t => {
+    const fmt = v => v != null ? v.toLocaleString() : '-';
+    h += `<tr>
+      <td style="padding:2px 6px;font-weight:600">${t.size}</td>
+      <td style="padding:2px 6px">${fmt(t.buyFast)}</td>
+      <td style="padding:2px 6px">${fmt(t.buyNormal)}</td>
+      <td style="padding:2px 6px;color:var(--blue);font-weight:600">${fmt(t.buyOverseas)}</td>
+    </tr>`;
+  });
+  h += '</tbody></table></div>';
+  return h;
 }
 
 function _simTable(tc, instantBuy, currentBid, itemId, sizeKey) {
