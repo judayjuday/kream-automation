@@ -1485,6 +1485,22 @@ function fetchExchangeRate(silent) {
       updateExchangeRateUI(SETTINGS.cnyRate, SETTINGS.usdRate, data.updated_at || '기본값');
       localStorage.setItem('kream_settings', JSON.stringify(SETTINGS));
       if (!silent && prevCny !== SETTINGS.cnyRate) recalcQueueCosts();
+      // 환율 변동 2% 이상 알림
+      if (prevCny > 0 && SETTINGS.cnyRate > 0) {
+        const changeRate = Math.abs((SETTINGS.cnyRate - prevCny) / prevCny * 100);
+        if (changeRate >= 2) {
+          const dir = SETTINGS.cnyRate > prevCny ? '+' : '';
+          const banner = document.getElementById('session-warning');
+          const text = document.getElementById('session-warning-text');
+          if (banner && text) {
+            banner.style.display = 'block';
+            banner.style.background = '#fff8e0';
+            banner.style.borderColor = '#8a6d00';
+            banner.style.color = '#8a6d00';
+            text.textContent = `⚠ CNY 환율 변동: ${prevCny.toFixed(2)} → ${SETTINGS.cnyRate.toFixed(2)} (${dir}${changeRate.toFixed(1)}%) — 큐 마진 재계산 권장`;
+          }
+        }
+      }
     })
     .catch(() => {
       // 서버 연결 실패 시 현재 SETTINGS 기본값으로 표시
