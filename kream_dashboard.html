@@ -3509,8 +3509,31 @@ function queueBuildResults() {
 
   const failed = queueData.filter(q => q.status === '실패').length;
   const unclassified = completed.filter(q => q.category === '미분류').length;
-  let summary = `완료 ${completed.length}건 | 실패 ${failed}건`;
-  if (unclassified > 0) summary += ` | <span style="color:var(--danger);font-weight:600">미분류 ${unclassified}건</span>`;
+
+  // 요약 통계 계산
+  let successCount = 0, marginLowCount = 0, collectFailCount = 0;
+  let totalProfit = 0, totalCost = 0;
+  completed.forEach(item => {
+    const r = item.result;
+    if (r.collectFailed) { collectFailCount++; return; }
+    const bp = getBidPrice(item);
+    if (!bp) return;
+    const pi = calcProfitForPrice(bp, r.totalCost || 0);
+    if (pi.profit > 0) { successCount++; totalProfit += pi.profit; }
+    else { marginLowCount++; }
+    totalCost += r.totalCost || 0;
+  });
+  const avgMarginRate = totalCost > 0 ? Math.round(totalProfit / totalCost * 1000) / 10 : 0;
+
+  let summary = `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px">`;
+  summary += `<span style="color:var(--accent);font-weight:700">마진OK ${successCount}건</span>`;
+  if (marginLowCount > 0) summary += `<span style="color:var(--danger)">마진부족 ${marginLowCount}건</span>`;
+  if (collectFailCount > 0) summary += `<span style="color:var(--danger)">수집실패 ${collectFailCount}건</span>`;
+  if (failed > 0) summary += `<span style="color:var(--danger)">실패 ${failed}건</span>`;
+  if (unclassified > 0) summary += `<span style="color:var(--danger);font-weight:600">미분류 ${unclassified}건</span>`;
+  if (totalProfit > 0) summary += `<span>예상수익 <strong style="color:var(--accent)">+${totalProfit.toLocaleString()}원</strong></span>`;
+  if (avgMarginRate > 0) summary += `<span>평균 ${avgMarginRate}%</span>`;
+  summary += `</div>`;
   document.getElementById('q-result-summary').innerHTML = summary;
 }
 
