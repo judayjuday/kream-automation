@@ -2683,10 +2683,16 @@ function queueRender() {
     let sizeLabel, cnyLabel;
     if (item.sizes && item.sizes.length > 0) {
       const szList = item.sizes.map(s => s.size);
-      sizeLabel = `${szList[0]}~${szList[szList.length-1]} (${szList.length}사이즈)`;
       const prices = item.sizes.map(s => s.cny_price);
-      const mn = Math.min(...prices), mx = Math.max(...prices);
-      cnyLabel = mn === mx ? `¥${mn}` : `¥${mn}~${mx}`;
+      const allSame = prices.every(p => p === prices[0]);
+      if (allSame) {
+        sizeLabel = `${szList[0]}~${szList[szList.length-1]} (${szList.length}사이즈)`;
+        cnyLabel = `¥${prices[0]}`;
+      } else {
+        // 개별 가격이 다를 때: 사이즈별로 표시
+        sizeLabel = `${szList[0]}~${szList[szList.length-1]} (${szList.length}사이즈)`;
+        cnyLabel = `<div style="font-size:11px;line-height:1.6">${item.sizes.map(s => `${s.size}: ¥${s.cny_price}`).join('<br>')}</div>`;
+      }
     } else {
       sizeLabel = item.size || '<span class="text-muted">ONE SIZE</span>';
       cnyLabel = item.cny != null ? `¥${item.cny}` : '-';
@@ -3083,7 +3089,7 @@ function queueBuildResults() {
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nameEn||''}">${r.nameKr||r.nameEn||'-'}</td>
         <td>${catDd}</td>
         <td colspan="4" style="font-size:12px;color:var(--text2)">${szCount}사이즈 (마진OK: ${profitSizes})
-          <button onclick="qToggleSizes(${item.id})" class="btn btn-outline btn-sm" style="padding:1px 6px;font-size:10px;margin-left:4px" id="q-sz-toggle-${item.id}">펼치기</button></td>
+          <button onclick="qToggleSizes(${item.id})" class="btn btn-outline btn-sm" style="padding:1px 6px;font-size:10px;margin-left:4px" id="q-sz-toggle-${item.id}">접기</button></td>
         <td>${strategyDd(item.id, item.bid_strategy)}</td>
         <td>
           <input type="number" min="1" value="${item.quantity||1}"
@@ -3113,9 +3119,9 @@ function queueBuildResults() {
         const szKp = _getSizeInstantBuy(item, sz);
         const szCompBadge = renderCompBadge(sz.comp);
         const myBidCellSz = renderMyBidCell(r.productId, sz.size);
-        html += `<tr class="q-sz-row-${item.id}" style="display:none;font-size:12px">
+        html += `<tr class="q-sz-row-${item.id}" style="font-size:12px">
           <td><input type="checkbox" class="q-sz-chk" data-id="${item.id}" data-size="${sz.size}" ${ok ? 'checked' : ''}></td>
-          <td style="padding-left:24px;color:var(--text2)">${sz.size}</td>
+          <td style="padding-left:24px;color:var(--text2)">${sz.size}${sz.cny ? ` <span style="color:var(--text3);font-size:10px">¥${sz.cny}</span>` : ''}</td>
           <td></td><td></td>
           <td>${sz.totalCost.toLocaleString()}</td>
           <td>${szKp ? szKp.toLocaleString() : '-'} ${szCompBadge}</td>
@@ -3135,13 +3141,13 @@ function queueBuildResults() {
   });
   tbody.innerHTML = html;
 
-  // 펼치기 상태 복원
-  _expandedSizes.forEach(id => {
+  // 접기 상태 복원 (기본은 펼침, _collapsedSizes에 있으면 접기)
+  _collapsedSizes.forEach(id => {
     const rows = document.querySelectorAll(`.q-sz-row-${id}`);
     const btn = document.getElementById(`q-sz-toggle-${id}`);
     if (rows.length > 0) {
-      rows.forEach(r => r.style.display = '');
-      if (btn) btn.textContent = '접기';
+      rows.forEach(r => r.style.display = 'none');
+      if (btn) btn.textContent = '펼치기';
     }
   });
 
@@ -3220,15 +3226,15 @@ function qChangeStrategy(id, strategy) {
   queueBuildResults();
 }
 
-const _expandedSizes = new Set(); // 펼치기 상태 유지
+const _collapsedSizes = new Set(); // 접기 상태 유지 (기본은 펼침)
 
 function qToggleSizes(id) {
   const rows = document.querySelectorAll(`.q-sz-row-${id}`);
   const btn = document.getElementById(`q-sz-toggle-${id}`);
-  const show = rows[0] && rows[0].style.display === 'none';
-  rows.forEach(r => r.style.display = show ? '' : 'none');
-  if (btn) btn.textContent = show ? '접기' : '펼치기';
-  if (show) _expandedSizes.add(id); else _expandedSizes.delete(id);
+  const isVisible = rows[0] && rows[0].style.display !== 'none';
+  rows.forEach(r => r.style.display = isVisible ? 'none' : '');
+  if (btn) btn.textContent = isVisible ? '펼치기' : '접기';
+  if (isVisible) _collapsedSizes.add(id); else _collapsedSizes.delete(id);
 }
 
 function queueToggleAll(master) {

@@ -1,8 +1,8 @@
 {
-  "counter": 90,
+  "counter": 92,
   "queue": [
     {
-      "id": 90,
+      "id": 92,
       "model": "JQ4110",
       "cny": null,
       "category": "신발",
@@ -10,7 +10,11 @@
       "sizes": [
         {
           "size": "215",
-          "cny_price": 375
+          "cny_price": 370
+        },
+        {
+          "size": "220",
+          "cny_price": 370
         }
       ],
       "sizeSystem": "KR",
@@ -19,105 +23,9 @@
       "quantity": 1,
       "bid_days": 30,
       "bid_strategy": "undercut",
-      "status": "완료",
-      "result": {
-        "productId": "467187",
-        "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙",
-        "nameEn": "(W) Adidas Ozgaia Triple Black",
-        "brand": "Adidas",
-        "kreamSizes": [],
-        "totalCost": 91461,
-        "margins": {
-          "margin_0": {
-            "sell_price": 101000,
-            "profit": 373
-          },
-          "margin_10": {
-            "sell_price": 111000,
-            "profit": 9713
-          },
-          "margin_15": {
-            "sell_price": 116000,
-            "profit": 14383
-          },
-          "margin_20": {
-            "sell_price": 121000,
-            "profit": 19053
-          }
-        },
-        "krwPrice": 83461,
-        "customs": 0,
-        "importVat": 0,
-        "sizeMargins": [
-          {
-            "size": "215",
-            "cny": 375.0,
-            "totalCost": 91461,
-            "margins": {
-              "margin_0": {
-                "sell_price": 101000,
-                "profit": 373
-              },
-              "margin_10": {
-                "sell_price": 111000,
-                "profit": 9713
-              },
-              "margin_15": {
-                "sell_price": 116000,
-                "profit": 14383
-              },
-              "margin_20": {
-                "sell_price": 121000,
-                "profit": 19053
-              }
-            },
-            "instantBuyPrice": 0,
-            "comp": {}
-          }
-        ],
-        "gosi": {
-          "manufacturer": "Adidas",
-          "type": "가방",
-          "color": "블랙",
-          "material": "상품별 상이",
-          "size": "상품별 상이",
-          "foot_length": "사이즈별 상이",
-          "heel_height": "사이즈별 상이",
-          "hs_code": "6404.11",
-          "tariff": 13
-        },
-        "instantBuyPrice": 84000,
-        "instantSellPrice": null,
-        "recentTradePrice": 90000,
-        "totalTrades": 3043,
-        "sellBids": [],
-        "buyBids": [],
-        "sizeDeliveryPrices": [],
-        "marketType": "데이터 부족",
-        "marketColor": "gray",
-        "avgMarginRate": null,
-        "profitableCount": 0,
-        "marketTotalCount": 1,
-        "marketDetails": [
-          {
-            "size": "215",
-            "margin_rate": null,
-            "profitable": false
-          }
-        ],
-        "comp": {}
-      },
-      "gosi": {
-        "manufacturer": "Adidas",
-        "type": "가방",
-        "color": "블랙",
-        "material": "상품별 상이",
-        "size": "상품별 상이",
-        "foot_length": "사이즈별 상이",
-        "heel_height": "사이즈별 상이",
-        "hs_code": "6404.11",
-        "tariff": 13
-      }
+      "status": "대기",
+      "result": null,
+      "gosi": null
     }
   ]
 }
