@@ -4400,8 +4400,20 @@ function queueConfirmAutoBid() {
               updateSyncStatus();
               queueBuildResults();
             }
+            // 입찰 반영 확인: 판매자센터에서 내 입찰 자동 동기화
+            addAutoLog('입찰 반영 확인을 위해 판매자센터 동기화 중...', 'log-info');
+            fetch('/api/my-bids/sync', {method:'POST'}).then(sr => sr.json()).then(syncResult => {
+              if (syncResult.ok || syncResult.bids) {
+                addAutoLog(`동기화 완료: ${(syncResult.bids||[]).length}건 확인`, 'log-success');
+                // 결과 테이블 "내 입찰가" 업데이트
+                queueBuildResults();
+              } else {
+                addAutoLog('동기화 실패 — 판매자센터 세션 확인 필요', 'log-error');
+              }
+            }).catch(() => {
+              addAutoLog('동기화 요청 실패', 'log-error');
+            });
             alert(`자동 입찰 완료!\n성공: ${r.success}건 / 전체: ${r.total}건`);
-            // batch 히스토리 새로고침
             loadBatchHistory();
           }
         }
