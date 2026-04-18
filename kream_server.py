@@ -3841,17 +3841,21 @@ def _run_monitor_check():
             if not my_price:
                 continue
 
-            # 판매입찰 가격 오름차순
-            sorted_prices = sorted(set(s["price"] for s in sell_bids))
-            if not sorted_prices:
-                continue
+            # 판매입찰 가격 오름차순 (내 입찰가 제외)
+            all_prices = sorted(set(s["price"] for s in sell_bids))
+            competitor_prices = [p for p in all_prices if p != my_price]
 
-            # 내가 이미 최저가면 패스
-            if my_price <= sorted_prices[0]:
+            if not competitor_prices:
+                # 내 입찰만 있고 경쟁자 없음 → 1위, 조정 불필요
+                print(f"[모니터] {bid.get('model','')} {bid.get('size','')}: 경쟁자 없음 (내가 1위)")
                 continue
 
             # 경쟁자 최저가
-            competitor_low = sorted_prices[0]
+            competitor_low = competitor_prices[0]
+
+            # 내가 이미 경쟁자보다 낮으면 패스
+            if my_price <= competitor_low:
+                continue
 
             # 새 가격 = 경쟁자 최저가 - 1,000원 (1,000원 단위 올림)
             new_price = int(math.ceil((competitor_low - 1000) / 1000) * 1000)
@@ -3865,10 +3869,13 @@ def _run_monitor_check():
             else:
                 expected_profit = None
 
-            # 상태 결정: 수익 5,000원 미만이면 profit_low
+            # 상태 결정: 수익 마이너스면 deficit, 5,000원 미만이면 profit_low
             status = "pending"
-            if expected_profit is not None and expected_profit < 5000:
-                status = "profit_low"
+            if expected_profit is not None:
+                if expected_profit < 0:
+                    status = "deficit"
+                elif expected_profit < 5000:
+                    status = "profit_low"
 
             adjustments.append({
                 "order_id": bid.get("orderId", ""),
@@ -4061,13 +4068,13 @@ def api_monitor_run_once():
 
 @app.route("/api/adjust/pending")
 def api_adjust_pending():
-    """pending/profit_low 상태의 조정 목록"""
+    """pending/profit_low/deficit 상태의 조정 목록"""
     conn = sqlite3.connect(str(PRICE_DB))
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute(
         """SELECT * FROM price_adjustments
-        WHERE status IN ('pending', 'profit_low')
+        WHERE status IN ('pending', 'profit_low', 'deficit')
         ORDER BY created_at DESC LIMIT 200"""
     )
     rows = [dict(r) for r in c.fetchall()]
@@ -4116,8 +4123,23 @@ def api_adjust_approve():
             conn.close()
 
             if not items:
-                add_log(tid, "error", "승인 대상 없음")
-                finish_task(tid, error="승인 대상 없음")
+                add_log(tid, "error", "승인 대상 없음 (적자/수익부족 항목은 승인 불가)")
+                finish_task(tid, error="승인 대상 없음 (적자/수익부족 항목은 승인 불가)")
+                return
+
+            # 수익 5,000원 미만 항목 필터링
+            valid_items = []
+            for item in items:
+                ep = item.get("expected_profit")
+                if ep is not None and ep < 5000:
+                    add_log(tid, "warn", f"{item['order_id']}: 수익 {ep:,}원 → 승인 불가 (최소 5,000원 필요)")
+                else:
+                    valid_items.append(item)
+            items = valid_items
+
+            if not items:
+                add_log(tid, "error", "수익 조건 미달로 승인 가능 항목 없음")
+                finish_task(tid, error="수익 조건 미달로 승인 가능 항목 없음")
                 return
 
             loop = asyncio.new_event_loop()

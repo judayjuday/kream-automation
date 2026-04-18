@@ -472,6 +472,16 @@ tr.selected td { background: var(--accent-light); }
 </div>
 
 <script>
+// ═══ 유틸: 예상 시간 포맷 ═══
+function _fmtEta(seconds) {
+  if (seconds <= 0) return '0초';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m > 0 && s > 0) return `${m}분 ${s}초`;
+  if (m > 0) return `${m}분`;
+  return `${s}초`;
+}
+
 // ═══ 설정 ═══
 let SETTINGS = {
   cnyRate: 218.12,
@@ -1882,18 +1892,26 @@ function renderPendingTable() {
   let html = '';
   _pendingData.forEach(adj => {
     const name = adj.name_kr || adj.model || '#' + adj.product_id;
+    const isDeficit = adj.status === 'deficit';
     const profitLow = adj.status === 'profit_low';
     const isPending = adj.status === 'pending';
+    const canApprove = isPending && (adj.expected_profit == null || adj.expected_profit >= 5000);
     const profitStr = adj.expected_profit != null
       ? `<span style="color:${adj.expected_profit >= 5000 ? 'var(--accent)' : 'var(--danger)'}">${adj.expected_profit.toLocaleString()}원</span>`
       : '<span style="color:var(--text3)">미확인</span>';
-    const statusBadge = profitLow
-      ? '<span class="badge badge-bad">수익 부족</span>'
-      : '<span class="badge badge-ok">조정 대기</span>';
+    let statusBadge;
+    if (isDeficit) {
+      statusBadge = '<span class="badge badge-bad" style="background:#dc3545;color:#fff">조정 불가 (적자)</span>';
+    } else if (profitLow) {
+      statusBadge = '<span class="badge badge-bad">수익 부족</span>';
+    } else {
+      statusBadge = '<span class="badge badge-ok">조정 대기</span>';
+    }
     const diff = adj.old_price - adj.new_price;
+    const dimRow = isDeficit || profitLow;
 
-    html += `<tr style="${profitLow ? 'opacity:0.5' : ''}">
-      <td><input type="checkbox" class="pend-cb" data-id="${adj.id}" ${isPending ? '' : 'disabled'}></td>
+    html += `<tr style="${dimRow ? 'opacity:0.5' : ''}">
+      <td><input type="checkbox" class="pend-cb" data-id="${adj.id}" ${canApprove ? '' : 'disabled'}></td>
       <td style="text-align:left">
         <div style="font-weight:600; font-size:12px">${name}</div>
         <div style="color:var(--text3); font-size:11px">#${adj.product_id}</div>
@@ -1901,12 +1919,12 @@ function renderPendingTable() {
       <td>${adj.size}</td>
       <td style="font-weight:600">${adj.old_price.toLocaleString()}원</td>
       <td style="color:var(--danger)">${adj.competitor_price.toLocaleString()}원</td>
-      <td style="color:var(--accent); font-weight:700">${adj.new_price.toLocaleString()}원<br><span style="font-size:11px; font-weight:400; color:var(--text3)">-${diff.toLocaleString()}원</span></td>
+      <td style="color:${isDeficit ? 'var(--danger)' : 'var(--accent)'}; font-weight:700">${isDeficit ? '조정 불가' : adj.new_price.toLocaleString() + '원'}<br><span style="font-size:11px; font-weight:400; color:var(--text3)">${isDeficit ? '적자 발생' : '-' + diff.toLocaleString() + '원'}</span></td>
       <td>${profitStr}</td>
       <td>${statusBadge}</td>
       <td style="font-size:11px; color:var(--text3)">${adj.created_at || ''}</td>
       <td>
-        ${isPending ? `<button class="btn btn-primary btn-sm" onclick="approveOne(${adj.id})">승인</button>` : ''}
+        ${canApprove ? `<button class="btn btn-primary btn-sm" onclick="approveOne(${adj.id})">승인</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="rejectOne(${adj.id})" style="margin-left:4px">거절</button>
       </td>
     </tr>`;
@@ -3228,15 +3246,19 @@ function queueExecute() {
 
   const logArea = document.getElementById('q-log');
   logArea.style.display = 'block';
+  const estTotal = totalPending * 30;
   logArea.innerHTML = `<div style="margin-bottom:8px">
-    <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap">
       <span id="q-progress-text">0/${totalPending} (0%)</span>
       <span id="q-progress-model" style="color:var(--text3);font-size:12px"></span>
+      <span id="q-eta-text" style="color:var(--text2);font-size:12px;margin-left:auto">예상 시간: 약 ${_fmtEta(estTotal)}</span>
     </div>
     <div style="background:var(--border);border-radius:4px;height:6px;margin-top:4px;overflow:hidden">
       <div id="q-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s"></div>
     </div>
   </div>`;
+  const _qExecStart = Date.now();
+  let _qLastDone = 0;
 
   fetch('/api/queue/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
   .then(r => r.json())
@@ -3247,7 +3269,7 @@ function queueExecute() {
       fetch('/api/queue/list').then(r => r.json()).then(qr => {
         queueData = qr.queue || [];
         queueRender();
-        // 진행률 업데이트
+        // 진행률 + 예상 시간 업데이트
         const done = queueData.filter(q => q.status === '완료' || q.status === '실패').length;
         const total = queueData.length;
         const pendingNow = queueData.filter(q => q.status === '검색 중' || q.status === '계산 중');
@@ -3255,10 +3277,18 @@ function queueExecute() {
         const pEl = document.getElementById('q-progress-text');
         const bar = document.getElementById('q-progress-bar');
         const mEl = document.getElementById('q-progress-model');
+        const etaEl = document.getElementById('q-eta-text');
         if (pEl) pEl.textContent = `${done}/${total} 완료 (${pct}%)`;
         if (bar) bar.style.width = pct + '%';
         if (mEl && pendingNow.length > 0) mEl.textContent = pendingNow[0].model + ' 처리 중...';
         else if (mEl) mEl.textContent = '';
+        if (etaEl && done > _qLastDone) {
+          _qLastDone = done;
+          const elapsed = (Date.now() - _qExecStart) / 1000;
+          const avgPerItem = elapsed / done;
+          const remaining = (total - done) * avgPerItem;
+          etaEl.textContent = remaining > 0 ? `예상 남은 시간: 약 ${_fmtEta(Math.round(remaining))}` : '거의 완료';
+        }
       });
       fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
         // 로그는 프로그레스바 아래에 추가
@@ -4457,7 +4487,23 @@ function queueConfirmAutoBid() {
     }
 
     btn.textContent = '자동 입찰 진행 중...';
-    addAutoLog(`자동 입찰 시작: ${filteredItems.length}건`, 'log-info');
+    const totalBids = filteredItems.length;
+    const bidEstTotal = totalBids * 90;
+    addAutoLog(`자동 입찰 시작: ${totalBids}건 (예상 시간: 약 ${_fmtEta(bidEstTotal)})`, 'log-info');
+
+    // 프로그레스바 추가
+    const progressHtml = `<div id="auto-bid-progress" style="margin:8px 0">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap">
+        <span id="ab-progress-text">0/${totalBids} (0%)</span>
+        <span id="ab-eta-text" style="color:var(--text2);font-size:12px;margin-left:auto">예상 시간: 약 ${_fmtEta(bidEstTotal)}</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:6px;margin-top:4px;overflow:hidden">
+        <div id="ab-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s"></div>
+      </div>
+    </div>`;
+    logArea.innerHTML += progressHtml;
+    const _abStart = Date.now();
+    let _abLastDone = 0;
 
     fetch('/api/queue/auto-register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4474,10 +4520,30 @@ function queueConfirmAutoBid() {
     const poll = setInterval(() => {
       fetch('/api/task/' + res.taskId).then(r => r.json()).then(task => {
         if (task.logs) {
-          logArea.innerHTML = task.logs.map(l => {
+          // 완료 건수 카운트 (성공/실패 로그)
+          const doneCount = task.logs.filter(l => l.msg && (l.msg.includes('입찰 완료') || l.msg.includes('입찰 성공') || l.msg.includes('실패') || l.msg.includes('스킵'))).length;
+          const pct = totalBids > 0 ? Math.round((doneCount / totalBids) * 100) : 0;
+
+          const logsHtml = task.logs.map(l => {
             const c = l.level === 'error' ? 'var(--danger)' : l.level === 'success' ? 'var(--accent)' : 'var(--text2)';
             return `<div style="color:${c}"><span style="color:var(--text3);font-size:11px">${l.time}</span> ${l.msg}</div>`;
           }).join('');
+
+          // 프로그레스바 + 로그 유지
+          const abProg = `<div id="auto-bid-progress" style="margin:8px 0">
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap">
+              <span id="ab-progress-text">${doneCount}/${totalBids} 완료 (${pct}%)</span>
+              <span id="ab-eta-text" style="color:var(--text2);font-size:12px;margin-left:auto">${
+                doneCount > 0 && doneCount < totalBids
+                  ? `예상 남은 시간: 약 ${_fmtEta(Math.round(((Date.now() - _abStart) / 1000 / doneCount) * (totalBids - doneCount)))}`
+                  : doneCount >= totalBids ? '거의 완료' : `예상 시간: 약 ${_fmtEta(bidEstTotal)}`
+              }</span>
+            </div>
+            <div style="background:var(--border);border-radius:4px;height:6px;margin-top:4px;overflow:hidden">
+              <div id="ab-progress-bar" style="background:var(--accent);height:100%;width:${pct}%;transition:width 0.3s"></div>
+            </div>
+          </div>`;
+          logArea.innerHTML = abProg + logsHtml;
           logArea.scrollTop = logArea.scrollHeight;
         }
         if (task.status === 'done' || task.status === 'error') {
