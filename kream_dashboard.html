@@ -643,7 +643,7 @@ function _onTabShown(id) {
       queueBuildResults();
     } catch(e) {}
   }
-  if (id === 'settings') { try { loadSettings(); } catch(e) {} }
+  if (id === 'settings') { try { loadSettings(); loadAlertSettings(); } catch(e) {} }
   if (id === 'adjust') { try { loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadExpiringBids(); loadEmailPassword(); } catch(e) {} }
 }
 
@@ -1676,6 +1676,61 @@ function saveSettings() {
 
   // 설정 변경 시 결과 테이블 재계산 (언더컷 금액 등)
   if (typeof queueBuildResults === 'function') queueBuildResults();
+}
+
+// ═══ 경보 알림 설정 ═══
+function saveAlertSettings() {
+  const email = (document.getElementById('set-alert-email') || {}).value || '';
+  const enabled = (document.getElementById('set-alert-enabled') || {}).checked;
+  const cooldown = parseInt((document.getElementById('set-alert-cooldown') || {}).value) || 60;
+  const lbl = document.getElementById('alert-enabled-label');
+  if (lbl) lbl.textContent = enabled ? 'ON' : 'OFF';
+
+  fetch('/api/settings').then(r => r.json()).then(cur => {
+    const updated = Object.assign({}, cur, {
+      alert_email: email || undefined,
+      alert_enabled: enabled,
+      alert_cooldown_minutes: cooldown,
+    });
+    if (!email) delete updated.alert_email;
+    fetch('/api/settings', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(updated)
+    });
+  });
+}
+
+function loadAlertSettings() {
+  fetch('/api/settings').then(r => r.json()).then(s => {
+    const emailEl = document.getElementById('set-alert-email');
+    const enabledEl = document.getElementById('set-alert-enabled');
+    const cooldownEl = document.getElementById('set-alert-cooldown');
+    if (emailEl) emailEl.value = s.alert_email || '';
+    if (enabledEl) {
+      enabledEl.checked = s.alert_enabled !== false;
+      const lbl = document.getElementById('alert-enabled-label');
+      if (lbl) lbl.textContent = enabledEl.checked ? 'ON' : 'OFF';
+    }
+    if (cooldownEl) cooldownEl.value = s.alert_cooldown_minutes || 60;
+  }).catch(() => {});
+}
+
+function sendTestAlert() {
+  const btn = document.getElementById('btn-test-alert');
+  const status = document.getElementById('test-alert-status');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = '발송 중...';
+  fetch('/api/health/test-alert', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({key: 'test_alert', message: '설정 탭에서 발송한 테스트 알림입니다'})
+  }).then(r => r.json()).then(res => {
+    if (btn) btn.disabled = false;
+    if (status) status.textContent = res.sent ? '발송 완료! 메일함 확인' : (res.reason || '발송 실패');
+    if (status) status.style.color = res.sent ? 'var(--accent)' : 'var(--danger)';
+  }).catch(e => {
+    if (btn) btn.disabled = false;
+    if (status) { status.textContent = '오류: ' + e.message; status.style.color = 'var(--danger)'; }
+  });
 }
 
 function loadSettings() {

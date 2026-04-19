@@ -36,8 +36,12 @@ from kream_bot import (
     STATE_FILE, PARTNER_URL, KREAM_URL,
 )
 from playwright.async_api import async_playwright
+from health_alert import HealthAlert
 
 app = Flask(__name__)
+
+# ── 경보 시스템 ──
+health_alerter = HealthAlert()
 
 BASE_DIR = Path(__file__).parent
 HISTORY_FILE = BASE_DIR / "execution_history.json"
@@ -2274,6 +2278,10 @@ def api_session_relogin():
                         except Exception as e:
                             results["partner"] = False
                             add_log(tid, "error", f"판매자센터 로그인 실패: {e}")
+                            try:
+                                health_alerter.alert("auth_partner_login_failed", f"판매자센터 자동 로그인 실패: {e}")
+                            except Exception:
+                                pass
                     if target in ("kream", "both"):
                         add_log(tid, "info", "KREAM 재로그인...")
                         try:
@@ -2283,6 +2291,10 @@ def api_session_relogin():
                         except Exception as e:
                             results["kream"] = False
                             add_log(tid, "error", f"KREAM 로그인 실패: {e}")
+                            try:
+                                health_alerter.alert("auth_kream_login_failed", f"KREAM 자동 로그인 실패: {e}")
+                            except Exception:
+                                pass
 
             loop.run_until_complete(_do_relogin())
 
@@ -4224,9 +4236,20 @@ def _run_monitor_check():
             _check_expiring_bids(bids)
         except Exception as ee:
             print(f"[모니터] 만료 임박 체크 오류: {ee}")
+
+        # 모니터링 성공 → 연속 실패 카운터 리셋
+        try:
+            on_bid_monitor_success()
+        except Exception:
+            pass
     except Exception as e:
         print(f"[모니터] 오류: {e}")
         traceback.print_exc()
+        # 모니터링 실패 → 연속 실패 카운터 증가
+        try:
+            on_bid_monitor_failure(str(e))
+        except Exception:
+            pass
 
 
 def _check_expiring_bids(bids):
@@ -5522,6 +5545,19 @@ def api_health():
         return jsonify({"status": "error", "error": str(e)})
 
 
+@app.route("/api/health/test-alert", methods=["POST"])
+def api_health_test_alert():
+    """테스트 알림 발송 (쿨다운 무시)"""
+    data = request.json or {}
+    key = data.get("key", "test_alert")
+    message = data.get("message", "테스트 알림입니다")
+    try:
+        result = health_alerter.alert(key, message, force=True)
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ═══════════════════════════════════════════
 # 판매 패턴 분석
 # ═══════════════════════════════════════════
@@ -5654,6 +5690,77 @@ def api_sales_pattern_analysis():
 
 
 # ═══════════════════════════════════════════
+# 경보 연동: 헬스체크 5분 모니터링 + 입찰 연속 실패 + 판매 무데이터
+# ═══════════════════════════════════════════
+
+_health_alert_timer = None
+_bid_monitor_fail_count = 0  # 입찰 모니터링 연속 실패 카운트
+
+
+def _health_alert_check():
+    """5분마다 헬스체크 내부 호출 → critical 시 경보 발송"""
+    global _health_alert_timer
+    try:
+        with app.test_request_context():
+            resp = api_health()
+            data = json.loads(resp.get_data())
+            if data.get("status") == "critical":
+                # critical 상세 이유 수집
+                reasons = []
+                if not data.get("auth_partner", {}).get("valid"):
+                    reasons.append("판매자센터 인증 무효")
+                if not data.get("auth_kream", {}).get("valid"):
+                    reasons.append("KREAM 인증 무효")
+                ah = data.get("auth_partner", {}).get("age_hours")
+                if ah and ah >= 24:
+                    reasons.append(f"판매자센터 인증 {ah}시간 경과")
+                ah2 = data.get("auth_kream", {}).get("age_hours")
+                if ah2 and ah2 >= 24:
+                    reasons.append(f"KREAM 인증 {ah2}시간 경과")
+                lsa = data.get("last_sale_age_hours")
+                if lsa and lsa >= 24:
+                    reasons.append(f"판매 수집 {lsa}시간 경과")
+                msg = "시스템 상태 CRITICAL: " + ", ".join(reasons) if reasons else "시스템 상태 CRITICAL"
+                health_alerter.alert("health_critical", msg, cooldown_minutes=60)
+
+            # 판매 수집 12시간 무데이터 체크
+            lsa = data.get("last_sale_age_hours")
+            if lsa is not None and lsa >= 12:
+                health_alerter.alert(
+                    "sales_no_data_12h",
+                    f"판매 수집 {lsa:.1f}시간 동안 새 데이터 없음. 스케줄러/세션 확인 필요.",
+                    cooldown_minutes=120,
+                )
+    except Exception as e:
+        print(f"[경보] 헬스체크 모니터링 오류: {e}")
+    # 5분 후 재실행
+    _health_alert_timer = threading.Timer(300, _health_alert_check)
+    _health_alert_timer.daemon = True
+    _health_alert_timer.start()
+
+
+def on_bid_monitor_success():
+    """입찰 모니터링 성공 시 카운터 리셋"""
+    global _bid_monitor_fail_count
+    _bid_monitor_fail_count = 0
+
+
+def on_bid_monitor_failure(error_msg=""):
+    """입찰 모니터링 실패 시 카운터 증가 → 3회 연속 시 경보"""
+    global _bid_monitor_fail_count
+    _bid_monitor_fail_count += 1
+    if _bid_monitor_fail_count >= 3:
+        try:
+            health_alerter.alert(
+                "bid_monitor_consecutive_fail",
+                f"입찰 모니터링 {_bid_monitor_fail_count}회 연속 실패. 마지막 오류: {error_msg}",
+                cooldown_minutes=60,
+            )
+        except Exception:
+            pass
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
@@ -5672,4 +5779,9 @@ if __name__ == "__main__":
     # 판매 수집 스케줄러 자동 시작
     sales_scheduler_state["running"] = True
     _schedule_next_sales_sync()
+    # 헬스체크 경보 모니터링 (5분 간격)
+    _health_alert_timer = threading.Timer(60, _health_alert_check)  # 서버 시작 1분 후 첫 실행
+    _health_alert_timer.daemon = True
+    _health_alert_timer.start()
+    print("  경보 모니터링: 5분 간격")
     app.run(host="0.0.0.0", port=5001, debug=False)

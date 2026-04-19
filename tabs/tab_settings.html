@@ -89,6 +89,32 @@
             <button class="btn btn-primary" onclick="saveSettings(); alert('저장 완료!')">설정 저장</button>
           </div>
         </div>
+
+        <!-- 알림 설정 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🔔</span> 경보 알림 설정</div>
+          <div class="form-row">
+            <span class="form-label">알림 이메일</span>
+            <input type="email" class="form-input form-input-lg" id="set-alert-email" placeholder="기본: KREAM 이메일" onchange="saveAlertSettings()">
+          </div>
+          <div class="form-row">
+            <span class="form-label">알림 활성화</span>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" id="set-alert-enabled" checked onchange="saveAlertSettings()">
+              <span id="alert-enabled-label" style="font-size:13px">ON</span>
+            </label>
+          </div>
+          <div class="form-row">
+            <span class="form-label">쿨다운 (분)</span>
+            <input type="number" class="form-input form-input-sm" id="set-alert-cooldown" value="60" min="5" step="5" onchange="saveAlertSettings()">
+            <span style="font-size:11px; color:var(--text3); margin-left:4px">같은 경보 재발송 대기 시간</span>
+          </div>
+          <div class="form-row" style="align-items:center; gap:10px">
+            <span class="form-label"></span>
+            <button class="btn btn-outline btn-sm" onclick="sendTestAlert()" id="btn-test-alert" style="font-size:12px; padding:6px 16px">테스트 알림 발송</button>
+            <span id="test-alert-status" style="font-size:11px; color:var(--text3)"></span>
+          </div>
+        </div>
       </div>
 
     </div>
