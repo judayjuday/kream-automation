@@ -108,6 +108,19 @@ _monitor_timer = None
 _monitor_lock = threading.Lock()
 
 
+# ── SQLite WAL 모드 활성화 ──
+def _enable_wal_mode():
+    """price_history.db를 WAL 모드로 변경 (동시 읽기/쓰기 성능 향상)"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    before = conn.execute("PRAGMA journal_mode;").fetchone()[0]
+    conn.execute("PRAGMA journal_mode=WAL;")
+    after = conn.execute("PRAGMA journal_mode;").fetchone()[0]
+    conn.close()
+    print(f"[DB] journal_mode: {before} → {after}")
+
+_enable_wal_mode()
+
+
 def _init_adjustments_table():
     """price_adjustments 테이블 생성"""
     conn = sqlite3.connect(str(PRICE_DB))
@@ -453,6 +466,30 @@ def _init_trade_volume_table():
 
 
 _init_trade_volume_table()
+
+
+# ── 탈환률 추적 (bid_competition_log) DB ──
+def _init_bid_competition_log():
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS bid_competition_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT,
+        model TEXT,
+        size TEXT,
+        my_price INTEGER,
+        market_lowest INTEGER,
+        am_i_lowest BOOLEAN,
+        my_margin INTEGER,
+        competitor_count INTEGER,
+        checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bid_comp_model ON bid_competition_log(model, checked_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bid_comp_checked ON bid_competition_log(checked_at)")
+    conn.commit()
+    conn.close()
+
+_init_bid_competition_log()
 
 
 def calc_customer_total(bid_price, category="신발"):
@@ -4001,6 +4038,60 @@ def _find_cost_for_bid(bid):
     return None
 
 
+def _log_bid_competition(bids, market):
+    """각 입찰에 대해 bid_competition_log에 한 줄씩 기록"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    logged = 0
+
+    for bid in bids:
+        pid = bid.get("productId")
+        my_price = bid.get("bidPrice", 0)
+        if not my_price:
+            continue
+
+        mkt = market.get(pid, {})
+        sell_bids = mkt.get("sell_bids", [])
+
+        # 시장 최저가 (내 입찰가 제외)
+        all_prices = sorted(set(s["price"] for s in sell_bids)) if sell_bids else []
+        competitor_prices = [p for p in all_prices if p != my_price]
+        market_lowest = competitor_prices[0] if competitor_prices else None
+        am_i_lowest = 1 if (market_lowest is None or my_price < market_lowest) else 0
+
+        # 경쟁자 수 (같은 사이즈의 판매 입찰 총 개수, 내 것 제외)
+        bid_size = bid.get("size", "ONE SIZE")
+        competitor_count = None
+        if sell_bids:
+            same_size_bids = [s for s in sell_bids if s.get("size") == bid_size]
+            # 전체 개수에서 내 입찰 1개 차감
+            competitor_count = max(0, len(same_size_bids) - 1)
+
+        # 마진 계산: 정산액 - 원가
+        my_margin = None
+        try:
+            total_cost = _find_cost_for_bid(bid)
+            if total_cost is not None:
+                settlement = _calc_settlement_for_monitor(my_price)
+                my_margin = settlement - total_cost
+        except Exception:
+            pass  # 계산 실패 시 NULL
+
+        conn.execute(
+            """INSERT INTO bid_competition_log
+               (product_id, model, size, my_price, market_lowest, am_i_lowest,
+                my_margin, competitor_count, checked_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (pid, bid.get("model", ""), bid_size, my_price,
+             market_lowest, am_i_lowest, my_margin, competitor_count, now)
+        )
+        logged += 1
+
+    conn.commit()
+    conn.close()
+    print(f"[모니터] bid_competition_log: {logged}건 기록")
+
+
 def _run_monitor_check():
     """모니터링: 순위 체크 → 가격 조정 계산 → DB 저장 → 이메일"""
     print(f"\n[모니터] ===== 순위 체크: {datetime.now().strftime('%m-%d %H:%M')} =====")
@@ -4026,6 +4117,12 @@ def _run_monitor_check():
         print(f"[모니터] 입찰 {len(bids)}건, 상품 {len(pids)}개 시세 수집")
         market = loop.run_until_complete(collect_market_data(pids, headless=True))
         loop.close()
+
+        # 2.5) bid_competition_log 기록 (모든 입찰에 대해)
+        try:
+            _log_bid_competition(bids, market)
+        except Exception as comp_e:
+            print(f"[모니터] bid_competition_log 기록 오류: {comp_e}")
 
         # 3) 순위 분석 + 가격 조정 계산
         adjustments = []
@@ -5312,6 +5409,137 @@ def api_sales_rebid_recommendations():
         recommendations.append(rec)
 
     return jsonify({"ok": True, "recommendations": recommendations})
+
+
+# ═══════════════════════════════════════════
+# 판매 패턴 분석
+# ═══════════════════════════════════════════
+
+@app.route("/api/sales/pattern-analysis")
+def api_sales_pattern_analysis():
+    """판매 패턴 분석: 모델별 판매 빈도, 시간대 분포, 추천 모니터링 간격"""
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+
+        # 모델별 판매 데이터
+        rows = conn.execute("""
+            SELECT model, trade_date, sale_price
+            FROM sales_history
+            WHERE model IS NOT NULL AND model != ''
+            ORDER BY model, trade_date
+        """).fetchall()
+
+        if not rows:
+            conn.close()
+            return jsonify({
+                "models": [],
+                "hourly_distribution": [{"hour": h, "count": 0} for h in range(24)],
+                "summary": {"total_models": 0, "models_recommended_30min": 0, "data_period_days": 0}
+            })
+
+        # 모델별 그룹핑
+        from collections import defaultdict
+        model_sales = defaultdict(list)
+        all_dates = []
+        hourly_counts = [0] * 24
+
+        for r in rows:
+            model = r["model"]
+            td = r["trade_date"] or ""
+            model_sales[model].append(td)
+            all_dates.append(td)
+            # 시간대 추출
+            try:
+                dt = datetime.strptime(td, "%Y-%m-%d %H:%M:%S")
+                hourly_counts[dt.hour] += 1
+            except Exception:
+                try:
+                    dt = datetime.strptime(td, "%Y-%m-%d")
+                    hourly_counts[12] += 1  # 시간 정보 없으면 정오로
+                except Exception:
+                    pass
+
+        # 전체 기간 계산
+        valid_dates = []
+        for d in all_dates:
+            try:
+                valid_dates.append(datetime.strptime(d[:10], "%Y-%m-%d"))
+            except Exception:
+                pass
+        data_period_days = 0
+        if valid_dates:
+            data_period_days = max(1, (max(valid_dates) - min(valid_dates)).days)
+
+        # 모델별 분석
+        models_result = []
+        models_30min = 0
+
+        for model, dates in model_sales.items():
+            count = len(dates)
+            if count < 3:
+                continue  # 3건 미만 제외
+
+            # 날짜 파싱
+            parsed = []
+            for d in dates:
+                try:
+                    parsed.append(datetime.strptime(d, "%Y-%m-%d %H:%M:%S"))
+                except Exception:
+                    try:
+                        parsed.append(datetime.strptime(d, "%Y-%m-%d"))
+                    except Exception:
+                        pass
+
+            if len(parsed) < 3:
+                continue
+
+            parsed.sort()
+            first_sale = parsed[0].strftime("%Y-%m-%d %H:%M")
+            last_sale = parsed[-1].strftime("%Y-%m-%d %H:%M")
+            span_days = max(1, (parsed[-1] - parsed[0]).days)
+
+            # 평균 판매 간격 (시간)
+            intervals = []
+            for i in range(1, len(parsed)):
+                diff_hours = (parsed[i] - parsed[i - 1]).total_seconds() / 3600
+                intervals.append(diff_hours)
+            avg_hours = sum(intervals) / len(intervals) if intervals else 999
+
+            # 추천 모니터링 간격
+            if avg_hours < 4:
+                recommended = "30분"
+                models_30min += 1
+            elif avg_hours < 12:
+                recommended = "1시간"
+            else:
+                recommended = "3시간"
+
+            models_result.append({
+                "model": model,
+                "sales_count": count,
+                "first_sale": first_sale,
+                "last_sale": last_sale,
+                "span_days": span_days,
+                "avg_hours_between_sales": round(avg_hours, 1),
+                "recommended_monitoring": recommended,
+            })
+
+        # 판매 수 내림차순 정렬
+        models_result.sort(key=lambda x: x["sales_count"], reverse=True)
+
+        conn.close()
+        return jsonify({
+            "models": models_result,
+            "hourly_distribution": [{"hour": h, "count": hourly_counts[h]} for h in range(24)],
+            "summary": {
+                "total_models": len(models_result),
+                "models_recommended_30min": models_30min,
+                "data_period_days": data_period_days,
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ═══════════════════════════════════════════

@@ -1,0 +1,123 @@
+<div id="tab-pattern" class="tab-view">
+  <!-- 요약 카드 -->
+  <div class="card">
+    <div class="card-title" style="justify-content:space-between">
+      <span><span class="icon">📊</span> 판매 패턴 분석</span>
+      <button class="btn btn-outline btn-sm" onclick="loadPatternAnalysis()">새로고침</button>
+    </div>
+    <div id="pattern-summary" style="display:flex; gap:24px; margin-bottom:12px; flex-wrap:wrap">
+      <div class="card" style="flex:1; min-width:150px; margin:0; padding:16px; text-align:center; background:#f8f9fa">
+        <div style="font-size:11px; color:#888; margin-bottom:4px">분석 모델 수</div>
+        <div id="pattern-total-models" style="font-size:28px; font-weight:800; color:var(--accent)">-</div>
+      </div>
+      <div class="card" style="flex:1; min-width:150px; margin:0; padding:16px; text-align:center; background:#f8f9fa">
+        <div style="font-size:11px; color:#888; margin-bottom:4px">30분 추천 모델</div>
+        <div id="pattern-30min-models" style="font-size:28px; font-weight:800; color:var(--danger)">-</div>
+      </div>
+      <div class="card" style="flex:1; min-width:150px; margin:0; padding:16px; text-align:center; background:#f8f9fa">
+        <div style="font-size:11px; color:#888; margin-bottom:4px">분석 기간</div>
+        <div id="pattern-period-days" style="font-size:28px; font-weight:800; color:var(--primary)">-</div>
+        <div style="font-size:11px; color:#888">일</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모델별 테이블 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span> 모델별 판매 패턴</div>
+    <div id="pattern-no-data" style="display:none; padding:20px; text-align:center; color:#888">
+      판매 데이터가 부족합니다. (3건 이상 판매 모델만 분석 대상)
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>모델번호</th>
+            <th>판매 수</th>
+            <th>첫 판매</th>
+            <th>마지막 판매</th>
+            <th>기간(일)</th>
+            <th>평균 간격(시간)</th>
+            <th>추천 모니터링</th>
+          </tr>
+        </thead>
+        <tbody id="pattern-tbody">
+          <tr><td colspan="8" class="text-muted">데이터 로딩 중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 시간대별 분포 그래프 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🕐</span> 시간대별 체결 분포 (0~23시)</div>
+    <div id="pattern-hourly-chart" style="display:flex; align-items:flex-end; gap:2px; height:200px; padding:10px 0; border-bottom:1px solid #eee">
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:10px; color:#999; padding-top:4px">
+      <span>0시</span><span>6시</span><span>12시</span><span>18시</span><span>23시</span>
+    </div>
+  </div>
+
+<script>
+function loadPatternAnalysis() {
+  fetch('/api/sales/pattern-analysis')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('pattern-tbody').innerHTML =
+          '<tr><td colspan="8" style="color:var(--danger)">오류: ' + data.error + '</td></tr>';
+        return;
+      }
+
+      // 요약 카드
+      const s = data.summary || {};
+      document.getElementById('pattern-total-models').textContent = s.total_models || 0;
+      document.getElementById('pattern-30min-models').textContent = s.models_recommended_30min || 0;
+      document.getElementById('pattern-period-days').textContent = s.data_period_days || 0;
+
+      // 모델 테이블
+      const models = data.models || [];
+      const tbody = document.getElementById('pattern-tbody');
+      if (!models.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted">분석 대상 모델 없음 (3건 이상 판매 필요)</td></tr>';
+        document.getElementById('pattern-no-data').style.display = 'block';
+      } else {
+        document.getElementById('pattern-no-data').style.display = 'none';
+        tbody.innerHTML = models.map((m, i) => {
+          const badgeColor = m.recommended_monitoring === '30분' ? 'var(--danger)' :
+                             m.recommended_monitoring === '1시간' ? 'var(--warning, orange)' : '#888';
+          return `<tr>
+            <td>${i + 1}</td>
+            <td><strong>${m.model}</strong></td>
+            <td>${m.sales_count}건</td>
+            <td style="font-size:12px">${m.first_sale}</td>
+            <td style="font-size:12px">${m.last_sale}</td>
+            <td>${m.span_days}일</td>
+            <td>${m.avg_hours_between_sales}h</td>
+            <td><span style="background:${badgeColor};color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600">${m.recommended_monitoring}</span></td>
+          </tr>`;
+        }).join('');
+      }
+
+      // 시간대 그래프
+      const hourly = data.hourly_distribution || [];
+      const maxCount = Math.max(1, ...hourly.map(h => h.count));
+      const chart = document.getElementById('pattern-hourly-chart');
+      chart.innerHTML = hourly.map(h => {
+        const pct = Math.max(2, (h.count / maxCount) * 100);
+        const bg = h.hour >= 8 && h.hour <= 22 ? 'var(--accent)' : '#ccc';
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+          <div style="font-size:10px;color:#666;margin-bottom:2px">${h.count || ''}</div>
+          <div style="width:100%;max-width:30px;height:${pct}%;background:${bg};border-radius:3px 3px 0 0;min-height:2px" title="${h.hour}시: ${h.count}건"></div>
+          <div style="font-size:9px;color:#aaa;margin-top:2px">${h.hour}</div>
+        </div>`;
+      }).join('');
+    })
+    .catch(e => {
+      document.getElementById('pattern-tbody').innerHTML =
+        '<tr><td colspan="8" style="color:var(--danger)">로드 실패: ' + e.message + '</td></tr>';
+    });
+}
+</script>
+</div>
