@@ -207,6 +207,12 @@ tr.selected td { background: var(--accent-light); }
       </div>
     </div>
     <div class="nav-group">
+      <div class="nav-label">물류</div>
+      <div class="nav-item" onclick="showTab('logistics')">
+        <span class="nav-icon">🚚</span> 물류 관리
+      </div>
+    </div>
+    <div class="nav-group">
       <div class="nav-label">설정</div>
       <div class="nav-item" onclick="showTab('settings')">
         <span class="nav-icon">⚙️</span> 환율/수수료
@@ -465,6 +471,7 @@ tr.selected td { background: var(--accent-light); }
       <div id="tab-prices" class="tab-view" data-tab-title="가격 수집"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-mybids" class="tab-view" data-tab-title="입찰 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-history" class="tab-view" data-tab-title="실행 이력"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-logistics" class="tab-view" data-tab-title="물류 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-settings" class="tab-view" data-tab-title="환율/수수료"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
@@ -585,6 +592,7 @@ function _loadTab(id, tabEl) {
 function _onTabShown(id) {
   if (id === 'margin') { try { quickCalc(); } catch(e) {} }
   if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); loadEditLog(); } catch(e) {} }
+  if (id === 'logistics') { try { loadLogisticsAll(); } catch(e) {} }
   if (id === 'register' && typeof queueRender === 'function') {
     try {
       qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
@@ -6116,6 +6124,238 @@ document.addEventListener('click', (e) => {
     panel.style.display = 'none';
   }
 });
+
+// ═══ 물류 관리 ═══
+let _suppliersCache = [];
+
+function loadLogisticsAll() {
+  loadSuppliers();
+  loadPendingShipments();
+  loadShipmentRequests();
+  loadLogisticsStats();
+}
+
+function loadLogisticsStats() {
+  fetch('/api/logistics/stats').then(r => r.json()).then(d => {
+    document.getElementById('logi-pending-cnt').textContent = (d.pending || 0) + '건';
+    document.getElementById('logi-progress-cnt').textContent = (d.in_progress || 0) + '건';
+    document.getElementById('logi-done-cnt').textContent = (d.done || 0) + '건';
+    document.getElementById('logi-month-cost').textContent = (d.month_cost || 0).toLocaleString() + '원';
+  }).catch(() => {});
+}
+
+function loadSuppliers() {
+  fetch('/api/logistics/suppliers').then(r => r.json()).then(d => {
+    _suppliersCache = d.suppliers || [];
+    const tbody = document.getElementById('sup-tbody');
+    if (!tbody) return;
+    if (_suppliersCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-muted">협력사 없음</td></tr>';
+    } else {
+      tbody.innerHTML = _suppliersCache.map(s => `<tr>
+        <td>${s.id}</td>
+        <td style="font-weight:600">${s.name}</td>
+        <td>${s.contact || '-'}</td>
+        <td>${s.phone || '-'}</td>
+        <td>${s.wechat || '-'}</td>
+        <td style="font-size:12px">${s.notes || '-'}</td>
+        <td style="font-size:11px; color:var(--text3)">${s.created_at || ''}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="deleteSupplier(${s.id})" style="color:var(--danger)">삭제</button></td>
+      </tr>`).join('');
+    }
+    // 드롭다운 업데이트
+    const sel = document.getElementById('ship-supplier');
+    const filterSel = document.getElementById('logi-filter-supplier');
+    if (sel) {
+      sel.innerHTML = '<option value="">선택하세요</option>' + _suppliersCache.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    }
+    if (filterSel) {
+      filterSel.innerHTML = '<option value="">전체 협력사</option>' + _suppliersCache.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    }
+  }).catch(() => {});
+}
+
+function addSupplier() {
+  const name = document.getElementById('sup-name').value.trim();
+  if (!name) { alert('이름을 입력하세요'); return; }
+  fetch('/api/logistics/supplier', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      name,
+      contact: document.getElementById('sup-contact').value.trim(),
+      phone: document.getElementById('sup-phone').value.trim(),
+      wechat: document.getElementById('sup-wechat').value.trim(),
+      notes: document.getElementById('sup-notes').value.trim(),
+    })
+  }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      loadSuppliers();
+      document.getElementById('sup-name').value = '';
+      document.getElementById('sup-contact').value = '';
+      document.getElementById('sup-phone').value = '';
+      document.getElementById('sup-wechat').value = '';
+      document.getElementById('sup-notes').value = '';
+    } else alert(res.error || '추가 실패');
+  });
+}
+
+function deleteSupplier(id) {
+  if (!confirm('협력사를 삭제하시겠습니까?')) return;
+  fetch(`/api/logistics/supplier/${id}`, { method: 'DELETE' })
+  .then(r => r.json()).then(() => loadSuppliers());
+}
+
+function loadPendingShipments() {
+  fetch('/api/logistics/pending').then(r => r.json()).then(d => {
+    const items = d.pending || [];
+    const countEl = document.getElementById('logi-wait-count');
+    if (countEl) countEl.textContent = items.length;
+    const tbody = document.getElementById('logi-pending-tbody');
+    if (!tbody) return;
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">발송 대기 없음</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(s => `<tr>
+      <td style="font-size:12px">${s.order_id || '-'}</td>
+      <td style="text-align:left; font-weight:600; font-size:12px">${s.model || s.name || '-'}</td>
+      <td>${s.size || '-'}</td>
+      <td>${s.amount ? s.amount.toLocaleString() + '원' : '-'}</td>
+      <td style="font-size:11px">${s.trade_date || s.sold_at || '-'}</td>
+      <td><button class="btn btn-primary btn-sm" onclick="openShipmentModal('${s.order_id}','${s.product_id||''}','${s.model||''}','${s.size||''}')">발송 요청</button></td>
+    </tr>`).join('');
+  }).catch(() => {});
+}
+
+let _shipModalData = {};
+function openShipmentModal(orderId, productId, model, size) {
+  _shipModalData = { orderId, productId, model, size };
+  const modal = document.getElementById('shipment-request-modal');
+  modal.style.display = 'flex';
+  document.getElementById('shipment-modal-info').innerHTML =
+    `<b>주문:</b> ${orderId} | <b>모델:</b> ${model} | <b>사이즈:</b> ${size}`;
+  document.getElementById('ship-hbl').value = '';
+  document.getElementById('ship-notes').value = '';
+}
+
+function closeShipmentModal() {
+  document.getElementById('shipment-request-modal').style.display = 'none';
+}
+
+function submitShipmentRequest() {
+  const supplierId = document.getElementById('ship-supplier').value;
+  const hbl = document.getElementById('ship-hbl').value.trim();
+  const notes = document.getElementById('ship-notes').value.trim();
+  const proofFile = document.getElementById('ship-proof').files[0];
+
+  if (!supplierId) { alert('협력사를 선택하세요'); return; }
+
+  const formData = new FormData();
+  formData.append('order_id', _shipModalData.orderId || '');
+  formData.append('product_id', _shipModalData.productId || '');
+  formData.append('model', _shipModalData.model || '');
+  formData.append('size', _shipModalData.size || '');
+  formData.append('supplier_id', supplierId);
+  formData.append('hubnet_hbl', hbl);
+  formData.append('notes', notes);
+  if (proofFile) formData.append('proof_image', proofFile);
+
+  fetch('/api/logistics/request', { method: 'POST', body: formData })
+  .then(r => r.json()).then(res => {
+    if (res.ok) {
+      closeShipmentModal();
+      loadPendingShipments();
+      loadShipmentRequests();
+      loadLogisticsStats();
+    } else alert(res.error || '요청 실패');
+  });
+}
+
+function loadShipmentRequests() {
+  const status = document.getElementById('logi-filter-status')?.value || '';
+  const supplier = document.getElementById('logi-filter-supplier')?.value || '';
+  let url = '/api/logistics/requests?';
+  if (status) url += `status=${encodeURIComponent(status)}&`;
+  if (supplier) url += `supplier_id=${supplier}&`;
+
+  fetch(url).then(r => r.json()).then(d => {
+    const items = d.requests || [];
+    const tbody = document.getElementById('logi-requests-tbody');
+    if (!tbody) return;
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-muted">발송 요청 없음</td></tr>';
+      return;
+    }
+    const statusColors = {'요청':'#2196f3','발송완료':'#ff9800','허브넷도착':'#9c27b0','통관중':'#e91e63','배송완료':'var(--accent)'};
+    tbody.innerHTML = items.map(r => {
+      const supName = _suppliersCache.find(s => s.id === r.supplier_id)?.name || '-';
+      return `<tr>
+        <td style="font-size:12px">${r.order_id || '-'}</td>
+        <td style="text-align:left; font-weight:600; font-size:12px">${r.model || '-'}</td>
+        <td>${r.size || '-'}</td>
+        <td>${supName}</td>
+        <td style="font-size:12px">${r.hubnet_hbl || '-'}</td>
+        <td style="font-size:11px">${r.request_date || '-'}</td>
+        <td>
+          <input type="text" value="${r.tracking_number || ''}" class="form-input" style="width:120px; font-size:11px"
+            onchange="updateTracking(${r.id}, this.value)" placeholder="트래킹 입력">
+        </td>
+        <td>
+          <select class="form-input" style="width:100px; font-size:11px; color:${statusColors[r.status]||'inherit'}"
+            onchange="updateShipmentStatus(${r.id}, this.value)">
+            ${['요청','발송완료','허브넷도착','통관중','배송완료'].map(s => `<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </td>
+        <td>${r.proof_image ? `<a href="/uploads/${r.proof_image}" target="_blank" style="font-size:11px">보기</a>` : '-'}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="deleteShipment(${r.id})" style="color:var(--danger); font-size:11px">삭제</button></td>
+      </tr>`;
+    }).join('');
+  }).catch(() => {});
+}
+
+function updateTracking(id, tracking) {
+  fetch(`/api/logistics/request/${id}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ tracking_number: tracking, status: tracking ? '발송완료' : undefined })
+  }).then(r => r.json()).then(() => { loadShipmentRequests(); loadLogisticsStats(); });
+}
+
+function updateShipmentStatus(id, status) {
+  fetch(`/api/logistics/request/${id}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ status })
+  }).then(r => r.json()).then(() => loadLogisticsStats());
+}
+
+function deleteShipment(id) {
+  if (!confirm('발송 요청을 삭제하시겠습니까?')) return;
+  fetch(`/api/logistics/request/${id}`, { method: 'DELETE' })
+  .then(r => r.json()).then(() => { loadShipmentRequests(); loadPendingShipments(); loadLogisticsStats(); });
+}
+
+function exportShipments() {
+  const status = document.getElementById('logi-filter-status')?.value || '';
+  const supplier = document.getElementById('logi-filter-supplier')?.value || '';
+  let url = '/api/logistics/export?';
+  if (status) url += `status=${encodeURIComponent(status)}&`;
+  if (supplier) url += `supplier_id=${supplier}&`;
+  window.open(url, '_blank');
+}
+
+function importTracking() {
+  const file = document.getElementById('tracking-import-file').files[0];
+  if (!file) { alert('파일을 선택하세요'); return; }
+  const statusEl = document.getElementById('tracking-import-status');
+  if (statusEl) statusEl.textContent = '가져오는 중...';
+  const formData = new FormData();
+  formData.append('file', file);
+  fetch('/api/logistics/import-tracking', { method: 'POST', body: formData })
+  .then(r => r.json()).then(res => {
+    if (statusEl) statusEl.textContent = res.ok ? `완료: ${res.updated || 0}건 업데이트` : (res.error || '실패');
+    loadShipmentRequests();
+    loadLogisticsStats();
+  }).catch(() => { if (statusEl) statusEl.textContent = '가져오기 실패'; });
+}
 
 // ── 초기 탭(register) — 인라인이므로 fetch 불필요, onTabShown만 호출 ──
 _onTabShown('register');

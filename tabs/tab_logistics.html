@@ -1,0 +1,192 @@
+      <div id="tab-logistics" class="tab-view">
+        <!-- 현황 카드 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🚚</span> 물류 현황</div>
+          <div class="metrics" id="logistics-metrics">
+            <div class="metric metric-blue">
+              <div class="metric-label">발송 대기</div>
+              <div class="metric-value" id="logi-pending-cnt">0건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">진행 중</div>
+              <div class="metric-value" id="logi-progress-cnt">0건</div>
+            </div>
+            <div class="metric metric-green">
+              <div class="metric-label">완료</div>
+              <div class="metric-value" id="logi-done-cnt">0건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">이번 달 물류비</div>
+              <div class="metric-value" id="logi-month-cost">0원</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 발송 대기 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 발송 대기 (<span id="logi-wait-count">0</span>건)</span>
+            <button class="btn btn-outline" onclick="loadPendingShipments()" style="font-size:12px; padding:4px 12px">새로고침</button>
+          </div>
+          <p class="text-muted" style="font-size:12px; margin-bottom:8px">KREAM 체결 건 중 발송 요청하지 않은 목록</p>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>주문번호</th>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>거래금액</th>
+                  <th>거래일</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="logi-pending-tbody">
+                <tr><td colspan="6" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 발송 요청 모달 (inline) -->
+        <div id="shipment-request-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:none; justify-content:center; align-items:center">
+          <div style="background:var(--card); border-radius:12px; padding:24px; width:500px; max-width:90vw; max-height:80vh; overflow-y:auto">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+              <h3 style="margin:0; font-size:16px">발송 요청</h3>
+              <button onclick="closeShipmentModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text3)">&times;</button>
+            </div>
+            <div id="shipment-modal-info" style="background:var(--bg2); padding:12px; border-radius:8px; margin-bottom:16px; font-size:13px"></div>
+            <div class="form-row">
+              <span class="form-label">협력사</span>
+              <select id="ship-supplier" class="form-input" style="width:200px">
+                <option value="">선택하세요</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <span class="form-label">허브넷 HBL</span>
+              <input type="text" id="ship-hbl" class="form-input" style="width:200px" placeholder="HBL 번호">
+            </div>
+            <div class="form-row">
+              <span class="form-label">메모</span>
+              <input type="text" id="ship-notes" class="form-input" style="width:300px" placeholder="요청 사항">
+            </div>
+            <div class="form-row">
+              <span class="form-label">증거 이미지</span>
+              <input type="file" id="ship-proof" accept="image/*" style="font-size:12px">
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+              <button class="btn btn-outline" onclick="closeShipmentModal()">취소</button>
+              <button class="btn btn-primary" onclick="submitShipmentRequest()">발송 요청</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 발송 진행 현황 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📦</span> 발송 진행 현황</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <select id="logi-filter-status" class="form-input" style="width:120px; font-size:12px" onchange="loadShipmentRequests()">
+                <option value="">전체 상태</option>
+                <option value="요청">요청</option>
+                <option value="발송완료">발송완료</option>
+                <option value="허브넷도착">허브넷도착</option>
+                <option value="통관중">통관중</option>
+                <option value="배송완료">배송완료</option>
+              </select>
+              <select id="logi-filter-supplier" class="form-input" style="width:120px; font-size:12px" onchange="loadShipmentRequests()">
+                <option value="">전체 협력사</option>
+              </select>
+              <button class="btn btn-outline" onclick="loadShipmentRequests()" style="font-size:12px; padding:4px 12px">새로고침</button>
+              <button class="btn btn-outline" onclick="exportShipments()" style="font-size:12px; padding:4px 12px">엑셀 내보내기</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>주문번호</th>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>협력사</th>
+                  <th>HBL</th>
+                  <th>요청일</th>
+                  <th>트래킹</th>
+                  <th>상태</th>
+                  <th>증거</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="logi-requests-tbody">
+                <tr><td colspan="10" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 트래킹 일괄 가져오기 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📥</span> 트래킹 번호 일괄 가져오기</div>
+          <p class="text-muted" style="font-size:12px; margin-bottom:8px">
+            협력사가 전달한 엑셀 파일에서 트래킹 번호를 일괄 입력합니다. (열: 주문번호 또는 HBL, 트래킹번호)
+          </p>
+          <div style="display:flex; gap:12px; align-items:center">
+            <input type="file" id="tracking-import-file" accept=".csv,.xlsx,.xls" style="font-size:12px">
+            <button class="btn btn-primary" onclick="importTracking()">가져오기</button>
+            <span id="tracking-import-status" style="font-size:12px; color:var(--text2)"></span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 협력사 관리 -->
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🤝</span> 협력사 관리</span>
+            <button class="btn btn-outline" onclick="loadSuppliers()" style="font-size:12px; padding:4px 12px">새로고침</button>
+          </div>
+          <!-- 협력사 추가 폼 -->
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; padding:12px; background:var(--bg2); border-radius:8px">
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">이름 *</label>
+              <input type="text" id="sup-name" class="form-input" style="width:120px" placeholder="협력사명">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">담당자</label>
+              <input type="text" id="sup-contact" class="form-input" style="width:100px" placeholder="담당자명">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">전화번호</label>
+              <input type="text" id="sup-phone" class="form-input" style="width:130px" placeholder="010-0000-0000">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">WeChat</label>
+              <input type="text" id="sup-wechat" class="form-input" style="width:120px" placeholder="WeChat ID">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">메모</label>
+              <input type="text" id="sup-notes" class="form-input" style="width:150px" placeholder="비고">
+            </div>
+            <button class="btn btn-primary" onclick="addSupplier()">추가</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>이름</th>
+                  <th>담당자</th>
+                  <th>전화번호</th>
+                  <th>WeChat</th>
+                  <th>메모</th>
+                  <th>등록일</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="sup-tbody">
+                <tr><td colspan="8" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>

@@ -23,7 +23,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 import openpyxl
 
 # ── 기존 모듈 import ──
@@ -4665,6 +4665,296 @@ def api_renew_bids():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"taskId": tid})
+
+
+# ═══════════════════════════════════════════
+# 물류 관리 API
+# ═══════════════════════════════════════════
+
+# 업로드 폴더
+UPLOADS_DIR = BASE_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+
+@app.route("/uploads/<path:filename>")
+def serve_upload(filename):
+    return send_from_directory(str(UPLOADS_DIR), filename)
+
+
+@app.route("/api/logistics/suppliers")
+def api_logistics_suppliers():
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM suppliers ORDER BY id").fetchall()
+    conn.close()
+    return jsonify({"suppliers": [dict(r) for r in rows]})
+
+
+@app.route("/api/logistics/supplier", methods=["POST"])
+def api_logistics_supplier_add():
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "이름 필요"}), 400
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        "INSERT INTO suppliers (name, contact, phone, wechat, notes, created_at) VALUES (?,?,?,?,?,?)",
+        (name, data.get("contact", ""), data.get("phone", ""), data.get("wechat", ""),
+         data.get("notes", ""), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/logistics/supplier/<int:sid>", methods=["DELETE"])
+def api_logistics_supplier_delete(sid):
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute("DELETE FROM suppliers WHERE id=?", (sid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/logistics/pending")
+def api_logistics_pending():
+    """발송 대기: sales_history에 있는데 shipment_requests에 없는 건"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("""
+        SELECT sh.order_id, sh.product_id, sh.model, sh.size,
+               sh.sale_price as amount, sh.trade_date as sold_at
+        FROM sales_history sh
+        LEFT JOIN shipment_requests sr ON sh.order_id = sr.order_id
+        WHERE sr.id IS NULL
+        ORDER BY sh.trade_date DESC
+        LIMIT 200
+    """).fetchall()
+    conn.close()
+    return jsonify({"pending": [dict(r) for r in rows]})
+
+
+@app.route("/api/logistics/request", methods=["POST"])
+def api_logistics_request_add():
+    """발송 요청 생성"""
+    # multipart/form-data 지원
+    order_id = request.form.get("order_id", "") or (request.json or {}).get("order_id", "")
+    product_id = request.form.get("product_id", "") or (request.json or {}).get("product_id", "")
+    model = request.form.get("model", "") or (request.json or {}).get("model", "")
+    size = request.form.get("size", "") or (request.json or {}).get("size", "")
+    supplier_id = request.form.get("supplier_id") or (request.json or {}).get("supplier_id")
+    hubnet_hbl = request.form.get("hubnet_hbl", "") or (request.json or {}).get("hubnet_hbl", "")
+    notes = request.form.get("notes", "") or (request.json or {}).get("notes", "")
+
+    if not supplier_id:
+        return jsonify({"error": "협력사 선택 필요"}), 400
+
+    # 증거 이미지 저장
+    proof_filename = ""
+    proof_file = request.files.get("proof_image")
+    if proof_file and proof_file.filename:
+        ext = proof_file.filename.rsplit(".", 1)[-1] if "." in proof_file.filename else "jpg"
+        proof_filename = f"proof_{order_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+        proof_file.save(str(UPLOADS_DIR / proof_filename))
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        """INSERT INTO shipment_requests
+        (order_id, product_id, model, size, supplier_id, hubnet_hbl, request_date,
+         tracking_number, status, proof_image, notes, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (order_id, product_id, model, size, int(supplier_id), hubnet_hbl,
+         now[:10], "", "요청", proof_filename, notes, now, now)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/logistics/request/<int:rid>", methods=["PUT"])
+def api_logistics_request_update(rid):
+    """발송 요청 업데이트 (트래킹/상태)"""
+    data = request.json or {}
+    conn = sqlite3.connect(str(PRICE_DB))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    updates = []
+    params = []
+    for field in ["tracking_number", "status", "hubnet_hbl", "notes"]:
+        if field in data and data[field] is not None:
+            updates.append(f"{field}=?")
+            params.append(data[field])
+
+    if not updates:
+        conn.close()
+        return jsonify({"ok": True})
+
+    updates.append("updated_at=?")
+    params.append(now)
+    params.append(rid)
+
+    # 상태 변경 이력 기록
+    if "status" in data:
+        old = conn.execute("SELECT status FROM shipment_requests WHERE id=?", (rid,)).fetchone()
+        if old:
+            save_edit_log("shipment", str(rid), "status", old[0], data["status"])
+
+    # 트래킹 입력 시 자동 상태 변경
+    if "tracking_number" in data and data["tracking_number"] and "status" not in data:
+        old_status = conn.execute("SELECT status FROM shipment_requests WHERE id=?", (rid,)).fetchone()
+        if old_status and old_status[0] == "요청":
+            updates = [u for u in updates if not u.startswith("status")]
+            updates.insert(0, "status=?")
+            params.insert(0, "발송완료")
+            save_edit_log("shipment", str(rid), "status", "요청", "발송완료")
+
+    conn.execute(f"UPDATE shipment_requests SET {','.join(updates)} WHERE id=?", params)
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/logistics/request/<int:rid>", methods=["DELETE"])
+def api_logistics_request_delete(rid):
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute("DELETE FROM shipment_requests WHERE id=?", (rid,))
+    conn.execute("DELETE FROM shipment_costs WHERE shipment_id=?", (rid,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/logistics/requests")
+def api_logistics_requests():
+    """발송 요청 목록 (필터 가능)"""
+    status = request.args.get("status", "")
+    supplier_id = request.args.get("supplier_id", "")
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    sql = "SELECT * FROM shipment_requests WHERE 1=1"
+    params = []
+    if status:
+        sql += " AND status=?"
+        params.append(status)
+    if supplier_id:
+        sql += " AND supplier_id=?"
+        params.append(int(supplier_id))
+    sql += " ORDER BY created_at DESC LIMIT 200"
+
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return jsonify({"requests": [dict(r) for r in rows]})
+
+
+@app.route("/api/logistics/stats")
+def api_logistics_stats():
+    """물류 현황 통계"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    pending = conn.execute("SELECT COUNT(*) FROM sales_history sh LEFT JOIN shipment_requests sr ON sh.order_id=sr.order_id WHERE sr.id IS NULL").fetchone()[0]
+    in_progress = conn.execute("SELECT COUNT(*) FROM shipment_requests WHERE status IN ('요청','발송완료','허브넷도착','통관중')").fetchone()[0]
+    done = conn.execute("SELECT COUNT(*) FROM shipment_requests WHERE status='배송완료'").fetchone()[0]
+
+    month_start = datetime.now().strftime("%Y-%m-01")
+    month_cost = conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN currency='KRW' THEN amount ELSE amount*218 END),0) FROM shipment_costs WHERE created_at>=?",
+        (month_start,)
+    ).fetchone()[0]
+    conn.close()
+    return jsonify({"pending": pending, "in_progress": in_progress, "done": done, "month_cost": int(month_cost)})
+
+
+@app.route("/api/logistics/export")
+def api_logistics_export():
+    """엑셀 내보내기 (CSV)"""
+    status = request.args.get("status", "")
+    supplier_id = request.args.get("supplier_id", "")
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    sql = "SELECT sr.*, s.name as supplier_name FROM shipment_requests sr LEFT JOIN suppliers s ON sr.supplier_id=s.id WHERE 1=1"
+    params = []
+    if status:
+        sql += " AND sr.status=?"
+        params.append(status)
+    if supplier_id:
+        sql += " AND sr.supplier_id=?"
+        params.append(int(supplier_id))
+    sql += " ORDER BY sr.created_at DESC"
+
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+
+    csv_data = "\ufeff주문번호,모델,사이즈,협력사,HBL,요청일,트래킹번호,상태,메모\n"
+    for r in rows:
+        csv_data += f"{r['order_id']},{r['model']},{r['size']},{r['supplier_name'] or ''},{r['hubnet_hbl'] or ''},{r['request_date'] or ''},{r['tracking_number'] or ''},{r['status']},{r['notes'] or ''}\n"
+
+    return Response(csv_data, mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=shipments_{datetime.now().strftime('%Y%m%d')}.csv"})
+
+
+@app.route("/api/logistics/import-tracking", methods=["POST"])
+def api_logistics_import_tracking():
+    """트래킹 번호 일괄 가져오기 (CSV)"""
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "파일 필요"}), 400
+
+    import csv, io
+    content = file.read().decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(content))
+    header = next(reader, [])
+
+    # 열 찾기
+    header_lower = [h.strip().lower() for h in header]
+    order_col = -1
+    hbl_col = -1
+    tracking_col = -1
+
+    for i, h in enumerate(header_lower):
+        if "주문" in h or "order" in h:
+            order_col = i
+        if "hbl" in h:
+            hbl_col = i
+        if "트래킹" in h or "tracking" in h or "운송장" in h:
+            tracking_col = i
+
+    if tracking_col < 0:
+        return jsonify({"error": "트래킹 열을 찾을 수 없습니다"}), 400
+    if order_col < 0 and hbl_col < 0:
+        return jsonify({"error": "주문번호 또는 HBL 열이 필요합니다"}), 400
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated = 0
+
+    for row in reader:
+        if len(row) <= tracking_col:
+            continue
+        tracking = row[tracking_col].strip()
+        if not tracking:
+            continue
+
+        if order_col >= 0 and len(row) > order_col and row[order_col].strip():
+            key_col = "order_id"
+            key_val = row[order_col].strip()
+        elif hbl_col >= 0 and len(row) > hbl_col and row[hbl_col].strip():
+            key_col = "hubnet_hbl"
+            key_val = row[hbl_col].strip()
+        else:
+            continue
+
+        result = conn.execute(
+            f"UPDATE shipment_requests SET tracking_number=?, status='발송완료', updated_at=? WHERE {key_col}=? AND (tracking_number IS NULL OR tracking_number='')",
+            (tracking, now, key_val)
+        )
+        if result.rowcount > 0:
+            updated += 1
+
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "updated": updated})
 
 
 # ═══════════════════════════════════════════
