@@ -3033,6 +3033,25 @@ def api_queue_execute():
 
             search_cache = {}  # 품번별 KREAM 검색 결과 캐시
 
+            # 내 입찰 로드 (즉시구매가에서 내 입찰 제외용)
+            my_bids_for_filter = {}  # key: f"{productId}_{size}" → [price, price, ...]
+            try:
+                mb_file = BASE_DIR / "my_bids_local.json"
+                if mb_file.exists():
+                    mb_data = json.loads(mb_file.read_text())
+                    for b in mb_data.get("bids", []):
+                        pid = str(b.get("productId", ""))
+                        sz = str(b.get("size", "ONE SIZE")).strip()
+                        price = b.get("price", 0)
+                        if pid and price:
+                            key = f"{pid}_{sz}"
+                            if key not in my_bids_for_filter:
+                                my_bids_for_filter[key] = []
+                            my_bids_for_filter[key].append(price)
+                    add_log(tid, "info", f"내 입찰 {len(mb_data.get('bids',[]))}건 로드 (즉시구매가 필터용)")
+            except Exception as e:
+                add_log(tid, "warn", f"내 입찰 로드 실패: {e} — 필터 없이 진행")
+
             for i, item in enumerate(pending, 1):
                 model = item["model"]
                 item["status"] = "검색 중"
@@ -3151,6 +3170,66 @@ def api_queue_execute():
                                 if digits and digits != sdp_size:
                                     sdp_map[digits] = sdp_buy
 
+                    # ── 내 입찰 제외 함수 ──
+                    def _exclude_my_bids_price(raw_price, pid, sz_name):
+                        """
+                        raw_price가 내 입찰가와 같으면 sell_bids에서 내 입찰 제거 후
+                        남은 최저가를 반환. 경쟁자가 없으면 0.
+                        """
+                        if not raw_price or not my_bids_for_filter:
+                            return raw_price
+
+                        # 사이즈 키 매칭 (W215 ↔ 215)
+                        sz_digits = re.sub(r'[^0-9.]', '', sz_name)
+                        my_prices = []
+                        for k_suffix in [sz_name, sz_digits, "ONE SIZE"]:
+                            key = f"{pid}_{k_suffix}"
+                            if key in my_bids_for_filter:
+                                my_prices.extend(my_bids_for_filter[key])
+
+                        if not my_prices:
+                            return raw_price
+
+                        # sell_bids에서 해당 사이즈의 모든 가격 수집
+                        sell_bids_raw = kream.get("sell_bids", [])
+                        sz_sell_prices = []
+                        for sb in sell_bids_raw:
+                            sb_sz = str(sb.get("size", "")).strip()
+                            sb_digits = re.sub(r'[^0-9.]', '', sb_sz)
+                            if sb_sz == sz_name or sb_digits == sz_digits or sz_name == "ONE SIZE":
+                                for _ in range(sb.get("quantity", 1)):
+                                    sz_sell_prices.append(sb["price"])
+
+                        if not sz_sell_prices:
+                            # sell_bids에 해당 사이즈 없으면 raw_price에서 직접 판단
+                            if raw_price in my_prices:
+                                add_log(tid, "warn",
+                                    f"  사이즈 {sz_name}: 즉시구매가 {raw_price:,}원 = 내 입찰 → 경쟁자 없음")
+                                return 0
+                            return raw_price
+
+                        # 내 입찰 수량만큼 제거
+                        remaining = list(sz_sell_prices)
+                        for mp in my_prices:
+                            if mp in remaining:
+                                remaining.remove(mp)
+
+                        if not remaining:
+                            add_log(tid, "info",
+                                f"  사이즈 {sz_name}: 전체 판매입찰이 내 입찰 → 경쟁자 없음 (내가 최저가)")
+                            return 0
+
+                        competitor_low = min(remaining)
+                        if competitor_low != raw_price:
+                            add_log(tid, "info",
+                                f"  사이즈 {sz_name}: 즉시구매가 {raw_price:,}원 → 내 입찰 제외 → 경쟁자 최저가 {competitor_low:,}원")
+                        return competitor_low
+
+                    # 전체 즉시구매가에서도 내 입찰 제외
+                    if instant_buy and product_id:
+                        item_sz = str(item.get("size", "ONE SIZE")).strip()
+                        instant_buy = _exclude_my_bids_price(instant_buy, product_id, item_sz)
+
                     if input_sizes:
                         size_margins = []
                         for sz in input_sizes:
@@ -3166,8 +3245,11 @@ def api_queue_execute():
                                 or sz_sdp.get("buyPrice")
                                 or sdp_map.get(sz_name, 0)
                             )
+                            # ★ 내 입찰 제외
+                            if sz_instant_buy and product_id:
+                                sz_instant_buy = _exclude_my_bids_price(sz_instant_buy, product_id, sz_name)
                             add_log(tid, "info",
-                                f"  사이즈 {sz_name}: 즉시구매가={sz_instant_buy or '매칭실패'}"
+                                f"  사이즈 {sz_name}: 즉시구매가={sz_instant_buy or '매칭실패(경쟁자없음)'}"
                                 f" (sdp_map keys: {list(sdp_map.keys())[:10]})")
                             sz_comp = {}
                             if sz_instant_buy and sz_sdp:
@@ -3198,9 +3280,11 @@ def api_queue_execute():
                         if item_size and sdp_map:
                             sz_buy = sdp_map.get(item_size, 0)
                             if sz_buy:
+                                # ★ 내 입찰 제외
+                                sz_buy = _exclude_my_bids_price(sz_buy, product_id, item_size)
                                 instant_buy = sz_buy
                                 add_log(tid, "info",
-                                    f"  사이즈 {item_size}: sdp_map에서 즉시구매가={sz_buy}원 매칭")
+                                    f"  사이즈 {item_size}: sdp_map에서 즉시구매가={sz_buy or '경쟁자없음'}원 매칭")
                             else:
                                 add_log(tid, "info",
                                     f"  사이즈 {item_size}: sdp_map에 없음 (keys: {list(sdp_map.keys())[:10]})")

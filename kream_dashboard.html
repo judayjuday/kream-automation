@@ -3655,11 +3655,15 @@ function roundUp1000(n) { return Math.ceil(n / 1000) * 1000; }
 function _getSizeInstantBuy(item, sz) {
   if (!item.result) return 0;
   const r = item.result;
+  const productId = r.productId || '';
 
-  // 1순위: sizeMargins의 instantBuyPrice (서버에서 계산된 값)
+  // 서버에서 이미 내 입찰 제외된 instantBuyPrice를 사용
+  // (서버 큐 실행 시 my_bids_local 기반으로 필터링됨)
+
+  // 1순위: sizeMargins의 instantBuyPrice (서버에서 내 입찰 제외 후 계산된 값)
   if (sz && sz.instantBuyPrice) return sz.instantBuyPrice;
 
-  // 2순위: sizeDeliveryPrices에서 해당 사이즈 직접 검색
+  // 2순위: sizeDeliveryPrices에서 해당 사이즈 직접 검색 + 내 입찰 제외
   if (sz && r.sizeDeliveryPrices && r.sizeDeliveryPrices.length > 0) {
     const szStr = String(sz.size).trim();
     const szDigits = szStr.replace(/[^0-9.]/g, '');
@@ -3668,17 +3672,63 @@ function _getSizeInstantBuy(item, sz) {
       return sStr === szStr || sStr.replace(/[^0-9.]/g, '') === szDigits;
     });
     if (sdp) {
-      // 해외배송 가격 우선 (우리는 해외배송 판매자)
-      return sdp.buyOverseas || sdp.buyPrice || sdp.buyNormal || 0;
+      let rawPrice = sdp.buyOverseas || sdp.buyPrice || sdp.buyNormal || 0;
+      // ★ 내 입찰 제외: sell_bids에서 내 입찰가를 빼고 남은 최저가 사용
+      if (rawPrice && productId) {
+        rawPrice = _excludeMyBidsFromPrice(rawPrice, productId, szStr, r.sellBids);
+      }
+      return rawPrice;
     }
   }
 
-  // 3순위: 개별 사이즈 항목 (sizes=[], size="225") → product-level의 instantBuyPrice
-  // 이 경우 서버에서 이미 해당 사이즈의 즉시구매가를 instant_buy에 매칭했으므로 사용
+  // 3순위: 개별 사이즈 항목 → product-level의 instantBuyPrice (서버에서 이미 내 입찰 제외됨)
   if (!sz) return r.instantBuyPrice || 0;
 
-  // 사이즈 매칭 실패 → 0 반환 (product-level로 대체하면 모든 사이즈 동일 가격 오류 발생)
   return 0;
+}
+
+// 내 입찰을 sell_bids에서 제거하고 경쟁자 최저가를 반환
+function _excludeMyBidsFromPrice(rawPrice, productId, sizeName, sellBids) {
+  if (!productId || !myBidsMap) return rawPrice;
+
+  // 내 입찰 찾기 (productId + size)
+  const szDigits = sizeName.replace(/[^0-9.]/g, '');
+  let myPrices = [];
+  for (const suffix of [sizeName, szDigits, 'ONE SIZE']) {
+    const key = `${productId}_${suffix}`;
+    if (myBidsMap[key]) {
+      myBidsMap[key].forEach(b => { if (b.price) myPrices.push(b.price); });
+    }
+  }
+  if (myPrices.length === 0) return rawPrice;
+
+  // sell_bids가 있으면 그걸로 정확히 계산
+  if (sellBids && sellBids.length > 0) {
+    let szSellPrices = [];
+    for (const sb of sellBids) {
+      const sbSz = String(sb.size || '').trim();
+      const sbDigits = sbSz.replace(/[^0-9.]/g, '');
+      if (sbSz === sizeName || sbDigits === szDigits || sizeName === 'ONE SIZE') {
+        for (let q = 0; q < (sb.quantity || 1); q++) {
+          szSellPrices.push(sb.price);
+        }
+      }
+    }
+    if (szSellPrices.length > 0) {
+      // 내 입찰 수량만큼 제거
+      let remaining = [...szSellPrices];
+      for (const mp of myPrices) {
+        const idx = remaining.indexOf(mp);
+        if (idx >= 0) remaining.splice(idx, 1);
+      }
+      if (remaining.length === 0) return 0; // 경쟁자 없음
+      return Math.min(...remaining);
+    }
+  }
+
+  // sell_bids 없으면 raw_price가 내 입찰인지만 확인
+  if (myPrices.includes(rawPrice)) return 0;
+  return rawPrice;
 }
 
 function getBidPrice(item, sz) {
@@ -3779,35 +3829,44 @@ function queueBuildResults() {
     }
 
     if (!hasSizes) {
-      // 즉시구매가 수집 실패 판별: collectFailed이거나 kp가 0
-      const priceFailed = r.collectFailed && !kp;
-      const bp = priceFailed ? 0 : getBidPrice(item);
-      const pi = priceFailed ? {profit: 0, marginRate: 0, settlement: 0, totalFee: 0} : calcProfitForPrice(bp, r.totalCost || 0);
-      const profitOk = !priceFailed && pi.profit > 0;
+      // ★ 즉시구매가: 내 입찰 제외 후 경쟁자 최저가 재계산
+      const kpFiltered = _getSizeInstantBuy(item, null);
+      const noCompetitor = !r.collectFailed && kp > 0 && kpFiltered === 0;  // 내 입찰만 있는 경우
+      const priceFailed = r.collectFailed && !kp && !kpFiltered;
+      const effectiveKp = kpFiltered || kp;  // 필터된 값 우선
+      const bp = (priceFailed || noCompetitor) ? 0 : getBidPrice(item);
+      const pi = (priceFailed || noCompetitor) ? {profit: 0, marginRate: 0, settlement: 0, totalFee: 0} : calcProfitForPrice(bp, r.totalCost || 0);
+      const profitOk = !priceFailed && !noCompetitor && pi.profit > 0;
       const profitColor = profitOk ? 'var(--accent)' : 'var(--danger)';
-      const profitBg = priceFailed ? ''
+      const profitBg = (priceFailed || noCompetitor) ? ''
                      : pi.profit < 0 ? 'var(--danger);color:#fff'
                      : pi.profit < 5000 ? 'var(--danger-light)'
                      : pi.profit < 10000 ? 'var(--warning-light)'
                      : '';
-      const profitWarn = priceFailed ? '' : pi.profit < 5000 ? ' 마진부족' : '';
+      const profitWarn = (priceFailed || noCompetitor) ? '' : pi.profit < 5000 ? ' 마진부족' : '';
       const myBidCell0 = renderMyBidCell(r.productId, item.size || 'ONE SIZE');
       const compBadge0 = renderCompBadge(r.comp);
       const sizeLabel0 = item.size ? ` <span style="color:var(--text2);font-weight:400;font-size:11px">${item.size}</span>` : '';
 
-      // 즉시구매가 셀: 수집 실패 시 빨간 텍스트
+      // 즉시구매가 셀
       const kpCell = priceFailed
         ? '<span style="color:var(--danger);font-weight:600">수집 실패</span>'
-        : `${kp ? kp.toLocaleString() : '-'}<br>${compBadge0}`;
-      // 입찰 예정가: 수집 실패 시 비워두기
+        : noCompetitor
+        ? '<span style="color:var(--accent);font-weight:600;font-size:11px">경쟁자 없음<br>(내가 최저가)</span>'
+        : `${effectiveKp ? effectiveKp.toLocaleString() : '-'}<br>${compBadge0}`;
+      // 입찰 예정가: 수집 실패/경쟁자 없음 시 비워두기
       const bidCell = priceFailed
         ? '<span style="color:var(--text3);font-size:11px">-</span>'
+        : noCompetitor
+        ? '<span style="color:var(--accent);font-size:11px">가격 유지</span>'
         : `<input type="number" class="form-input" value="${bp}" step="1000"
             style="width:80px;height:26px;font-size:12px;font-weight:700;text-align:right"
             onchange="qSetBidPrice(${item.id},null,this.value)">`;
       // 마진 셀: 수집 실패 시 "계산 불가"
       const profitCell = priceFailed
         ? '<span style="color:var(--text3)">계산 불가</span>'
+        : noCompetitor
+        ? '<span style="color:var(--accent);font-size:11px">1위 유지</span>'
         : `<span style="color:${profitBg?'#fff':profitColor};font-weight:600">${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)${profitWarn}</span>`;
 
       html += `<tr>
@@ -3864,29 +3923,38 @@ function queueBuildResults() {
       // 사이즈별 행
       r.sizeMargins.forEach(sz => {
         const szKp = _getSizeInstantBuy(item, sz);
-        const szFailed = !szKp || szKp === 0;
-        const bp = szFailed ? 0 : getBidPrice(item, sz);
-        const pi = szFailed ? {profit:0,marginRate:0} : calcProfitForPrice(bp, sz.totalCost);
-        const ok = !szFailed && pi.profit > 0;
+        // 구분: 수집 실패 vs 경쟁자 없음
+        const szRawKp = sz.instantBuyPrice || 0;
+        const szNoCompetitor = szRawKp > 0 && szKp === 0;  // 원래 가격 있었지만 내 입찰 제외하면 0
+        const szFailed = !szKp && !szNoCompetitor && (!szRawKp || r.collectFailed);
+        const bp = (szFailed || szNoCompetitor) ? 0 : getBidPrice(item, sz);
+        const pi = (szFailed || szNoCompetitor) ? {profit:0,marginRate:0} : calcProfitForPrice(bp, sz.totalCost);
+        const ok = !szFailed && !szNoCompetitor && pi.profit > 0;
         const pc = ok ? 'var(--accent)' : 'var(--danger)';
-        const szBg = szFailed ? ''
+        const szBg = (szFailed || szNoCompetitor) ? ''
                    : pi.profit < 0 ? 'var(--danger);color:#fff'
                    : pi.profit < 5000 ? 'var(--danger-light)'
                    : pi.profit < 10000 ? 'var(--warning-light)'
                    : '';
-        const szWarn = szFailed ? '' : pi.profit < 5000 ? ' 마진부족' : '';
+        const szWarn = (szFailed || szNoCompetitor) ? '' : pi.profit < 5000 ? ' 마진부족' : '';
         const szCompBadge = renderCompBadge(sz.comp);
         const myBidCellSz = renderMyBidCell(r.productId, sz.size);
         const szKpCell = szFailed
           ? '<span style="color:var(--danger);font-size:11px">수집 실패</span>'
+          : szNoCompetitor
+          ? '<span style="color:var(--accent);font-size:11px">경쟁자 없음</span>'
           : `${szKp.toLocaleString()} ${szCompBadge}`;
         const szBidCell = szFailed
           ? '<span style="color:var(--text3);font-size:10px">-</span>'
+          : szNoCompetitor
+          ? '<span style="color:var(--accent);font-size:10px">가격 유지</span>'
           : `<input type="number" class="form-input" value="${bp}" step="1000"
               style="width:76px;height:24px;font-size:11px;font-weight:700;text-align:right"
               onchange="qSetBidPrice(${item.id},'${sz.size}',this.value)">`;
         const szProfitCell = szFailed
           ? '<span style="color:var(--text3);font-size:11px">계산 불가</span>'
+          : szNoCompetitor
+          ? '<span style="color:var(--accent);font-size:11px">1위 유지</span>'
           : `${pi.profit>0?'+':''}${pi.profit.toLocaleString()} (${pi.marginRate}%)${szWarn}`;
         html += `<tr class="q-sz-row-${item.id}" style="font-size:12px">
           <td><input type="checkbox" class="q-sz-chk" data-id="${item.id}" data-size="${sz.size}" ${ok ? 'checked' : ''}></td>
