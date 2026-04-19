@@ -5412,6 +5412,117 @@ def api_sales_rebid_recommendations():
 
 
 # ═══════════════════════════════════════════
+# 헬스체크
+# ════════════════════════════��══════════════
+
+@app.route("/api/health")
+def api_health():
+    """시스템 헬스체크: 인증/스케줄러/데이터 신선도/DB/백업 상태"""
+    try:
+        now = datetime.now()
+        result = {}
+
+        # 인증 파일 상태
+        for key, fname in [("auth_partner", "auth_state.json"), ("auth_kream", "auth_state_kream.json")]:
+            fpath = BASE_DIR / fname
+            if fpath.exists():
+                mtime = datetime.fromtimestamp(fpath.stat().st_mtime)
+                age_hours = round((now - mtime).total_seconds() / 3600, 1)
+                # 파일 내용이 유효한지 확인 (빈 JSON이 아닌지)
+                valid = False
+                try:
+                    data = json.loads(fpath.read_text())
+                    valid = bool(data.get("cookies") or data.get("origins"))
+                except Exception:
+                    pass
+                result[key] = {
+                    "exists": True,
+                    "last_modified": mtime.isoformat(),
+                    "age_hours": age_hours,
+                    "valid": valid,
+                }
+            else:
+                result[key] = {
+                    "exists": False,
+                    "last_modified": None,
+                    "age_hours": None,
+                    "valid": False,
+                }
+
+        # 스케줄러 상태
+        result["schedulers"] = {
+            "monitor": "running" if monitor_state.get("running") else "stopped",
+            "sales": "running" if sales_scheduler_state.get("running") else "stopped",
+        }
+
+        # 마지막 판매 수집
+        last_sale_collected = None
+        last_sale_age_hours = None
+        try:
+            conn = sqlite3.connect(str(PRICE_DB))
+            row = conn.execute("SELECT MAX(collected_at) FROM sales_history").fetchone()
+            conn.close()
+            if row and row[0]:
+                last_sale_collected = row[0]
+                try:
+                    last_dt = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+                    last_sale_age_hours = round((now - last_dt).total_seconds() / 3600, 1)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        result["last_sale_collected"] = last_sale_collected
+        result["last_sale_age_hours"] = last_sale_age_hours
+
+        # DB 크기
+        db_size_mb = None
+        try:
+            db_size_mb = round(PRICE_DB.stat().st_size / (1024 * 1024), 2)
+        except Exception:
+            pass
+        result["db_size_mb"] = db_size_mb
+
+        # 마지막 백업
+        backup_dir = Path.home() / "Desktop" / "kream_backups"
+        last_backup = None
+        last_backup_age_hours = None
+        try:
+            if backup_dir.exists():
+                backups = sorted(backup_dir.glob("price_history_*.db"), key=lambda f: f.stat().st_mtime, reverse=True)
+                if backups:
+                    bmtime = datetime.fromtimestamp(backups[0].stat().st_mtime)
+                    last_backup = bmtime.isoformat()
+                    last_backup_age_hours = round((now - bmtime).total_seconds() / 3600, 1)
+        except Exception:
+            pass
+        result["last_backup"] = last_backup
+        result["last_backup_age_hours"] = last_backup_age_hours
+
+        # ��합 상태 판정
+        status = "healthy"
+
+        # critical 조건
+        if (not result["auth_partner"]["exists"] or not result["auth_partner"]["valid"]
+                or (result["auth_partner"]["age_hours"] is not None and result["auth_partner"]["age_hours"] >= 24)
+                or not result["auth_kream"]["exists"] or not result["auth_kream"]["valid"]
+                or (result["auth_kream"]["age_hours"] is not None and result["auth_kream"]["age_hours"] >= 24)
+                or (last_sale_age_hours is not None and last_sale_age_hours >= 24)):
+            status = "critical"
+        # warning 조건
+        elif ((result["auth_partner"]["age_hours"] is not None and result["auth_partner"]["age_hours"] >= 12)
+                or (result["auth_kream"]["age_hours"] is not None and result["auth_kream"]["age_hours"] >= 12)
+                or (last_sale_age_hours is not None and last_sale_age_hours >= 12)
+                or (last_backup_age_hours is not None and last_backup_age_hours >= 25)):
+            status = "warning"
+
+        result["status"] = status
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
+
+
+# ═══════════════════════════════════════════
 # 판매 패턴 분석
 # ═══════════════════════════════════════════
 

@@ -46,6 +46,15 @@ body { font-family: 'Pretendard', -apple-system, sans-serif; background: var(--b
 .header h1 { font-size: 20px; font-weight: 700; }
 .header-info { font-size: 12px; color: var(--text3); }
 
+/* 헬스체크 신호등 */
+.health-light { display:flex; align-items:center; gap:4px; cursor:pointer; padding:4px 8px; border-radius:6px; transition:background 0.2s; }
+.health-light:hover { background:rgba(0,0,0,0.05); }
+.hl-dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.hl-label { font-size:11px; color:var(--text3); font-weight:600; }
+.health-modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:2000; justify-content:center; align-items:center; }
+.health-modal-overlay.show { display:flex; }
+.health-modal { background:#fff; border-radius:12px; padding:24px; width:90%; max-width:520px; max-height:80vh; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.2); }
+
 .content { padding: 24px 32px; }
 
 /* 탭 */
@@ -145,6 +154,8 @@ tr.selected td { background: var(--accent-light); }
   .content { padding: 12px; }
   .header { padding: 12px 16px; }
   .header h1 { font-size: 16px; }
+  .hl-label { display: none; }
+  .health-light { padding: 4px; }
   .card { padding: 12px; }
   .card-title { font-size: 13px; flex-wrap: wrap; gap: 8px; }
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -232,6 +243,18 @@ tr.selected td { background: var(--accent-light); }
     <div class="header">
       <h1 id="page-title">상품 등록 / 입찰</h1>
       <div style="display:flex;align-items:center;gap:16px">
+        <!-- 헬스체크 신호등 -->
+        <div id="health-lights" style="display:flex;gap:8px;align-items:center">
+          <div class="health-light" id="hl-auth" onclick="showHealthModal()" title="인증 상태">
+            <span class="hl-dot" style="background:#999"></span><span class="hl-label">인증</span>
+          </div>
+          <div class="health-light" id="hl-sched" onclick="showHealthModal()" title="스케줄러 상태">
+            <span class="hl-dot" style="background:#999"></span><span class="hl-label">스케줄러</span>
+          </div>
+          <div class="health-light" id="hl-data" onclick="showHealthModal()" title="데이터 신선도">
+            <span class="hl-dot" style="background:#999"></span><span class="hl-label">데이터</span>
+          </div>
+        </div>
         <!-- 알림 벨 -->
         <div style="position:relative;cursor:pointer" onclick="toggleNotifPanel()">
           <span style="font-size:20px">🔔</span>
@@ -248,6 +271,19 @@ tr.selected td { background: var(--accent-light); }
       </div>
       <div id="notif-list" style="font-size:12px">
         <div class="text-muted" style="padding:16px;text-align:center">알림 없음</div>
+      </div>
+    </div>
+
+    <!-- 헬스체크 모달 -->
+    <div class="health-modal-overlay" id="health-modal-overlay" onclick="if(event.target===this)closeHealthModal()">
+      <div class="health-modal">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="margin:0;font-size:16px;font-weight:700">시스템 상태 상세</h3>
+          <button onclick="closeHealthModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888">&times;</button>
+        </div>
+        <div id="health-modal-body" style="font-size:13px;line-height:1.8">
+          <div class="text-muted" style="text-align:center;padding:20px">로딩 중...</div>
+        </div>
       </div>
     </div>
 
@@ -6430,6 +6466,109 @@ function importTracking() {
     loadLogisticsStats();
   }).catch(() => { if (statusEl) statusEl.textContent = '가져오기 실패'; });
 }
+
+// ═══ 헬스체크 신호등 ═══
+let _lastHealthData = null;
+
+function _colorForStatus(s) {
+  if (s === 'healthy') return '#31b46e';
+  if (s === 'warning') return '#f0a020';
+  if (s === 'critical') return '#e74c3c';
+  return '#999'; // error / unknown
+}
+
+function pollHealth() {
+  fetch('/api/health')
+    .then(r => r.json())
+    .then(h => {
+      _lastHealthData = h;
+
+      // 인증 신호등
+      const authStatus = (!h.auth_partner.exists || !h.auth_partner.valid ||
+        !h.auth_kream.exists || !h.auth_kream.valid ||
+        (h.auth_partner.age_hours != null && h.auth_partner.age_hours >= 24) ||
+        (h.auth_kream.age_hours != null && h.auth_kream.age_hours >= 24))
+        ? 'critical'
+        : ((h.auth_partner.age_hours != null && h.auth_partner.age_hours >= 12) ||
+           (h.auth_kream.age_hours != null && h.auth_kream.age_hours >= 12))
+          ? 'warning' : 'healthy';
+      document.querySelector('#hl-auth .hl-dot').style.background = _colorForStatus(authStatus);
+
+      // 스케줄러 신호등
+      const schedStatus = (h.schedulers.monitor === 'running' && h.schedulers.sales === 'running')
+        ? 'healthy'
+        : (h.schedulers.monitor === 'running' || h.schedulers.sales === 'running')
+          ? 'warning' : 'critical';
+      document.querySelector('#hl-sched .hl-dot').style.background = _colorForStatus(schedStatus);
+
+      // 데이터 신선도 신호등
+      const dataStatus = (h.last_sale_age_hours != null && h.last_sale_age_hours >= 24) ? 'critical'
+        : (h.last_sale_age_hours != null && h.last_sale_age_hours >= 12) ? 'warning'
+        : (h.last_sale_age_hours == null) ? 'warning' : 'healthy';
+      document.querySelector('#hl-data .hl-dot').style.background = _colorForStatus(dataStatus);
+    })
+    .catch(() => {
+      // 폴링 실패 → 회색
+      document.querySelectorAll('.hl-dot').forEach(d => d.style.background = '#999');
+    });
+}
+
+function showHealthModal() {
+  document.getElementById('health-modal-overlay').classList.add('show');
+  const body = document.getElementById('health-modal-body');
+  if (!_lastHealthData) {
+    body.innerHTML = '<div class="text-muted" style="text-align:center;padding:20px">데이터 없음</div>';
+    return;
+  }
+  const h = _lastHealthData;
+  const dot = (s) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${_colorForStatus(s)};margin-right:4px"></span>`;
+  const statusBadge = `<span style="display:inline-block;padding:3px 12px;border-radius:12px;background:${_colorForStatus(h.status)};color:#fff;font-weight:700;font-size:12px">${h.status.toUpperCase()}</span>`;
+
+  body.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">${statusBadge}</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 0;font-weight:600">판매자센터 인증</td>
+        <td>${h.auth_partner.exists ? (h.auth_partner.valid ? '유효' : '무효') : '파일 없음'}
+            ${h.auth_partner.age_hours != null ? ' (' + h.auth_partner.age_hours + '시간 전)' : ''}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 0;font-weight:600">KREAM 인증</td>
+        <td>${h.auth_kream.exists ? (h.auth_kream.valid ? '유효' : '무효') : '파일 없음'}
+            ${h.auth_kream.age_hours != null ? ' (' + h.auth_kream.age_hours + '시간 전)' : ''}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 0;font-weight:600">모니터링 스케줄러</td>
+        <td>${h.schedulers.monitor === 'running' ? '실행 중' : '<span style="color:var(--danger)">중지됨</span>'}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 0;font-weight:600">판매 수집 스케줄러</td>
+        <td>${h.schedulers.sales === 'running' ? '실행 중' : '<span style="color:var(--danger)">중지됨</span>'}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 0;font-weight:600">마지막 판매 수집</td>
+        <td>${h.last_sale_collected || '없음'}
+            ${h.last_sale_age_hours != null ? ' (' + h.last_sale_age_hours + '시간 전)' : ''}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 0;font-weight:600">DB 크기</td>
+        <td>${h.db_size_mb != null ? h.db_size_mb + ' MB' : '-'}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;font-weight:600">마지막 백업</td>
+        <td>${h.last_backup || '없음'}
+            ${h.last_backup_age_hours != null ? ' (' + h.last_backup_age_hours + '시간 전)' : ''}</td>
+      </tr>
+    </table>`;
+}
+
+function closeHealthModal() {
+  document.getElementById('health-modal-overlay').classList.remove('show');
+}
+
+// 즉시 1회 + 30초마다 폴링
+pollHealth();
+setInterval(pollHealth, 30000);
 
 // ── 초기 탭(register) — 인라인이므로 fetch 불필요, onTabShown만 호출 ──
 _onTabShown('register');
