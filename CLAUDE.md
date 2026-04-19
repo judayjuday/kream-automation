@@ -40,49 +40,32 @@
 
 ## 순차 작업 큐 (위에서부터 순서대로 진행)
 
-### 작업 1: 작업 예상 시간 표시
-- 일괄 실행, 자동 입찰 시 예상 소요 시간을 프로그레스바 옆에 표시
-- 계산 방법: 상품 1건당 약 30초 (KREAM 검색 + 마진 계산), 입찰 1건당 약 90초
-- 예: "5건 실행 중... 2/5 완료 (40%) | 예상 남은 시간: 약 4분 30초"
-- kream_dashboard.html의 기존 프로그레스바 영역에 추가
-- 실시간 업데이트 (task 폴링 시 경과 시간 계산)
+### 작업 1: 허브넷 물류 관리 DB 설계
+- price_history.db에 물류 관련 테이블 3개 추가:
+  - suppliers (협력사 목록): id, name, contact, phone, wechat, notes, created_at
+  - shipment_requests (발송 요청): id, order_id, product_id, model, size, supplier_id, hubnet_hbl, request_date, tracking_number, status, proof_image, notes, created_at, updated_at
+  - shipment_costs (물류 비용): id, shipment_id, cost_type, amount, currency, notes, created_at
 
-### 작업 2: 조건부 입찰
-- 대시보드 결과 테이블에서 조건 설정 가능:
-  "즉시구매가가 X원 이하로 떨어지면 자동 입찰"
-  "경쟁자 최저가가 X원 이상이면 자동 입찰"
-- price_history.db에 conditional_bids 테이블 추가:
-  id, product_id, model, size, condition_type(price_below/competitor_above),
-  condition_value, bid_price, status(active/triggered/expired), created_at, triggered_at
-- 모니터링 스케줄러(2시간마다)에서 조건 체크 → 충족 시 자동 입찰 실행
-- 대시보드에 "조건부 입찰" 섹션 추가 (가격 자동 조정 탭)
-- 조건 충족 시 알림 (notifications 테이블에 추가)
+### 작업 2: 대시보드에 "물류 관리" 탭 추가
+- 사이드바에 "물류 관리" 메뉴 추가
+- tabs/tab_logistics.html 새로 생성
+- 화면 구성: 발송 대기 목록, 발송 진행 현황, 협력사 관리
 
-### 작업 3: 입찰 만료 자동 갱신
-- 내 입찰 중 만료일이 3일 이내인 건 자동 감지
-- 대시보드에 "만료 임박 N건" 경고 배지 표시
-- "자동 갱신" 버튼 → 동일 가격으로 재입찰
-- 모니터링 스케줄러에서 만료 임박 체크 추가
-- 알림: "JQ4110 W215 128,000원 입찰이 2일 후 만료됩니다"
-- 설정에서 자동 갱신 ON/OFF 가능 (기본 OFF, 수동 승인)
+### 작업 3: 발송 요청 워크플로우
+- KREAM 체결 → 발송 대기 목록에 자동 추가 (sales_history 연동)
+- 발송 요청 폼: 협력사 선택, HBL 번호, 메모, 증거 스크린샷 업로드
+- "발송 요청" 버튼 → DB 저장 + 상태 변경
+- 협력사별 요청 내역 조회
 
-### 작업 4: 마진 시뮬레이터 강화
-- 마진 계산기 탭 개선:
-  - CNY 가격 입력 → 즉시 원가 계산 (환율 × 1.03 + 배송비)
-  - KREAM 판매가 입력 → 정산액, 마진, 마진율 즉시 표시
-  - 수수료율 6% 적용
-  - "이 가격에 팔면 마진 X원 (Y%)" 한눈에
-  - 고객 부담 관부가세도 참고 표시 ($150 초과 여부)
-- 역계산 기능: "마진 10,000원 남기려면 최소 판매가 X원"
-- 모델번호 입력하면 KREAM 현재 시세 자동 로드
+### 작업 4: 트래킹 번호 입력 + 상태 관리
+- 트래킹 번호 입력 → 상태 자동 "발송완료"로 변경
+- 상태 변경 이력 기록, HBL 번호로 조회
+- API: POST/PUT/GET /api/logistics/request(s), /api/logistics/pending, /api/logistics/supplier(s)
 
-### 작업 5: 수정 이력 로그
-- 사용자가 입찰 예정가, 수량, 전략 등을 수정할 때마다 이력 기록
-- price_history.db에 edit_log 테이블:
-  id, item_type(queue/result/bid), item_id, field_name, old_value, new_value, edited_at
-- 대시보드 실행 이력 탭에 "수정 이력" 섹션 추가
-- 날짜별 필터링 가능
-- 예: "4/19 14:30 | JQ4110 215 | 입찰예정가 | 128,000 → 127,000"
+### 작업 5: 물류 현황 대시보드 + 엑셀 연동
+- 현황 카드: 발송 대기/진행 중/완료 건수, 이번 달 물류비
+- 발송 요청 테이블 + 필터 (상태별/협력사별/기간별)
+- 엑셀 내보내기/가져오기 (/api/logistics/import-tracking)
 
 ---
 

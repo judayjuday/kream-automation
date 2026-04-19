@@ -194,6 +194,59 @@ def save_edit_log(item_type, item_id, field_name, old_value, new_value):
     conn.close()
 
 
+# ── 물류 관리 (logistics) DB ──
+def _init_logistics_tables():
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    # 협력사
+    c.execute("""CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        contact TEXT,
+        phone TEXT,
+        wechat TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL
+    )""")
+    # 발송 요청
+    c.execute("""CREATE TABLE IF NOT EXISTS shipment_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT,
+        product_id TEXT,
+        model TEXT,
+        size TEXT,
+        supplier_id INTEGER,
+        hubnet_hbl TEXT,
+        request_date TEXT,
+        tracking_number TEXT,
+        status TEXT DEFAULT '발송대기',
+        proof_image TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sr_status ON shipment_requests(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sr_order ON shipment_requests(order_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sr_hbl ON shipment_requests(hubnet_hbl)")
+    # 물류 비용
+    c.execute("""CREATE TABLE IF NOT EXISTS shipment_costs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shipment_id INTEGER NOT NULL,
+        cost_type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'KRW',
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (shipment_id) REFERENCES shipment_requests(id)
+    )""")
+    conn.commit()
+    conn.close()
+
+
+_init_logistics_tables()
+
+
 # ── 판매 이력 (sales_history) DB ──
 def _init_sales_history_table():
     """sales_history 테이블 생성"""
