@@ -1,0 +1,58 @@
+[watchdog] 시작: #오후
+[watchdog] Cloudflare Tunnel 모드
+[watchdog] 서버 시작: #오후
+[watchdog] 종료: #오후
+[watchdog] 시작: #오후
+[watchdog] Cloudflare Tunnel 모드
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 시작: #오후
+[watchdog] Cloudflare Tunnel 모드
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후
+[watchdog] 서버 크래시! exit=137: #오후
+[watchdog] 3초 후 재시작...
+[watchdog] 서버 시작: #오후

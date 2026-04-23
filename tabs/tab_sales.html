@@ -1,0 +1,386 @@
+      <div id="tab-sales" class="tab-view">
+
+        <!-- 상단: 요약 카드 4개 -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:16px">
+          <div class="card" style="text-align:center; padding:16px">
+            <div style="font-size:12px; color:var(--text3)">오늘</div>
+            <div style="font-size:24px; font-weight:700; margin:4px 0" id="sd-today-cnt">-</div>
+            <div style="font-size:13px; color:var(--text2)" id="sd-today-rev">-</div>
+          </div>
+          <div class="card" style="text-align:center; padding:16px">
+            <div style="font-size:12px; color:var(--text3)">어제</div>
+            <div style="font-size:24px; font-weight:700; margin:4px 0" id="sd-yesterday-cnt">-</div>
+            <div style="font-size:13px; color:var(--text2)" id="sd-yesterday-rev">-</div>
+          </div>
+          <div class="card" style="text-align:center; padding:16px">
+            <div style="font-size:12px; color:var(--text3)">최근 7일</div>
+            <div style="font-size:24px; font-weight:700; margin:4px 0" id="sd-7d-cnt">-</div>
+            <div style="font-size:13px; color:var(--text2)" id="sd-7d-rev">-</div>
+          </div>
+          <div class="card" style="text-align:center; padding:16px">
+            <div style="font-size:12px; color:var(--text3)">최근 30일</div>
+            <div style="font-size:24px; font-weight:700; margin:4px 0" id="sd-30d-cnt">-</div>
+            <div style="font-size:13px; color:var(--text2)" id="sd-30d-rev">-</div>
+          </div>
+        </div>
+
+        <!-- 스케줄러 상태 + 수동 동기화 -->
+        <div class="card" style="padding:12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
+          <div style="font-size:12px; color:var(--text3)">
+            <span id="sd-scheduler-info">스케줄러 로딩 중...</span>
+            <span style="margin-left:12px; font-size:11px; color:var(--text3)" id="sd-last-update"></span>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="sdSync()">수동 동기화</button>
+            <button class="btn btn-outline btn-sm" id="sd-sched-btn" onclick="sdSchedulerToggle()">스케줄러</button>
+          </div>
+        </div>
+
+        <!-- 중간: 베스트셀러 TOP 10 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🏆</span> 베스트셀러 TOP 10 <span style="font-size:11px; color:var(--text3); font-weight:400">(최근 30일)</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px">#</th>
+                  <th>모델</th>
+                  <th style="text-align:right">판매 건수</th>
+                  <th style="text-align:right">총 매출</th>
+                  <th style="text-align:right">건당 평균</th>
+                  <th style="width:80px">상세</th>
+                </tr>
+              </thead>
+              <tbody id="sd-top-tbody">
+                <tr><td colspan="6" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 시간대별 판매 분포 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📊</span> 시간대별 판매 분포 <span style="font-size:11px; color:var(--text3); font-weight:400">(최근 30일)</span></div>
+          <div id="sd-hourly-chart" style="display:flex; align-items:flex-end; gap:4px; height:140px; padding:8px 0; overflow-x:auto"></div>
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text3); padding:0 2px">
+            <span>0시</span><span>6시</span><span>12시</span><span>18시</span><span>23시</span>
+          </div>
+        </div>
+
+        <!-- 검색 필터 -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">🔍</span> 판매 이력 검색</span>
+            <button class="btn btn-outline btn-sm" onclick="sdSearch(1)">검색</button>
+          </div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; align-items:flex-end">
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">모델</div>
+              <input type="text" class="form-input" id="sd-filter-model" placeholder="모델번호" style="width:150px" onkeydown="if(event.key==='Enter')sdSearch(1)">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">사이즈</div>
+              <input type="text" class="form-input" id="sd-filter-size" placeholder="사이즈" style="width:100px" onkeydown="if(event.key==='Enter')sdSearch(1)">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">시작일</div>
+              <input type="date" class="form-input" id="sd-filter-from" style="width:150px">
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text3); margin-bottom:4px">종료일</div>
+              <input type="date" class="form-input" id="sd-filter-to" style="width:150px">
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="sdResetFilter()" style="color:var(--text3)">초기화</button>
+          </div>
+
+          <!-- 검색 결과 테이블 -->
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px">#</th>
+                  <th>주문번호</th>
+                  <th>상품</th>
+                  <th>모델</th>
+                  <th>사이즈</th>
+                  <th style="text-align:right">거래금액</th>
+                  <th>거래일</th>
+                  <th>발송상태</th>
+                </tr>
+              </thead>
+              <tbody id="sd-search-tbody">
+                <tr><td colspan="8" class="text-muted">검색 조건을 입력하고 검색 버튼을 클릭하세요</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:8px; align-items:center">
+            <button class="btn btn-outline btn-sm" id="sd-search-prev" onclick="sdSearch(sdSearchPage-1)" disabled>이전</button>
+            <span id="sd-search-page-info" class="text-muted" style="font-size:12px"></span>
+            <button class="btn btn-outline btn-sm" id="sd-search-next" onclick="sdSearch(sdSearchPage+1)" disabled>다음</button>
+          </div>
+        </div>
+
+        <!-- 최근 판매 내역 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">💰</span> 최근 판매 내역</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px">#</th>
+                  <th>주문번호</th>
+                  <th>상품</th>
+                  <th>모델</th>
+                  <th>사이즈</th>
+                  <th style="text-align:right">거래금액</th>
+                  <th>거래일</th>
+                  <th>발송상태</th>
+                </tr>
+              </thead>
+              <tbody id="sd-recent-tbody">
+                <tr><td colspan="8" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 모델 상세 모달 -->
+        <div id="sd-model-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999; align-items:center; justify-content:center">
+          <div style="background:var(--card); border-radius:12px; padding:24px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; position:relative">
+            <button onclick="sdCloseModal()" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:20px; color:var(--text3); cursor:pointer">&times;</button>
+            <h3 style="margin:0 0 16px" id="sd-modal-title">모델 상세</h3>
+            <div id="sd-modal-body">로딩 중...</div>
+          </div>
+        </div>
+
+        <script>
+        // ═══ 판매 관리 탭 JS ═══
+        let sdSearchPage = 1;
+
+        function sdLoadDashboard() {
+          fetch('/api/sales/dashboard').then(r=>r.json()).then(data=>{
+            if(!data.ok) return;
+            const s = data.summary;
+            document.getElementById('sd-today-cnt').textContent = s.today.count.toLocaleString() + '건';
+            document.getElementById('sd-today-rev').textContent = s.today.total_revenue.toLocaleString() + '원';
+            document.getElementById('sd-yesterday-cnt').textContent = s.yesterday.count.toLocaleString() + '건';
+            document.getElementById('sd-yesterday-rev').textContent = s.yesterday.total_revenue.toLocaleString() + '원';
+            document.getElementById('sd-7d-cnt').textContent = s.last_7days.count.toLocaleString() + '건';
+            document.getElementById('sd-7d-rev').textContent = s.last_7days.total_revenue.toLocaleString() + '원';
+            document.getElementById('sd-30d-cnt').textContent = s.last_30days.count.toLocaleString() + '건';
+            document.getElementById('sd-30d-rev').textContent = s.last_30days.total_revenue.toLocaleString() + '원';
+            document.getElementById('sd-last-update').textContent = '최종 갱신: ' + new Date().toLocaleTimeString();
+
+            // 베스트셀러
+            if(data.top_models && data.top_models.length > 0) {
+              let html = '';
+              data.top_models.forEach((m,i)=>{
+                const avg = m.count > 0 ? Math.round(m.total_revenue / m.count) : 0;
+                html += `<tr style="cursor:pointer" onclick="sdShowModel('${m.model.replace(/'/g,"\\'")}')">
+                  <td style="font-weight:700; color:${i<3?'var(--accent)':'var(--text2)'}">${i+1}</td>
+                  <td><strong>${m.model}</strong></td>
+                  <td style="text-align:right">${m.count}건</td>
+                  <td style="text-align:right">${m.total_revenue.toLocaleString()}원</td>
+                  <td style="text-align:right">${avg.toLocaleString()}원</td>
+                  <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();sdShowModel('${m.model.replace(/'/g,"\\'")}')">상세</button></td>
+                </tr>`;
+              });
+              document.getElementById('sd-top-tbody').innerHTML = html;
+            } else {
+              document.getElementById('sd-top-tbody').innerHTML = '<tr><td colspan="6" class="text-muted">판매 데이터 없음</td></tr>';
+            }
+
+            // 시간대별 분포 차트
+            const hourly = data.hourly_distribution || [];
+            const maxCount = Math.max(...hourly.map(h=>h.count), 1);
+            let chartHtml = '';
+            hourly.forEach(h=>{
+              const pct = (h.count / maxCount * 100).toFixed(0);
+              const barColor = h.hour >= 9 && h.hour <= 23 ? 'var(--accent)' : 'var(--border)';
+              chartHtml += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; min-width:16px" title="${h.hour}시: ${h.count}건">
+                <div style="font-size:9px; color:var(--text3); margin-bottom:2px">${h.count||''}</div>
+                <div style="width:100%; max-width:24px; height:${Math.max(pct,2)}%; background:${barColor}; border-radius:3px 3px 0 0; min-height:2px"></div>
+                <div style="font-size:9px; color:var(--text3); margin-top:2px">${h.hour}</div>
+              </div>`;
+            });
+            document.getElementById('sd-hourly-chart').innerHTML = chartHtml;
+
+            // 최근 판매
+            if(data.recent_sales && data.recent_sales.length > 0) {
+              let rhtml = '';
+              data.recent_sales.forEach((s,i)=>{
+                rhtml += `<tr style="cursor:pointer" onclick="sdShowModel('${(s.model||'').replace(/'/g,"\\'")}')">
+                  <td>${i+1}</td>
+                  <td style="font-size:11px">${s.order_id||'-'}</td>
+                  <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(s.product_info||'').replace(/"/g,'&quot;')}">${s.product_info||'-'}</td>
+                  <td><strong>${s.model||'-'}</strong></td>
+                  <td>${s.size||'-'}</td>
+                  <td style="text-align:right;font-weight:600">${s.sale_price?s.sale_price.toLocaleString()+'원':'-'}</td>
+                  <td style="font-size:12px">${s.trade_date||'-'}</td>
+                  <td><span style="color:var(--accent)">${s.ship_status||'-'}</span></td>
+                </tr>`;
+              });
+              document.getElementById('sd-recent-tbody').innerHTML = rhtml;
+            } else {
+              document.getElementById('sd-recent-tbody').innerHTML = '<tr><td colspan="8" class="text-muted">판매 데이터 없음</td></tr>';
+            }
+          }).catch(()=>{});
+
+          // 스케줄러 상태
+          fetch('/api/sales/scheduler/status').then(r=>r.json()).then(data=>{
+            if(!data.ok) return;
+            const el = document.getElementById('sd-scheduler-info');
+            const btn = document.getElementById('sd-sched-btn');
+            if(data.running) {
+              el.textContent = `동기화 실행 중 | 마지막: ${data.last_run||'-'} | 다음: ${data.next_run||'-'} | 총 ${data.total_syncs}회`;
+              btn.textContent = '스케줄러 중지';
+              btn.style.borderColor = 'var(--danger)';
+              btn.style.color = 'var(--danger)';
+            } else {
+              el.textContent = '스케줄러 중지됨';
+              btn.textContent = '스케줄러 시작';
+              btn.style.borderColor = '';
+              btn.style.color = '';
+            }
+          }).catch(()=>{});
+        }
+
+        function sdSync() {
+          const btn = document.querySelector('[onclick="sdSync()"]');
+          if(btn){btn.disabled=true;btn.textContent='동기화 중...';}
+          fetch('/api/sales/sync',{method:'POST'}).then(r=>r.json()).then(data=>{
+            if(btn){btn.disabled=false;btn.textContent='수동 동기화';}
+            if(data.ok){
+              alert(`동기화 완료: 총 ${data.total}건, 신규 ${data.new_count}건`);
+              sdLoadDashboard();
+            } else {
+              alert('동기화 실패: '+(data.error||''));
+            }
+          }).catch(e=>{
+            if(btn){btn.disabled=false;btn.textContent='수동 동기화';}
+            alert('동기화 요청 실패');
+          });
+        }
+
+        function sdSchedulerToggle() {
+          const btn = document.getElementById('sd-sched-btn');
+          const isRunning = btn.textContent.includes('중지');
+          fetch(isRunning?'/api/sales/scheduler/stop':'/api/sales/scheduler/start',{method:'POST'})
+            .then(r=>r.json()).then(()=>sdLoadDashboard()).catch(()=>{});
+        }
+
+        function sdSearch(page) {
+          if(page < 1) page = 1;
+          sdSearchPage = page;
+          const model = document.getElementById('sd-filter-model').value.trim();
+          const size = document.getElementById('sd-filter-size').value.trim();
+          const from = document.getElementById('sd-filter-from').value;
+          const to = document.getElementById('sd-filter-to').value;
+          let url = `/api/sales/search?page=${page}&per_page=20`;
+          if(model) url += `&model=${encodeURIComponent(model)}`;
+          if(size) url += `&size=${encodeURIComponent(size)}`;
+          if(from) url += `&from_date=${from}`;
+          if(to) url += `&to_date=${to}`;
+
+          fetch(url).then(r=>r.json()).then(data=>{
+            if(!data.ok) return;
+            const tbody = document.getElementById('sd-search-tbody');
+            if(!data.sales || data.sales.length===0){
+              tbody.innerHTML = '<tr><td colspan="8" class="text-muted">검색 결과 없음</td></tr>';
+              document.getElementById('sd-search-page-info').textContent = '';
+              document.getElementById('sd-search-prev').disabled = true;
+              document.getElementById('sd-search-next').disabled = true;
+              return;
+            }
+            let html='';
+            const offset = (data.page-1)*data.per_page;
+            data.sales.forEach((s,i)=>{
+              html += `<tr style="cursor:pointer" onclick="sdShowModel('${(s.model||'').replace(/'/g,"\\'")}')">
+                <td>${offset+i+1}</td>
+                <td style="font-size:11px">${s.order_id||'-'}</td>
+                <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(s.product_info||'').replace(/"/g,'&quot;')}">${s.product_info||'-'}</td>
+                <td><strong>${s.model||'-'}</strong></td>
+                <td>${s.size||'-'}</td>
+                <td style="text-align:right;font-weight:600">${s.sale_price?s.sale_price.toLocaleString()+'원':'-'}</td>
+                <td style="font-size:12px">${s.trade_date||'-'}</td>
+                <td><span style="color:var(--accent)">${s.ship_status||'-'}</span></td>
+              </tr>`;
+            });
+            tbody.innerHTML = html;
+            document.getElementById('sd-search-page-info').textContent = `${data.page}/${data.total_pages} 페이지 (총 ${data.total}건)`;
+            document.getElementById('sd-search-prev').disabled = data.page <= 1;
+            document.getElementById('sd-search-next').disabled = data.page >= data.total_pages;
+          }).catch(()=>{
+            document.getElementById('sd-search-tbody').innerHTML = '<tr><td colspan="8" class="text-muted">검색 실패</td></tr>';
+          });
+        }
+
+        function sdResetFilter() {
+          document.getElementById('sd-filter-model').value = '';
+          document.getElementById('sd-filter-size').value = '';
+          document.getElementById('sd-filter-from').value = '';
+          document.getElementById('sd-filter-to').value = '';
+          document.getElementById('sd-search-tbody').innerHTML = '<tr><td colspan="8" class="text-muted">검색 조건을 입력하고 검색 버튼을 클릭하세요</td></tr>';
+          document.getElementById('sd-search-page-info').textContent = '';
+          document.getElementById('sd-search-prev').disabled = true;
+          document.getElementById('sd-search-next').disabled = true;
+        }
+
+        function sdShowModel(model) {
+          if(!model || model==='-') return;
+          const modal = document.getElementById('sd-model-modal');
+          modal.style.display = 'flex';
+          document.getElementById('sd-modal-title').textContent = model + ' 판매 상세';
+          document.getElementById('sd-modal-body').innerHTML = '<div class="text-muted">로딩 중...</div>';
+
+          fetch(`/api/sales/by-model/${encodeURIComponent(model)}`).then(r=>r.json()).then(data=>{
+            if(!data.ok){ document.getElementById('sd-modal-body').innerHTML='조회 실패'; return; }
+            let html = `
+              <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px">
+                <div style="background:var(--bg); padding:12px; border-radius:8px; text-align:center">
+                  <div style="font-size:11px; color:var(--text3)">총 판매</div>
+                  <div style="font-size:20px; font-weight:700">${data.total_count}건</div>
+                </div>
+                <div style="background:var(--bg); padding:12px; border-radius:8px; text-align:center">
+                  <div style="font-size:11px; color:var(--text3)">평균 가격</div>
+                  <div style="font-size:20px; font-weight:700">${data.avg_price?data.avg_price.toLocaleString()+'원':'-'}</div>
+                </div>
+                <div style="background:var(--bg); padding:12px; border-radius:8px; text-align:center">
+                  <div style="font-size:11px; color:var(--text3)">회전율</div>
+                  <div style="font-size:20px; font-weight:700">${data.turnover_days?data.turnover_days+'일/건':'-'}</div>
+                </div>
+              </div>`;
+
+            if(data.size_distribution && data.size_distribution.length > 0){
+              html += `<h4 style="margin:0 0 8px; font-size:14px">사이즈별 분포</h4>
+              <div class="table-wrap"><table><thead><tr><th>사이즈</th><th style="text-align:right">판매 건수</th><th style="text-align:right">평균 가격</th></tr></thead><tbody>`;
+              data.size_distribution.forEach(sz=>{
+                html += `<tr><td>${sz.size}</td><td style="text-align:right">${sz.count}건</td><td style="text-align:right">${Math.round(sz.avg_price).toLocaleString()}원</td></tr>`;
+              });
+              html += '</tbody></table></div>';
+            }
+
+            if(data.sales && data.sales.length > 0){
+              html += `<h4 style="margin:16px 0 8px; font-size:14px">최근 판매 이력 (최대 50건)</h4>
+              <div class="table-wrap" style="max-height:300px; overflow-y:auto"><table><thead><tr><th>거래일</th><th>사이즈</th><th style="text-align:right">금액</th><th>발송</th></tr></thead><tbody>`;
+              data.sales.forEach(s=>{
+                html += `<tr><td style="font-size:12px">${s.trade_date||'-'}</td><td>${s.size||'-'}</td><td style="text-align:right;font-weight:600">${s.sale_price?s.sale_price.toLocaleString()+'원':'-'}</td><td style="font-size:12px">${s.ship_status||'-'}</td></tr>`;
+              });
+              html += '</tbody></table></div>';
+            }
+
+            document.getElementById('sd-modal-body').innerHTML = html;
+          }).catch(()=>{
+            document.getElementById('sd-modal-body').innerHTML = '<div class="text-muted">조회 실패</div>';
+          });
+        }
+
+        function sdCloseModal() {
+          document.getElementById('sd-model-modal').style.display = 'none';
+        }
+        // 모달 바깥 클릭 시 닫기
+        document.getElementById('sd-model-modal').addEventListener('click', function(e){
+          if(e.target === this) sdCloseModal();
+        });
+        </script>
+      </div>

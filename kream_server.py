@@ -11,6 +11,7 @@ KREAM 판매자센터 자동화 - Flask 백엔드 서버
 import asyncio
 import json
 import math
+import random
 import re
 import sqlite3
 import smtplib
@@ -150,6 +151,53 @@ def _init_adjustments_table():
 
 
 _init_adjustments_table()
+
+
+def _init_bid_cost_table():
+    """bid_cost 테이블 생성 — 입찰 시점의 원가 정보 보관"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS bid_cost (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT UNIQUE,
+        model TEXT,
+        size TEXT,
+        cny_price REAL,
+        exchange_rate REAL,
+        overseas_shipping INTEGER DEFAULT 8000,
+        other_costs INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model ON bid_cost(model)")
+    conn.commit()
+    conn.close()
+
+
+_init_bid_cost_table()
+
+
+def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
+                   overseas_shipping=8000, other_costs=0):
+    """입찰 성공 시 원가 정보 저장 (order_id 기준 UPSERT)"""
+    if not order_id or not cny_price:
+        return
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        """INSERT INTO bid_cost (order_id, model, size, cny_price, exchange_rate,
+           overseas_shipping, other_costs)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(order_id) DO UPDATE SET
+             cny_price=excluded.cny_price,
+             exchange_rate=excluded.exchange_rate,
+             overseas_shipping=excluded.overseas_shipping,
+             other_costs=excluded.other_costs""",
+        (order_id, model or "", size or "", float(cny_price),
+         float(exchange_rate), int(overseas_shipping), int(other_costs))
+    )
+    conn.commit()
+    conn.close()
+
+
 
 
 # ── 조건부 입찰 (conditional_bids) DB ──
@@ -1134,6 +1182,12 @@ def api_register():
     if not product_id or not price:
         return jsonify({"error": "productId, price 필요"}), 400
 
+    # 원가 정보 (있으면 입찰 성공 시 bid_cost에 저장)
+    cny_price = data.get("cny_price", 0)
+    exchange_rate = data.get("exchange_rate", 0)
+    overseas_shipping = data.get("overseas_shipping", 8000)
+    model = str(data.get("model", "")).strip()
+
     tid = new_task()
     add_log(tid, "info", f"자동화 시작: #{product_id} → {price:,}원 × {qty}개")
 
@@ -1143,9 +1197,26 @@ def api_register():
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
                 run_full_register(product_id, price, size, qty,
-                                  gosi_already, gosi, tid)
+                                  gosi_already, gosi, tid, model=model)
             )
             loop.close()
+
+            # 입찰 성공 시 bid_cost 저장
+            if result and result.get("success"):
+                if cny_price and float(cny_price) > 0:
+                    try:
+                        _save_bid_cost(
+                            order_id=result.get("orderId") or f"{product_id}_{size}",
+                            model=model, size=size,
+                            cny_price=float(cny_price),
+                            exchange_rate=float(exchange_rate) if exchange_rate else 0,
+                            overseas_shipping=int(overseas_shipping),
+                        )
+                    except Exception:
+                        pass
+                else:
+                    print(f"[bid_cost] 경고: #{product_id} 원가(cny_price) 없음 — bid_cost 미저장")
+
             finish_task(tid, result=result)
         except Exception as e:
             traceback.print_exc()
@@ -1568,6 +1639,7 @@ async def upload_bulk_excel(tid):
                 pass
 
             add_log(tid, "success", "대량입찰 등록 완료!")
+            add_log(tid, "warn", "대량입찰은 원가(bid_cost) 자동 저장 불가 — 가격 조정 탭에서 원가를 수동 등록하세요")
         except Exception as e:
             add_log(tid, "error", f"업로드 실패: {e}")
             await browser.close()
@@ -3726,6 +3798,20 @@ def api_queue_auto_register():
                             if bi_result.get("ok"):
                                 save_bid_local(pid, model=model, size=bi_result["size"],
                                               price=bi_result["price"], source="placed")
+                                _cny = matched_bi.get("cny_price", 0)
+                                if _cny and float(_cny) > 0:
+                                    try:
+                                        _save_bid_cost(
+                                            order_id=bi_result.get("orderId") or f"{pid}_{bi_result['size']}",
+                                            model=model, size=bi_result["size"],
+                                            cny_price=float(_cny),
+                                            exchange_rate=float(matched_bi.get("exchange_rate", 0)),
+                                            overseas_shipping=int(matched_bi.get("overseas_shipping", 8000)),
+                                        )
+                                    except Exception:
+                                        pass
+                                else:
+                                    add_log(tid, "warn", f"  [{model} {bi_result['size']}] 원가(cny_price) 없음 — bid_cost 미저장")
                     except Exception as e:
                         add_log(tid, "error", f"  일괄 입찰 오류: {e}")
                         for bi in group:
@@ -3751,6 +3837,20 @@ def api_queue_auto_register():
                         if ok:
                             save_bid_local(pid, model=model, size=size,
                                           price=price, source="placed")
+                            _cny = bi.get("cny_price", 0)
+                            if _cny and float(_cny) > 0:
+                                try:
+                                    _save_bid_cost(
+                                        order_id=result.get("orderId") or f"{pid}_{size}",
+                                        model=model, size=size,
+                                        cny_price=float(_cny),
+                                        exchange_rate=float(bi.get("exchange_rate", 0)),
+                                        overseas_shipping=int(bi.get("overseas_shipping", 8000)),
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                add_log(tid, "warn", f"  [{model} {size}] 원가(cny_price) 없음 — bid_cost 미저장")
                     except Exception as e:
                         add_log(tid, "error", f"  입찰 오류: {e}")
                         results.append({"productId": pid, "model": model,
@@ -4039,8 +4139,37 @@ def _calc_settlement_for_monitor(sell_price):
 
 
 def _find_cost_for_bid(bid):
-    """큐 데이터에서 입찰의 원가(total_cost) 찾기"""
+    """입찰의 원가(total_cost) 찾기 — bid_cost DB → 큐 메모리 순서로 조회"""
+    order_id = bid.get("orderId") or ""
     model = (bid.get("model") or "").upper()
+    size = bid.get("size") or ""
+
+    # 1) bid_cost 테이블에서 조회 (order_id 매칭 또는 model+size 매칭)
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        row = None
+        if order_id:
+            c.execute("SELECT * FROM bid_cost WHERE order_id=?", (order_id,))
+            row = c.fetchone()
+        if not row and model:
+            c.execute("SELECT * FROM bid_cost WHERE UPPER(model)=? AND size=? ORDER BY created_at DESC LIMIT 1",
+                      (model, size))
+            row = c.fetchone()
+        conn.close()
+        if row:
+            r = dict(row)
+            cny = r.get("cny_price", 0)
+            rate = r.get("exchange_rate", 0)
+            ship = r.get("overseas_shipping", 8000)
+            other = r.get("other_costs", 0)
+            if cny and rate:
+                return round(cny * rate * 1.03 + ship + other)
+    except Exception:
+        pass
+
+    # 2) 큐 메모리에서 조회 (기존 동작)
     for item in product_queue:
         if (item.get("model") or "").upper() != model:
             continue
@@ -4104,9 +4233,30 @@ def _log_bid_competition(bids, market):
     print(f"[모니터] bid_competition_log: {logged}건 기록")
 
 
+def _expire_old_pending():
+    """24시간 경과한 pending/profit_low/deficit → expired 처리 (승인/거절 건은 보존)"""
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        c = conn.cursor()
+        c.execute(
+            """UPDATE price_adjustments SET status='expired', executed_at=?
+               WHERE status IN ('pending','profit_low','deficit')
+                 AND created_at < datetime('now','-24 hours')""",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),)
+        )
+        expired = c.rowcount
+        conn.commit()
+        conn.close()
+        if expired:
+            print(f"[모니터] 이전 대기 건 {expired}건 만료 처리 완료")
+    except Exception as e:
+        print(f"[모니터] 만료 처리 오류: {e}")
+
+
 def _run_monitor_check():
     """모니터링: 순위 체크 → 가격 조정 계산 → DB 저장 → 이메일"""
     print(f"\n[모니터] ===== 순위 체크: {datetime.now().strftime('%m-%d %H:%M')} =====")
+    _expire_old_pending()
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -4448,16 +4598,42 @@ def api_monitor_run_once():
 
 @app.route("/api/adjust/pending")
 def api_adjust_pending():
-    """pending/profit_low/deficit 상태의 조정 목록"""
+    """pending/profit_low/deficit 상태의 조정 목록 — bid_cost JOIN으로 실시간 수익 재계산"""
     conn = sqlite3.connect(str(PRICE_DB))
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute(
-        """SELECT * FROM price_adjustments
-        WHERE status IN ('pending', 'profit_low', 'deficit')
-        ORDER BY created_at DESC LIMIT 200"""
+        """SELECT pa.*,
+                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs
+           FROM price_adjustments pa
+           LEFT JOIN bid_cost bc ON pa.order_id = bc.order_id
+           WHERE pa.status IN ('pending', 'profit_low', 'deficit')
+           ORDER BY pa.created_at DESC LIMIT 200"""
     )
-    rows = [dict(r) for r in c.fetchall()]
+    rows = []
+    for r in c.fetchall():
+        row = dict(r)
+        # bid_cost 데이터가 있으면 expected_profit 실시간 재계산
+        cny = row.pop("cny_price", None)
+        rate = row.pop("exchange_rate", None)
+        ship = row.pop("overseas_shipping", None)
+        other = row.pop("other_costs", None)
+        if cny and rate:
+            total_cost = round(cny * rate * 1.03 + (ship or 8000) + (other or 0))
+            settlement = _calc_settlement_for_monitor(row["new_price"])
+            row["expected_profit"] = settlement - total_cost
+            row["has_cost_data"] = True
+            # 상태도 재계산 (deficit/profit_low/pending)
+            ep = row["expected_profit"]
+            if ep < 0:
+                row["status"] = "deficit"
+            elif ep < 5000:
+                row["status"] = "profit_low"
+            else:
+                row["status"] = "pending"
+        else:
+            row["has_cost_data"] = False
+        rows.append(row)
     conn.close()
     return jsonify({"adjustments": rows})
 
@@ -4582,6 +4758,86 @@ def api_adjust_reject():
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "count": len(ids)})
+
+
+@app.route("/api/bid-cost/upsert", methods=["POST"])
+def api_bid_cost_upsert():
+    """원가 수동 입력/수정"""
+    data = request.json or {}
+    order_id = data.get("order_id", "").strip()
+    model = data.get("model", "").strip()
+    size = data.get("size", "").strip()
+    cny_price = data.get("cny_price")
+    exchange_rate = data.get("exchange_rate")
+
+    if not order_id:
+        return jsonify({"ok": False, "error": "order_id 필수"}), 400
+    if not cny_price or float(cny_price) <= 0:
+        return jsonify({"ok": False, "error": "CNY 가격 필수"}), 400
+
+    # 환율 없으면 현재 설정에서 가져옴
+    if not exchange_rate:
+        settings = {}
+        if SETTINGS_FILE.exists():
+            settings = json.loads(SETTINGS_FILE.read_text())
+        exchange_rate = settings.get("cnyRate", 215)
+
+    cny_f = float(cny_price)
+    rate_f = float(exchange_rate)
+    ship_i = int(data.get("overseas_shipping", 8000))
+    other_i = int(data.get("other_costs", 0))
+
+    _save_bid_cost(
+        order_id=order_id, model=model, size=size,
+        cny_price=cny_f,
+        exchange_rate=rate_f,
+        overseas_shipping=ship_i,
+        other_costs=other_i,
+    )
+
+    # pending 조정 건의 expected_profit + status 갱신
+    total_cost = round(cny_f * rate_f * 1.03 + ship_i + other_i)
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, new_price FROM price_adjustments WHERE order_id=? AND status IN ('pending','profit_low','deficit')",
+            (order_id,)
+        )
+        for pa in c.fetchall():
+            settlement = _calc_settlement_for_monitor(pa["new_price"])
+            ep = settlement - total_cost
+            if ep < 0:
+                new_status = "deficit"
+            elif ep < 5000:
+                new_status = "profit_low"
+            else:
+                new_status = "pending"
+            c.execute(
+                "UPDATE price_adjustments SET expected_profit=?, status=? WHERE id=?",
+                (ep, new_status, pa["id"])
+            )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/bid-cost/get/<order_id>")
+def api_bid_cost_get(order_id):
+    """특정 order_id의 원가 조회"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM bid_cost WHERE order_id=?", (order_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return jsonify({"ok": True, "cost": dict(row)})
+    return jsonify({"ok": True, "cost": None})
 
 
 @app.route("/api/email/test", methods=["POST"])
@@ -5252,17 +5508,32 @@ def _run_sales_sync():
         loop.close()
 
 
+def _get_sales_sync_interval():
+    """설정에서 판매 수집 간격(초) 조회 — 기본 30분 + ±5분 랜덤 지터"""
+    interval_min = 30
+    try:
+        if SETTINGS_FILE.exists():
+            settings = json.loads(SETTINGS_FILE.read_text())
+            interval_min = settings.get("sales_sync_interval_minutes", 30)
+    except Exception:
+        pass
+    base_seconds = max(5, interval_min) * 60
+    jitter = random.randint(-300, 300)  # ±5분
+    return max(300, base_seconds + jitter)  # 최소 5분
+
+
 def _schedule_next_sales_sync():
-    """1시간 후 다음 판매 수집 예약"""
+    """다음 판매 수집 예약 (설정 간격 + 랜덤 지터)"""
     global _sales_timer
     with _sales_lock:
         if not sales_scheduler_state["running"]:
             return
-    _sales_timer = threading.Timer(3600, _sales_sync_tick)
+    interval = _get_sales_sync_interval()
+    _sales_timer = threading.Timer(interval, _sales_sync_tick)
     _sales_timer.daemon = True
     _sales_timer.start()
     with _sales_lock:
-        next_time = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+        next_time = (datetime.now() + timedelta(seconds=interval)).strftime("%Y-%m-%d %H:%M")
         sales_scheduler_state["next_run"] = next_time
 
 
@@ -5355,6 +5626,183 @@ def api_sales_stats():
     })
 
 
+@app.route("/api/sales/dashboard")
+def api_sales_dashboard():
+    """판매 대시보드 — 요약/베스트셀러/최근 판매/시간대 분포"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+
+    def _period_stats(date_from, date_to=None):
+        if date_to:
+            c.execute(
+                "SELECT COUNT(*) as cnt, COALESCE(SUM(sale_price),0) as rev FROM sales_history WHERE trade_date >= ? AND trade_date <= ?",
+                (date_from, date_to))
+        else:
+            c.execute(
+                "SELECT COUNT(*) as cnt, COALESCE(SUM(sale_price),0) as rev FROM sales_history WHERE trade_date >= ?",
+                (date_from,))
+        r = c.fetchone()
+        return {"count": r["cnt"], "total_revenue": r["rev"]}
+
+    summary = {
+        "today": _period_stats(today, today),
+        "yesterday": _period_stats(yesterday, yesterday),
+        "last_7days": _period_stats(week_ago),
+        "last_30days": _period_stats(month_ago),
+    }
+
+    # 베스트셀러 TOP 10 (30일)
+    c.execute("""
+        SELECT model, COUNT(*) as count, COALESCE(SUM(sale_price),0) as total_revenue
+        FROM sales_history WHERE model != '' AND trade_date >= ?
+        GROUP BY model ORDER BY count DESC LIMIT 10
+    """, (month_ago,))
+    top_models = [dict(r) for r in c.fetchall()]
+
+    # 최근 20건
+    c.execute("SELECT * FROM sales_history ORDER BY trade_date DESC, id DESC LIMIT 20")
+    recent_sales = []
+    for r in c.fetchall():
+        row = dict(r)
+        row["margin_estimate"] = None  # 마진 추정 불가 시 NULL
+        recent_sales.append(row)
+
+    # 시간대별 분포 (30일, trade_date에서 시간 추출)
+    c.execute("""
+        SELECT CAST(SUBSTR(trade_date, 12, 2) AS INTEGER) as hour, COUNT(*) as count
+        FROM sales_history WHERE trade_date >= ? AND LENGTH(trade_date) >= 13
+        GROUP BY hour ORDER BY hour
+    """, (month_ago,))
+    hourly_raw = {r["hour"]: r["count"] for r in c.fetchall()}
+    hourly_distribution = [{"hour": h, "count": hourly_raw.get(h, 0)} for h in range(24)]
+
+    conn.close()
+    return jsonify({
+        "ok": True,
+        "summary": summary,
+        "top_models": top_models,
+        "recent_sales": recent_sales,
+        "hourly_distribution": hourly_distribution,
+    })
+
+
+@app.route("/api/sales/search")
+def api_sales_search():
+    """판매 이력 검색 — 모델/사이즈/기간 필터 + 페이지네이션"""
+    model = request.args.get("model", "").strip()
+    size = request.args.get("size", "").strip()
+    from_date = request.args.get("from_date", "").strip()
+    to_date = request.args.get("to_date", "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = min(per_page, 100)
+
+    conditions = []
+    params = []
+    if model:
+        conditions.append("model LIKE ?")
+        params.append(f"%{model}%")
+    if size:
+        conditions.append("size = ?")
+        params.append(size)
+    if from_date:
+        conditions.append("trade_date >= ?")
+        params.append(from_date)
+    if to_date:
+        conditions.append("trade_date <= ?")
+        params.append(to_date + " 23:59:59")
+
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    c.execute(f"SELECT COUNT(*) FROM sales_history{where}", params)
+    total = c.fetchone()[0]
+
+    offset = (page - 1) * per_page
+    c.execute(
+        f"SELECT * FROM sales_history{where} ORDER BY trade_date DESC, id DESC LIMIT ? OFFSET ?",
+        params + [per_page, offset]
+    )
+    sales = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "sales": sales,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": math.ceil(total / per_page) if per_page else 0,
+    })
+
+
+@app.route("/api/sales/by-model/<path:model>")
+def api_sales_by_model(model):
+    """모델별 판매 상세 — 회전율/평균가격/사이즈분포"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    # 전체 판매 이력
+    c.execute(
+        "SELECT * FROM sales_history WHERE model = ? ORDER BY trade_date DESC",
+        (model,))
+    sales = [dict(r) for r in c.fetchall()]
+
+    if not sales:
+        conn.close()
+        return jsonify({"ok": True, "model": model, "total_count": 0, "sales": [],
+                        "avg_price": None, "size_distribution": [], "turnover_days": None})
+
+    total_count = len(sales)
+    prices = [s["sale_price"] for s in sales if s.get("sale_price")]
+    avg_price = round(sum(prices) / len(prices)) if prices else None
+
+    # 사이즈별 분포
+    c.execute("""
+        SELECT size, COUNT(*) as count, COALESCE(AVG(sale_price),0) as avg_price
+        FROM sales_history WHERE model = ? AND size != ''
+        GROUP BY size ORDER BY count DESC
+    """, (model,))
+    size_distribution = [dict(r) for r in c.fetchall()]
+
+    # 회전율 (첫 판매 ~ 마지막 판매 사이 일수 / 판매 건수)
+    c.execute(
+        "SELECT MIN(trade_date) as first_sale, MAX(trade_date) as last_sale FROM sales_history WHERE model = ?",
+        (model,))
+    dates = c.fetchone()
+    turnover_days = None
+    if dates["first_sale"] and dates["last_sale"] and total_count > 1:
+        try:
+            d1 = datetime.strptime(dates["first_sale"][:10], "%Y-%m-%d")
+            d2 = datetime.strptime(dates["last_sale"][:10], "%Y-%m-%d")
+            span = (d2 - d1).days
+            if span > 0:
+                turnover_days = round(span / total_count, 1)
+        except Exception:
+            pass
+
+    conn.close()
+    return jsonify({
+        "ok": True,
+        "model": model,
+        "total_count": total_count,
+        "avg_price": avg_price,
+        "size_distribution": size_distribution,
+        "turnover_days": turnover_days,
+        "sales": sales[:50],  # 최근 50건만
+    })
+
+
 @app.route("/api/sales/scheduler/status")
 def api_sales_scheduler_status():
     """판매 수집 스케줄러 상태"""
@@ -5370,7 +5818,7 @@ def api_sales_scheduler_start():
             return jsonify({"ok": True, "msg": "이미 실행 중"})
         sales_scheduler_state["running"] = True
     _schedule_next_sales_sync()
-    return jsonify({"ok": True, "msg": "스케줄러 시작됨 (1시간 간격)"})
+    return jsonify({"ok": True, "msg": "스케줄러 시작됨 (30분 간격 + 지터)"})
 
 
 @app.route("/api/sales/scheduler/stop", methods=["POST"])
@@ -5769,7 +6217,7 @@ if __name__ == "__main__":
     print("  KREAM 판매자 대시보드 서버")
     print("  http://localhost:5001")
     print(f"  모니터링 스케줄: 매일 {MONITOR_HOURS}시")
-    print(f"  판매 수집: 1시간 간격")
+    print(f"  판매 수집: 30분 간격 + ±5분 지터")
     print("=" * 50)
     # 서버 시작 시 환율 자동 조회 (백그라운드)
     threading.Thread(target=fetch_exchange_rates, daemon=True).start()

@@ -1,26 +1,9 @@
 {
-  "counter": 168,
+  "counter": 169,
   "queue": [
     {
       "id": 167,
       "model": "TEST_VERIFY",
-      "cny": 100.0,
-      "category": "",
-      "categoryAuto": false,
-      "sizes": [],
-      "sizeSystem": "",
-      "size": "",
-      "shipping": 8000,
-      "quantity": 1,
-      "bid_days": 30,
-      "bid_strategy": "undercut",
-      "status": "대기",
-      "result": null,
-      "gosi": null
-    },
-    {
-      "id": 168,
-      "model": "TEST",
       "cny": 100.0,
       "category": "",
       "categoryAuto": false,

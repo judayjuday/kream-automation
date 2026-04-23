@@ -213,6 +213,9 @@ tr.selected td { background: var(--accent-light); }
       <div class="nav-item" onclick="showTab('mybids')">
         <span class="nav-icon">📑</span> 입찰 관리
       </div>
+      <div class="nav-item" onclick="showTab('sales')">
+        <span class="nav-icon">💰</span> 판매 관리
+      </div>
       <div class="nav-item" onclick="showTab('history')">
         <span class="nav-icon">📝</span> 실행 이력
       </div>
@@ -302,6 +305,24 @@ tr.selected td { background: var(--accent-light); }
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
           <button class="btn btn-outline" id="sync-bids-btn" onclick="syncMyBids()">내 입찰 현황 동기화 🔄</button>
           <span id="sync-bids-status" style="font-size:12px; color:var(--text3)">동기화 안 됨</span>
+        </div>
+
+        <!-- 판매 요약 위젯 -->
+        <div class="card" id="home-sales-widget" style="margin-bottom:12px; padding:16px">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px">
+            <div style="display:flex; gap:24px; align-items:center; flex-wrap:wrap">
+              <div>
+                <div style="font-size:11px; color:var(--text3)">오늘 판매</div>
+                <div style="font-size:22px; font-weight:700" id="home-sales-today">-</div>
+              </div>
+              <div id="home-sales-compare" style="font-size:12px; color:var(--text3)"></div>
+              <div style="border-left:1px solid var(--border); padding-left:16px">
+                <div style="font-size:11px; color:var(--text3)">오늘 매출</div>
+                <div style="font-size:18px; font-weight:600" id="home-sales-revenue">-</div>
+              </div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="showTab('sales')">판매 관리 보기</button>
+          </div>
         </div>
 
         <!-- 상품 추가 폼 -->
@@ -509,6 +530,7 @@ tr.selected td { background: var(--accent-light); }
       <div id="tab-adjust" class="tab-view" data-tab-title="가격 자동 조정"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-prices" class="tab-view" data-tab-title="가격 수집"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-mybids" class="tab-view" data-tab-title="입찰 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-sales" class="tab-view" data-tab-title="판매 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-history" class="tab-view" data-tab-title="실행 이력"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-pattern" class="tab-view" data-tab-title="판매 패턴"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-logistics" class="tab-view" data-tab-title="물류 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
@@ -567,6 +589,7 @@ function showTab(id) {
     adjust: '가격 자동 조정',
     prices: '가격 수집',
     mybids: '입찰 관리',
+    sales: '판매 관리',
     history: '실행 이력',
     pattern: '📊 판매 패턴',
     settings: '환율 / 수수료 설정'
@@ -632,16 +655,20 @@ function _loadTab(id, tabEl) {
 
 function _onTabShown(id) {
   if (id === 'margin') { try { quickCalc(); } catch(e) {} }
+  if (id === 'sales') { try { sdLoadDashboard(); } catch(e) {} }
   if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); loadEditLog(); } catch(e) {} }
   if (id === 'logistics') { try { loadLogisticsAll(); } catch(e) {} }
   if (id === 'pattern') { try { loadPatternAnalysis(); } catch(e) {} }
-  if (id === 'register' && typeof queueRender === 'function') {
-    try {
-      qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
-      qRenderSizeRows();
-      queueRender();
-      queueBuildResults();
-    } catch(e) {}
+  if (id === 'register') {
+    try { _loadHomeSalesWidget(); } catch(e) {}
+    if (typeof queueRender === 'function') {
+      try {
+        qSizeRows = [{ id: Date.now() + Math.random(), size: '', cny: '' }];
+        qRenderSizeRows();
+        queueRender();
+        queueBuildResults();
+      } catch(e) {}
+    }
   }
   if (id === 'settings') { try { loadSettings(); loadAlertSettings(); } catch(e) {} }
   if (id === 'adjust') { try { loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadExpiringBids(); loadEmailPassword(); } catch(e) {} }
@@ -1112,6 +1139,30 @@ function toggleGosiFields() {
   const already = document.getElementById('gosi-already').checked;
   document.getElementById('gosi-section').style.display = already ? 'none' : 'block';
 }
+
+// ═══ 홈 판매 요약 위젯 ═══
+function _loadHomeSalesWidget() {
+  fetch('/api/sales/dashboard').then(r=>r.json()).then(data=>{
+    if(!data.ok) return;
+    const s = data.summary;
+    document.getElementById('home-sales-today').textContent = s.today.count + '건';
+    document.getElementById('home-sales-revenue').textContent = s.today.total_revenue.toLocaleString() + '원';
+    const cmp = document.getElementById('home-sales-compare');
+    if(s.yesterday.count > 0) {
+      const diff = s.today.count - s.yesterday.count;
+      const pct = Math.round((diff / s.yesterday.count) * 100);
+      const sign = diff >= 0 ? '+' : '';
+      const color = diff >= 0 ? 'var(--accent)' : 'var(--danger)';
+      cmp.innerHTML = `<span style="color:${color}">${sign}${diff}건 (${sign}${pct}%)</span> <span style="color:var(--text3)">vs 어제</span>`;
+    } else if(s.today.count > 0) {
+      cmp.innerHTML = '<span style="color:var(--accent)">어제 판매 없음</span>';
+    } else {
+      cmp.textContent = '';
+    }
+  }).catch(()=>{});
+}
+// 페이지 로드 시 자동 호출
+try { _loadHomeSalesWidget(); } catch(e) {}
 
 // ═══ 판매 이력 ═══
 let salesCurrentPage = 0;
@@ -2149,9 +2200,18 @@ function renderPendingTable() {
     const profitLow = adj.status === 'profit_low';
     const isPending = adj.status === 'pending';
     const canApprove = isPending && (adj.expected_profit == null || adj.expected_profit >= 5000);
-    const profitStr = adj.expected_profit != null
-      ? `<span style="color:${adj.expected_profit >= 5000 ? 'var(--accent)' : 'var(--danger)'}">${adj.expected_profit.toLocaleString()}원</span>`
-      : '<span style="color:var(--text3)">미확인</span>';
+
+    let profitStr;
+    if (adj.expected_profit != null) {
+      if (adj.expected_profit >= 4000) {
+        profitStr = `<span style="color:var(--accent); font-weight:600">${adj.expected_profit.toLocaleString()}원</span>`;
+      } else {
+        profitStr = `<span style="color:var(--danger); font-weight:600">${adj.expected_profit.toLocaleString()}원</span> <span style="font-size:10px; background:var(--danger); color:#fff; padding:1px 6px; border-radius:4px">마진 부족</span>`;
+      }
+    } else {
+      profitStr = `<span style="color:var(--text3)">원가 등록 필요</span> <button class="btn btn-outline btn-sm" style="font-size:10px; padding:2px 8px; margin-left:4px" onclick="openCostModal('${(adj.order_id||'').replace(/'/g,"\\'")}','${(adj.model||'').replace(/'/g,"\\'")}','${(adj.size||'').replace(/'/g,"\\'")}')">입력</button>`;
+    }
+
     let statusBadge;
     if (isDeficit) {
       statusBadge = '<span class="badge badge-bad" style="background:#dc3545;color:#fff">조정 불가 (적자)</span>';
@@ -2184,6 +2244,85 @@ function renderPendingTable() {
   });
   tbody.innerHTML = html;
 }
+
+// ═══ 원가 수동 입력 모달 ═══
+function openCostModal(orderId, model, size) {
+  document.getElementById('cost-order-id').value = orderId;
+  document.getElementById('cost-model').value = model;
+  document.getElementById('cost-size').value = size;
+  document.getElementById('cost-cny').value = '';
+  document.getElementById('cost-rate').value = SETTINGS.cnyRate || '';
+  document.getElementById('cost-shipping').value = '8000';
+  document.getElementById('cost-other').value = '0';
+  document.getElementById('cost-preview').textContent = '';
+  document.getElementById('cost-modal').style.display = 'flex';
+
+  // 기존 원가 있으면 불러오기
+  fetch(`/api/bid-cost/get/${encodeURIComponent(orderId)}`).then(r=>r.json()).then(data=>{
+    if(data.ok && data.cost) {
+      document.getElementById('cost-cny').value = data.cost.cny_price || '';
+      document.getElementById('cost-rate').value = data.cost.exchange_rate || '';
+      document.getElementById('cost-shipping').value = data.cost.overseas_shipping || 8000;
+      document.getElementById('cost-other').value = data.cost.other_costs || 0;
+      updateCostPreview();
+    }
+  }).catch(()=>{});
+
+  // 실시간 미리보기
+  ['cost-cny','cost-rate','cost-shipping','cost-other'].forEach(id=>{
+    document.getElementById(id).oninput = updateCostPreview;
+  });
+}
+
+function updateCostPreview() {
+  const cny = parseFloat(document.getElementById('cost-cny').value) || 0;
+  const rate = parseFloat(document.getElementById('cost-rate').value) || 0;
+  const ship = parseInt(document.getElementById('cost-shipping').value) || 0;
+  const other = parseInt(document.getElementById('cost-other').value) || 0;
+  if (cny > 0 && rate > 0) {
+    const total = Math.round(cny * rate * 1.03 + ship + other);
+    document.getElementById('cost-preview').textContent = `총 원가: ${total.toLocaleString()}원 (CNY ${cny} × ${rate.toFixed(2)} × 1.03 + 배송 ${ship.toLocaleString()} + 기타 ${other.toLocaleString()})`;
+  } else {
+    document.getElementById('cost-preview').textContent = 'CNY 가격과 환율을 입력하세요';
+  }
+}
+
+function closeCostModal() {
+  document.getElementById('cost-modal').style.display = 'none';
+}
+
+function saveCostModal() {
+  const orderId = document.getElementById('cost-order-id').value;
+  const cny = parseFloat(document.getElementById('cost-cny').value);
+  if (!cny || cny <= 0) { alert('CNY 가격을 입력하세요'); return; }
+
+  fetch('/api/bid-cost/upsert', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      order_id: orderId,
+      model: document.getElementById('cost-model').value,
+      size: document.getElementById('cost-size').value,
+      cny_price: cny,
+      exchange_rate: parseFloat(document.getElementById('cost-rate').value) || null,
+      overseas_shipping: parseInt(document.getElementById('cost-shipping').value) || 8000,
+      other_costs: parseInt(document.getElementById('cost-other').value) || 0,
+    })
+  }).then(r=>r.json()).then(data=>{
+    if(data.ok) {
+      alert('원가 저장 완료');
+      closeCostModal();
+      loadPendingAdjustments();
+    } else {
+      alert('저장 실패: ' + (data.error||''));
+    }
+  }).catch(()=>alert('저장 요청 실패'));
+}
+
+// 모달 바깥 클릭 닫기
+document.addEventListener('click', function(e) {
+  const modal = document.getElementById('cost-modal');
+  if (e.target === modal) closeCostModal();
+});
 
 function pendToggleAll(checked) {
   document.querySelectorAll('.pend-cb:not(:disabled)').forEach(cb => cb.checked = checked);
@@ -4744,6 +4883,7 @@ function _buildBidList() {
         const bp = getBidPrice(item, sz);
         if (!bp) return;
         bidList.push({ model: item.model, size: sz.size, price: bp, cost: sz.totalCost,
+          cny_price: sz.cny || item.cny || 0, exchange_rate: SETTINGS.cnyRate || 0,
           productId: r.productId, nameEn: r.nameEn||'', qty: item.quantity,
           gosi: g, category: item.category, gosiAlready: false, bid_days: item.bid_days || 30 });
       });
@@ -4751,6 +4891,7 @@ function _buildBidList() {
       const bp = getBidPrice(item);
       if (!bp) return;
       bidList.push({ model: item.model, size: item.size || 'ONE SIZE', price: bp, cost: r.totalCost||0,
+        cny_price: item.cny || 0, exchange_rate: SETTINGS.cnyRate || 0,
         productId: r.productId, nameEn: r.nameEn||'', qty: item.quantity,
         gosi: g, category: item.category, gosiAlready: false, bid_days: item.bid_days || 30 });
     }
