@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026/04/24 01:56",
+    "type": "입찰실패",
+    "productId": "12345",
+    "price": 100000,
+    "quantity": 1,
+    "success": 0,
+    "fail": 1
+  },
+  {
     "date": "2026/04/19 02:53",
     "type": "입찰",
     "productId": "220596",

@@ -48,6 +48,14 @@
             <span style="font-size:11px; color:var(--text3); margin-left:8px">OFF = 브라우저 표시 (디버깅용)</span>
           </div>
           <div class="form-row">
+            <span class="form-label">원가 없이 입찰 차단</span>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" id="set-require-cny" checked onchange="saveSettings()">
+              <span id="require-cny-label" style="font-size:13px">ON (CNY 필수)</span>
+            </label>
+            <span style="font-size:11px; color:var(--text3); margin-left:8px">OFF = 원가 없이 입찰 허용 (경고만)</span>
+          </div>
+          <div class="form-row">
             <span class="form-label">입찰 만료 자동 갱신</span>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
               <input type="checkbox" id="set-auto-renew" onchange="saveSettings()">

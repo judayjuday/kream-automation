@@ -1188,6 +1188,17 @@ def api_register():
     overseas_shipping = data.get("overseas_shipping", 8000)
     model = str(data.get("model", "")).strip()
 
+    # CNY 필수 검증
+    require_cny = True
+    if SETTINGS_FILE.exists():
+        try:
+            _s = json.loads(SETTINGS_FILE.read_text())
+            require_cny = _s.get("require_cny_on_bid", True)
+        except Exception:
+            pass
+    if require_cny and (not cny_price or float(cny_price) <= 0):
+        return jsonify({"error": "원가(CNY)는 필수입니다. 설정에서 해제 가능"}), 400
+
     tid = new_task()
     add_log(tid, "info", f"자동화 시작: #{product_id} → {price:,}원 × {qty}개")
 
@@ -3656,6 +3667,20 @@ def api_queue_auto_register():
     if not bid_items:
         return jsonify({"error": "항목 없음"}), 400
 
+    # CNY 필수 검증
+    require_cny = True
+    if SETTINGS_FILE.exists():
+        try:
+            _s = json.loads(SETTINGS_FILE.read_text())
+            require_cny = _s.get("require_cny_on_bid", True)
+        except Exception:
+            pass
+    if require_cny:
+        missing_cny = [bi for bi in bid_items if not bi.get("cny_price") or float(bi.get("cny_price", 0)) <= 0]
+        if missing_cny:
+            models = set(bi.get("model", "?") for bi in missing_cny)
+            return jsonify({"error": f"원가(CNY)는 필수입니다 ({len(missing_cny)}건: {', '.join(models)}). 설정에서 해제 가능"}), 400
+
     # 세션 파일 확인
     if not Path(STATE_FILE).exists():
         return jsonify({"error": "세션 없음. 먼저 python3 kream_bot.py --mode login 실행"}), 400
@@ -4838,6 +4863,113 @@ def api_bid_cost_get(order_id):
     if row:
         return jsonify({"ok": True, "cost": dict(row)})
     return jsonify({"ok": True, "cost": None})
+
+
+@app.route("/api/bid-cost/missing")
+def api_bid_cost_missing():
+    """원가 없는 pending 조정건을 모델별 그룹화하여 반환"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute(
+        """SELECT pa.order_id, pa.product_id, pa.model, pa.name_kr, pa.size, pa.new_price
+           FROM price_adjustments pa
+           LEFT JOIN bid_cost bc ON pa.order_id = bc.order_id
+           WHERE pa.status IN ('pending','profit_low','deficit')
+             AND bc.order_id IS NULL
+           ORDER BY pa.model, pa.size"""
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    from collections import OrderedDict
+    groups_dict = OrderedDict()
+    for r in rows:
+        key = r["model"] or r["product_id"] or "unknown"
+        if key not in groups_dict:
+            groups_dict[key] = {
+                "model": r["model"] or "",
+                "product_id": r["product_id"] or "",
+                "display_name": r["name_kr"] or r["model"] or f"#{r['product_id']}",
+                "bids": [],
+            }
+        groups_dict[key]["bids"].append({
+            "order_id": r["order_id"],
+            "size": r["size"],
+            "current_price": r["new_price"],
+        })
+
+    return jsonify({"groups": list(groups_dict.values()), "total": len(rows)})
+
+
+@app.route("/api/bid-cost/bulk-upsert", methods=["POST"])
+def api_bid_cost_bulk_upsert():
+    """여러 건 원가 한번에 저장 + price_adjustments 재계산"""
+    data = request.json or {}
+    entries = data.get("entries", [])
+    if not entries:
+        return jsonify({"ok": False, "error": "entries 필요"}), 400
+
+    updated = 0
+    failed = 0
+    details = []
+
+    # 환율 기본값
+    default_rate = 215
+    if SETTINGS_FILE.exists():
+        try:
+            s = json.loads(SETTINGS_FILE.read_text())
+            default_rate = s.get("cnyRate", 215)
+        except Exception:
+            pass
+
+    for entry in entries:
+        oid = (entry.get("order_id") or "").strip()
+        cny = entry.get("cny_price")
+        if not oid or not cny or float(cny) <= 0:
+            failed += 1
+            details.append({"order_id": oid, "ok": False, "reason": "order_id 또는 cny_price 누락"})
+            continue
+
+        cny_f = float(cny)
+        rate_f = float(entry.get("exchange_rate") or default_rate)
+        ship_i = int(entry.get("overseas_shipping", 8000))
+        other_i = int(entry.get("other_costs", 0))
+        model = entry.get("model", "")
+        size = entry.get("size", "")
+
+        try:
+            _save_bid_cost(
+                order_id=oid, model=model, size=size,
+                cny_price=cny_f, exchange_rate=rate_f,
+                overseas_shipping=ship_i, other_costs=other_i,
+            )
+
+            # pending 건 expected_profit 재계산
+            total_cost = round(cny_f * rate_f * 1.03 + ship_i + other_i)
+            conn = sqlite3.connect(str(PRICE_DB))
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, new_price FROM price_adjustments WHERE order_id=? AND status IN ('pending','profit_low','deficit')",
+                (oid,)
+            )
+            for pa in c.fetchall():
+                settlement = _calc_settlement_for_monitor(pa["new_price"])
+                ep = settlement - total_cost
+                new_status = "deficit" if ep < 0 else ("profit_low" if ep < 5000 else "pending")
+                c.execute("UPDATE price_adjustments SET expected_profit=?, status=? WHERE id=?",
+                          (ep, new_status, pa["id"]))
+            conn.commit()
+            conn.close()
+
+            updated += 1
+            details.append({"order_id": oid, "ok": True})
+        except Exception as e:
+            failed += 1
+            details.append({"order_id": oid, "ok": False, "reason": str(e)})
+
+    return jsonify({"ok": True, "updated": updated, "failed": failed, "details": details})
 
 
 @app.route("/api/email/test", methods=["POST"])
