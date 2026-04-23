@@ -64,6 +64,42 @@
             <span style="font-size:11px; color:var(--text3); margin-left:8px">ON = 만료 3일 전 자동 재입찰</span>
           </div>
           <div class="divider"></div>
+          <div class="card-title"><span class="icon">🤖</span> 자동 가격 조정</div>
+          <div class="form-row">
+            <span class="form-label">자동 실행</span>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" id="set-auto-adjust" onchange="saveAutoAdjustSettings()">
+              <span id="auto-adjust-label" style="font-size:13px">OFF</span>
+            </label>
+            <span style="font-size:11px; color:var(--text3); margin-left:8px">모니터링 후 자동으로 가격 수정</span>
+          </div>
+          <div class="form-row">
+            <span class="form-label">하루 최대 수정</span>
+            <input type="number" class="form-input form-input-sm" id="set-aa-daily-max" value="10" min="1" max="100" onchange="saveAutoAdjustSettings()"> 건
+          </div>
+          <div class="form-row">
+            <span class="form-label">최소 마진</span>
+            <input type="number" class="form-input form-input-sm" id="set-aa-min-profit" value="4000" min="0" step="1000" onchange="saveAutoAdjustSettings()"> 원
+          </div>
+          <div class="divider"></div>
+          <div class="card-title"><span class="icon">🔄</span> 자동 재입찰</div>
+          <div class="form-row">
+            <span class="form-label">자동 재입찰</span>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" id="set-auto-rebid" onchange="saveAutoRebidSettings()">
+              <span id="auto-rebid-label" style="font-size:13px">OFF</span>
+            </label>
+            <span style="font-size:11px; color:var(--text3); margin-left:8px">판매 감지 시 자동 재입찰</span>
+          </div>
+          <div class="form-row">
+            <span class="form-label">하루 최대 재입찰</span>
+            <input type="number" class="form-input form-input-sm" id="set-rebid-daily-max" value="20" min="1" max="100" onchange="saveAutoRebidSettings()"> 건
+          </div>
+          <div class="form-row">
+            <span class="form-label">블랙리스트 모델</span>
+            <input type="text" class="form-input form-input-lg" id="set-rebid-blacklist" placeholder="IX7694, DC5227 (쉼표 구분)" onchange="saveAutoRebidSettings()">
+          </div>
+          <div class="divider"></div>
           <div class="card-title"><span class="icon">📝</span> 고시정보 기본값</div>
           <div class="form-row">
             <span class="form-label">제조국</span>

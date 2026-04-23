@@ -21,8 +21,52 @@
      - `curl -s -X POST http://localhost:5001/api/queue/add -H "Content-Type: application/json" -d '{"model":"TEST","cny":100}' | grep ok` → ok 확인
    - 실패 시 자동 디버깅 3회 재시도, 3회 실패하면 "사용자 확인 필요" 보고 후 멈춤
 
+---
+
+## 절대 규칙 (위반 시 즉시 중단)
+
+1. **원가 없으면 절대 가짜 값 사용 금지** → NULL로 저장, "원가 등록 필요" 표시
+2. **판매 완료된 건(sales_history)은 수정/삭제 금지** → 읽기 전용
+3. **price_history.db 직접 DROP TABLE / DELETE FROM 금지** → 마이그레이션 스크립트 사용
+4. **auth_state.json 백업 없이 덮어쓰기 금지** → 성공 시에만 세션 저장
+5. **git push -f, git reset --hard 금지** → 사용자 명시적 요청 시에만
+6. **테스트 데이터로 실제 입찰 실행 금지** → productId=TEST_XXX 접두사 사용
+
+---
+
+## 작업 완료 전 체크리스트
+
+모든 작업 완료 선언 전 반드시 확인:
+
+- [ ] `python3 -c "import py_compile; py_compile.compile('변경파일.py', doraise=True)"` 통과
+- [ ] `curl -s http://localhost:5001/api/health` 응답 200
+- [ ] 새 DB 컬럼 추가했으면 기존 데이터 NULL 처리 확인
+- [ ] 새 API 만들었으면 에러 응답도 JSON 반환 (HTML 금지)
+- [ ] 프론트엔드 수정했으면 브라우저 콘솔 에러 없음 확인
+- [ ] API 라우트 충돌 없음 확인
+
+---
+
+## 커밋 규칙
+
+- 작업 단위마다 단일 커밋 (롤백 용이성)
+- 커밋 메시지 형식: `feat|fix|chore: 한글 설명`
+- auto-commit 금지 (사용자 확인 후)
+- 커밋 전 체크리스트 통과 필수
+
+---
+
+## 테스트 데이터
+
+실제 데이터 건드리지 말고 이 데이터 사용:
+- 테스트 order_id: `TEST_XXX` 접두사
+- 테스트 product_id: `99999`
+- 테스트 후 반드시 정리: `DELETE FROM 테이블 WHERE order_id LIKE 'TEST_%'`
+
+---
+
 ## 서버 관련
-- 서버 재시작: lsof -ti:5001 | xargs kill -9 2>/dev/null; python3 kream_server.py > server.log 2>&1 &
+- 서버 재시작: `lsof -ti:5001 | xargs kill -9 2>/dev/null; python3 kream_server.py > server.log 2>&1 &`
 - auth_state.json 절대 빈 세션으로 덮어쓰지 말 것
 - 성공 시에만 세션 저장
 
@@ -35,6 +79,8 @@
 - competitor_analysis.py: 경쟁사 분석
 - tabs/: 탭별 HTML 파일
 - price_history.db: SQLite DB (가격이력/입찰이력/판매이력)
+- .claude/hooks/: 자동 검증 스크립트
+- .claude/skills/: 작업별 규칙 (DB 마이그레이션, API 추가 등)
 
 ---
 

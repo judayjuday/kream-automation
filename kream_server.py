@@ -198,6 +198,60 @@ def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
     conn.close()
 
 
+def _init_auto_adjust_log_table():
+    """auto_adjust_log 테이블 — 자동 실행 이력"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS auto_adjust_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT,
+        model TEXT,
+        size TEXT,
+        old_price INTEGER,
+        new_price INTEGER,
+        expected_profit INTEGER,
+        action TEXT,
+        skip_reason TEXT,
+        modify_result TEXT,
+        executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_auto_adjust_executed ON auto_adjust_log(executed_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_auto_adjust_order ON auto_adjust_log(order_id, executed_at)")
+    conn.commit()
+    conn.close()
+
+
+_init_auto_adjust_log_table()
+
+
+def _init_auto_rebid_log_table():
+    """auto_rebid_log 테이블 — 자동 재입찰 이력
+    action: auto_rebid_success | skipped_no_cost | skipped_loop_guard |
+            skipped_margin_low | skipped_price_shift | skipped_blacklist |
+            skipped_daily_limit | skipped_disabled | rebid_failed
+    """
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS auto_rebid_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_order_id TEXT,
+        model TEXT,
+        size TEXT,
+        sold_price INTEGER,
+        new_bid_price INTEGER,
+        expected_profit INTEGER,
+        action TEXT,
+        skip_reason TEXT,
+        new_order_id TEXT,
+        executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rebid_executed ON auto_rebid_log(executed_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rebid_model_size ON auto_rebid_log(model, size, executed_at)")
+    conn.commit()
+    conn.close()
+
+
+_init_auto_rebid_log_table()
 
 
 # ── 조건부 입찰 (conditional_bids) DB ──
@@ -4417,6 +4471,18 @@ def _run_monitor_check():
             on_bid_monitor_success()
         except Exception:
             pass
+
+        # 모니터링 완료 후 → 자동 가격 조정 실행 (설정 ON일 때만)
+        try:
+            aa_settings = _get_auto_adjust_settings()
+            if aa_settings["enabled"]:
+                print("[모니터] 자동 가격 조정 실행 중...")
+                aa_result = auto_execute_approvals()
+                print(f"[모니터] 자동 조정 결과: 수정 {aa_result['modified']}, "
+                      f"건너뜀 {aa_result['skipped']['total']}, 실패 {aa_result['failed']}")
+        except Exception as ae:
+            print(f"[모니터] 자동 조정 오류: {ae}")
+            traceback.print_exc()
     except Exception as e:
         print(f"[모니터] 오류: {e}")
         traceback.print_exc()
@@ -5635,9 +5701,25 @@ def _run_sales_sync():
 
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(_do())
+        result = loop.run_until_complete(_do())
     finally:
         loop.close()
+
+    # 새 판매 감지 시 자동 재입찰 시도 (sync 컨텍스트에서 호출)
+    if result and result.get("ok") and result.get("new_items"):
+        try:
+            rebid_result = auto_rebid_after_sale(result["new_items"])
+            print(f"[auto_rebid] 성공={rebid_result['success']} "
+                  f"건너뜀={rebid_result['skipped']} "
+                  f"실패={rebid_result['failed']}")
+        except Exception as re:
+            print(f"[auto_rebid] 예외: {re}")
+            try:
+                health_alerter.alert("auto_rebid_exception", str(re), cooldown_minutes=60)
+            except Exception:
+                pass
+
+    return result
 
 
 def _get_sales_sync_interval():
@@ -6338,6 +6420,926 @@ def on_bid_monitor_failure(error_msg=""):
             )
         except Exception:
             pass
+
+
+# ═══════════════════════════════════════════
+# 자동 가격 조정 (언더컷 자동 방어)
+# ═══════════════════════════════════════════
+
+
+def _get_auto_adjust_settings():
+    """자동 조정 관련 설정값 로드"""
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    return {
+        "enabled": settings.get("auto_adjust_enabled", False),
+        "daily_max": int(settings.get("auto_adjust_daily_max", 10)),
+        "min_profit": int(settings.get("auto_adjust_min_profit", 4000)),
+    }
+
+
+def _auto_adjust_today_stats():
+    """오늘 자동 실행 통계"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    today = datetime.now().strftime("%Y-%m-%d")
+    c.execute(
+        "SELECT action, COUNT(*) FROM auto_adjust_log WHERE date(executed_at)=? GROUP BY action",
+        (today,)
+    )
+    stats = dict(c.fetchall())
+    conn.close()
+    return {
+        "modified": stats.get("auto_modified", 0),
+        "skipped_no_cost": stats.get("skipped_no_cost", 0),
+        "skipped_profit_low": stats.get("skipped_profit_low", 0),
+        "skipped_cooldown": stats.get("skipped_cooldown", 0),
+        "skipped_daily_limit": stats.get("skipped_daily_limit", 0),
+        "skipped_failure_rate": stats.get("skipped_failure_rate", 0),
+        "skipped_stale_data": stats.get("skipped_stale_data", 0),
+        "modify_failed": stats.get("modify_failed", 0),
+    }
+
+
+def _auto_adjust_failure_rate_1h():
+    """최근 1시간 실행 실패율"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute(
+        "SELECT action FROM auto_adjust_log WHERE action IN ('auto_modified','modify_failed') "
+        "AND executed_at > datetime('now', '-1 hour')"
+    )
+    rows = [r[0] for r in c.fetchall()]
+    conn.close()
+    if not rows:
+        return 0.0
+    failed = sum(1 for r in rows if r == "modify_failed")
+    return failed / len(rows)
+
+
+def _log_auto_adjust(order_id, model, size, old_price, new_price, expected_profit, action, skip_reason=None, modify_result=None):
+    """auto_adjust_log에 기록"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        """INSERT INTO auto_adjust_log (order_id, model, size, old_price, new_price,
+           expected_profit, action, skip_reason, modify_result)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (order_id, model or "", size or "", old_price, new_price,
+         expected_profit, action, skip_reason, modify_result)
+    )
+    conn.commit()
+    conn.close()
+
+
+def auto_execute_approvals(force=False):
+    """자동 가격 조정 실행 — pending 건 중 조건 통과 건만 수정
+
+    Args:
+        force: True면 auto_adjust_enabled 설정 무시 (수동 1회 실행용)
+
+    Returns:
+        dict: {modified, skipped: {total, ...}, failed, details: [...]}
+    """
+    aa_settings = _get_auto_adjust_settings()
+    if not force and not aa_settings["enabled"]:
+        return {"modified": 0, "skipped": {"total": 0}, "failed": 0, "details": [], "reason": "disabled"}
+
+    daily_max = aa_settings["daily_max"]
+    min_profit = aa_settings["min_profit"]
+
+    # 실패율 체크
+    failure_rate = _auto_adjust_failure_rate_1h()
+    if failure_rate > 0.2:
+        # 자동 OFF
+        if aa_settings["enabled"]:
+            try:
+                existing = json.loads(SETTINGS_FILE.read_text()) if SETTINGS_FILE.exists() else {}
+                existing["auto_adjust_enabled"] = False
+                existing["auto_adjust_disabled_reason"] = "failure_rate_exceeded"
+                SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
+            except Exception:
+                pass
+            try:
+                health_alerter.alert("auto_adjust_disabled",
+                    f"자동 가격 조정이 비활성화되었습니다. 최근 1시간 실패율: {failure_rate*100:.0f}%")
+            except Exception:
+                pass
+        return {"modified": 0, "skipped": {"total": 0}, "failed": 0, "details": [],
+                "reason": f"failure_rate_exceeded ({failure_rate*100:.0f}%)"}
+
+    # 오늘 통계
+    today_stats = _auto_adjust_today_stats()
+    today_modified = today_stats["modified"]
+
+    # pending 건 조회 (bid_cost JOIN)
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute(
+        """SELECT pa.*, bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs
+           FROM price_adjustments pa
+           LEFT JOIN bid_cost bc ON pa.order_id = bc.order_id
+           WHERE pa.status IN ('pending','profit_low','deficit')
+           ORDER BY pa.created_at ASC"""
+    )
+    pending_rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    modified = 0
+    failed = 0
+    skipped = {"total": 0, "no_cost": 0, "profit_low": 0, "cooldown": 0,
+               "daily_limit": 0, "failure_rate": 0, "stale_data": 0}
+    details = []
+    start_time = datetime.now()
+    profit_low_count = 0
+
+    for row in pending_rows:
+        # 5분 타임아웃
+        if (datetime.now() - start_time).total_seconds() > 300:
+            break
+
+        oid = row["order_id"]
+        model = row["model"] or ""
+        size = row["size"] or ""
+        old_price = row["old_price"]
+        new_price = row["new_price"]
+
+        # a) 원가 체크
+        cny = row.get("cny_price")
+        rate = row.get("exchange_rate")
+        if not cny or not rate:
+            skipped["no_cost"] += 1
+            skipped["total"] += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, None,
+                             "skipped_no_cost", "원가 미등록")
+            details.append({"order_id": oid, "action": "skipped_no_cost"})
+            continue
+
+        # 실시간 수익 계산
+        ship = row.get("overseas_shipping") or 8000
+        other = row.get("other_costs") or 0
+        total_cost = round(cny * rate * 1.03 + ship + other)
+        settlement = _calc_settlement_for_monitor(new_price)
+        expected_profit = settlement - total_cost
+
+        # b) 마진 체크
+        if expected_profit < min_profit:
+            skipped["profit_low"] += 1
+            skipped["total"] += 1
+            profit_low_count += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, expected_profit,
+                             "skipped_profit_low", f"마진 {expected_profit:,}원 < {min_profit:,}원")
+            details.append({"order_id": oid, "action": "skipped_profit_low", "profit": expected_profit})
+            continue
+
+        # c) 쿨다운 체크 (24시간)
+        conn2 = sqlite3.connect(str(PRICE_DB))
+        c2 = conn2.cursor()
+        c2.execute(
+            "SELECT COUNT(*) FROM auto_adjust_log WHERE order_id=? AND action='auto_modified' "
+            "AND executed_at > datetime('now', '-24 hours')", (oid,)
+        )
+        if c2.fetchone()[0] > 0:
+            conn2.close()
+            skipped["cooldown"] += 1
+            skipped["total"] += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, expected_profit,
+                             "skipped_cooldown", "24시간 쿨다운")
+            details.append({"order_id": oid, "action": "skipped_cooldown"})
+            continue
+        conn2.close()
+
+        # d) 하루 한도 체크
+        if today_modified + modified >= daily_max:
+            skipped["daily_limit"] += 1
+            skipped["total"] += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, expected_profit,
+                             "skipped_daily_limit", f"하루 한도 {daily_max}건 초과")
+            details.append({"order_id": oid, "action": "skipped_daily_limit"})
+            continue
+
+        # e) 스테일 데이터 체크 — pending 상태 재확인
+        conn3 = sqlite3.connect(str(PRICE_DB))
+        c3 = conn3.cursor()
+        c3.execute("SELECT status FROM price_adjustments WHERE id=?", (row["id"],))
+        curr = c3.fetchone()
+        conn3.close()
+        if not curr or curr[0] not in ("pending",):
+            skipped["stale_data"] += 1
+            skipped["total"] += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, expected_profit,
+                             "skipped_stale_data", f"상태 변경됨: {curr[0] if curr else 'deleted'}")
+            details.append({"order_id": oid, "action": "skipped_stale_data"})
+            continue
+
+        # f) 실행: modify_bid_price
+        print(f"[자동조정] {oid} {model} {size}: {old_price:,} → {new_price:,}원 (수익 {expected_profit:,}원)")
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            ok = loop.run_until_complete(modify_bid_price(oid, new_price, headless=True))
+            loop.close()
+        except Exception as e:
+            ok = False
+            print(f"[자동조정] 오류: {e}")
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if ok:
+            # 성공 → price_adjustments 상태 업데이트
+            conn4 = sqlite3.connect(str(PRICE_DB))
+            conn4.execute(
+                "UPDATE price_adjustments SET status='executed', executed_at=? WHERE id=?",
+                (now_str, row["id"])
+            )
+            conn4.commit()
+            conn4.close()
+            modified += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, expected_profit,
+                             "auto_modified", modify_result="success")
+            details.append({"order_id": oid, "action": "auto_modified", "profit": expected_profit})
+            print(f"[자동조정] ✓ 성공")
+        else:
+            # 실패 → price_adjustments는 건드리지 않음
+            conn4 = sqlite3.connect(str(PRICE_DB))
+            conn4.execute(
+                "UPDATE price_adjustments SET status='failed', executed_at=? WHERE id=?",
+                (now_str, row["id"])
+            )
+            conn4.commit()
+            conn4.close()
+            failed += 1
+            _log_auto_adjust(oid, model, size, old_price, new_price, expected_profit,
+                             "modify_failed", modify_result="playwright_error")
+            details.append({"order_id": oid, "action": "modify_failed"})
+            print(f"[자동조정] ✗ 실패")
+
+    # 마진 부족 5건 이상 → 알림
+    if profit_low_count >= 5:
+        try:
+            health_alerter.alert("auto_adjust_low_margin",
+                f"마진 부족 건 {profit_low_count}건 누적", cooldown_minutes=1440)
+        except Exception:
+            pass
+
+    # 하루 한도 초과 → 알림
+    if skipped["daily_limit"] > 0:
+        try:
+            health_alerter.alert("auto_adjust_daily_limit",
+                f"하루 자동 조정 한도 {daily_max}건 초과", cooldown_minutes=1440)
+        except Exception:
+            pass
+
+    result = {"modified": modified, "skipped": skipped, "failed": failed, "details": details}
+    print(f"[자동조정] 완료: 수정 {modified}, 건너뜀 {skipped['total']}, 실패 {failed}")
+    return result
+
+
+# ── 자동 조정 API ──
+
+@app.route("/api/auto-adjust/status")
+def api_auto_adjust_status():
+    """자동 조정 상태"""
+    aa = _get_auto_adjust_settings()
+    today_stats = _auto_adjust_today_stats()
+    failure_rate = _auto_adjust_failure_rate_1h()
+
+    # 마지막 실행 시각
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("SELECT MAX(executed_at) FROM auto_adjust_log")
+    last_row = c.fetchone()
+    last_run = last_row[0] if last_row and last_row[0] else None
+
+    # 최근 50건 성공률
+    c.execute(
+        "SELECT action FROM auto_adjust_log WHERE action IN ('auto_modified','modify_failed') "
+        "ORDER BY executed_at DESC LIMIT 50"
+    )
+    recent = [r[0] for r in c.fetchall()]
+    conn.close()
+
+    success_rate_50 = None
+    if recent:
+        success_rate_50 = round(sum(1 for r in recent if r == "auto_modified") / len(recent) * 100, 1)
+
+    # disabled_reason
+    disabled_reason = None
+    if SETTINGS_FILE.exists():
+        try:
+            s = json.loads(SETTINGS_FILE.read_text())
+            disabled_reason = s.get("auto_adjust_disabled_reason")
+        except Exception:
+            pass
+
+    return jsonify({
+        "enabled": aa["enabled"],
+        "daily_max": aa["daily_max"],
+        "min_profit": aa["min_profit"],
+        "today_modified": today_stats["modified"],
+        "today_skipped": {
+            "total": sum(v for k, v in today_stats.items() if k.startswith("skipped_")),
+            "no_cost": today_stats["skipped_no_cost"],
+            "profit_low": today_stats["skipped_profit_low"],
+            "cooldown": today_stats["skipped_cooldown"],
+            "daily_limit": today_stats["skipped_daily_limit"],
+            "failure_rate": today_stats["skipped_failure_rate"],
+            "stale_data": today_stats["skipped_stale_data"],
+        },
+        "today_failed": today_stats["modify_failed"],
+        "last_run": last_run,
+        "failure_rate_1h": round(failure_rate * 100, 1),
+        "success_rate_50": success_rate_50,
+        "disabled_reason": disabled_reason,
+    })
+
+
+@app.route("/api/auto-adjust/toggle", methods=["POST"])
+def api_auto_adjust_toggle():
+    """자동 조정 ON/OFF 토글"""
+    data = request.json or {}
+    enabled = bool(data.get("enabled", False))
+    existing = {}
+    if SETTINGS_FILE.exists():
+        try:
+            existing = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    existing["auto_adjust_enabled"] = enabled
+    if enabled:
+        existing.pop("auto_adjust_disabled_reason", None)
+    SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
+    return jsonify({"ok": True, "enabled": enabled})
+
+
+@app.route("/api/auto-adjust/run-once", methods=["POST"])
+def api_auto_adjust_run_once():
+    """수동 1회 실행 (auto_adjust_enabled 무관)"""
+    tid = new_task()
+    add_log(tid, "info", "자동 조정 수동 실행 시작...")
+
+    def run():
+        try:
+            result = auto_execute_approvals(force=True)
+            add_log(tid, "success",
+                    f"완료: 수정 {result['modified']}, 건너뜀 {result['skipped']['total']}, 실패 {result['failed']}")
+            finish_task(tid, result=result)
+        except Exception as e:
+            traceback.print_exc()
+            add_log(tid, "error", f"오류: {e}")
+            finish_task(tid, error=str(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"taskId": tid})
+
+
+@app.route("/api/auto-adjust/history")
+def api_auto_adjust_history():
+    """자동 조정 이력"""
+    limit = int(request.args.get("limit", 50))
+    action_filter = request.args.get("filter", "all")
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+
+    query = "SELECT * FROM auto_adjust_log WHERE 1=1"
+    params = []
+
+    if action_filter == "modified":
+        query += " AND action='auto_modified'"
+    elif action_filter == "skipped":
+        query += " AND action LIKE 'skipped_%'"
+    elif action_filter == "failed":
+        query += " AND action='modify_failed'"
+
+    if from_date:
+        query += " AND date(executed_at) >= ?"
+        params.append(from_date)
+    if to_date:
+        query += " AND date(executed_at) <= ?"
+        params.append(to_date)
+
+    query += " ORDER BY executed_at DESC LIMIT ?"
+    params.append(limit)
+
+    c = conn.cursor()
+    c.execute(query, params)
+    items = [dict(r) for r in c.fetchall()]
+
+    # 전체 건수
+    count_query = "SELECT COUNT(*) FROM auto_adjust_log WHERE 1=1"
+    count_params = []
+    if action_filter == "modified":
+        count_query += " AND action='auto_modified'"
+    elif action_filter == "skipped":
+        count_query += " AND action LIKE 'skipped_%'"
+    elif action_filter == "failed":
+        count_query += " AND action='modify_failed'"
+    if from_date:
+        count_query += " AND date(executed_at) >= ?"
+        count_params.append(from_date)
+    if to_date:
+        count_query += " AND date(executed_at) <= ?"
+        count_params.append(to_date)
+
+    c.execute(count_query, count_params)
+    total = c.fetchone()[0]
+    conn.close()
+
+    return jsonify({"items": items, "total": total})
+
+
+# ═══════════════════════════════════════════
+# 자동 재입찰 시스템
+# ═══════════════════════════════════════════
+
+
+def _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
+                    expected_profit, action, skip_reason=None, new_order_id=None):
+    """auto_rebid_log에 기록"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.execute(
+        """INSERT INTO auto_rebid_log
+        (original_order_id, model, size, sold_price, new_bid_price,
+         expected_profit, action, skip_reason, new_order_id)
+        VALUES (?,?,?,?,?,?,?,?,?)""",
+        (order_id, model or "", size or "", sold_price, new_bid_price,
+         expected_profit, action, skip_reason, new_order_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def _count_recent_rebids(model, size, hours=24):
+    """같은 모델+사이즈의 최근 N시간 성공 재입찰 횟수"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM auto_rebid_log "
+        "WHERE model=? AND size=? AND action='auto_rebid_success' "
+        "AND executed_at > datetime('now', ?)",
+        (model, size, f'-{hours} hours')
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+
+def _count_today_rebid_success():
+    """오늘 성공 재입찰 총 건수"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM auto_rebid_log "
+        "WHERE action='auto_rebid_success' "
+        "AND date(executed_at)=date('now', 'localtime')"
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+
+def _get_my_other_bids(model, size, exclude_order_id):
+    """내 입찰 중 해당 모델+사이즈의 다른 입찰들 (자기 입찰 제외용)"""
+    try:
+        bids_file = BASE_DIR / "my_bids_local.json"
+        if not bids_file.exists():
+            return []
+        data = json.loads(bids_file.read_text())
+        bids = data.get("bids", [])
+        return [b for b in bids
+                if (b.get("model") or "").upper() == (model or "").upper()
+                and str(b.get("size")) == str(size)
+                and str(b.get("orderId")) != str(exclude_order_id)]
+    except Exception:
+        return []
+
+
+async def _fetch_kream_prices_for_model(model):
+    """모델번호로 KREAM 사이즈별 즉시구매가 수집.
+    Returns: {size: buy_price} dict
+    """
+    results = await search_by_model(model)
+    if not results:
+        return {}
+
+    kream = results[0].get("kream", {})
+    sizes = kream.get("sizes", [])
+    price_map = {}
+    for s in sizes:
+        sz = str(s.get("size", ""))
+        bp = s.get("buy_price") or s.get("buyPrice") or 0
+        if sz and bp:
+            price_map[sz] = bp
+    return price_map
+
+
+async def _execute_rebid(product_id, model, size, price, cny_price):
+    """Playwright로 실제 입찰 실행"""
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await create_browser(p, headless=get_headless())
+        context = await create_context(browser, STATE_FILE)
+        page = await context.new_page()
+        await apply_stealth(page)
+
+        if not await ensure_logged_in(page, context):
+            await browser.close()
+            return {"success": False, "error": "로그인 필요"}
+
+        bid_data = {
+            "product_id": str(product_id),
+            "사이즈": size,
+            "입찰가격": price,
+            "수량": 1,
+            "bid_days": 30,
+        }
+
+        try:
+            success = await place_bid(page, bid_data, delay=2.0)
+        except Exception as e:
+            await browser.close()
+            return {"success": False, "error": str(e)}
+
+        if success:
+            await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
+            # bid_cost 저장
+            if cny_price and float(cny_price) > 0:
+                settings = {}
+                if SETTINGS_FILE.exists():
+                    try:
+                        settings = json.loads(SETTINGS_FILE.read_text())
+                    except Exception:
+                        pass
+                rate = settings.get("cnyRate", 215)
+                try:
+                    _save_bid_cost(
+                        order_id=f"{product_id}_{size}_rebid",
+                        model=model, size=size,
+                        cny_price=float(cny_price),
+                        exchange_rate=float(rate),
+                        overseas_shipping=8000,
+                    )
+                except Exception:
+                    pass
+
+        await browser.close()
+        return {"success": success}
+
+
+def auto_rebid_after_sale(sale_records):
+    """판매 감지 시 자동 재입찰 실행.
+    Args:
+        sale_records: list of dict [{order_id, model, size, sale_price, product_id}, ...]
+    Returns:
+        dict: {success, skipped, failed, details}
+    """
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+
+    if not settings.get("auto_rebid_enabled", False):
+        return {"success": 0, "skipped": len(sale_records), "failed": 0,
+                "details": [{"reason": "skipped_disabled"} for _ in sale_records]}
+
+    daily_max = int(settings.get("auto_rebid_daily_max", 20))
+    blacklist = set(settings.get("auto_rebid_blacklist", []))
+    min_profit = int(settings.get("auto_adjust_min_profit", 4000))
+    undercut = int(settings.get("undercutAmount", 1000))
+
+    results = {"success": 0, "skipped": 0, "failed": 0, "details": []}
+
+    # 모델별 그룹핑 (KREAM 가격 1회만 수집)
+    model_groups = {}
+    for sale in sale_records:
+        m = sale.get("model") or ""
+        model_groups.setdefault(m, []).append(sale)
+
+    async def _process():
+        for model, sales_for_model in model_groups.items():
+            # 블랙리스트 체크
+            if model in blacklist:
+                for sale in sales_for_model:
+                    _log_auto_rebid(sale.get("order_id"), model, sale.get("size"),
+                                    sale.get("sale_price"), None, None,
+                                    "skipped_blacklist", f"Model {model} in blacklist")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": sale.get("order_id"), "action": "skipped_blacklist"})
+                continue
+
+            # 모델별 KREAM 가격 수집
+            try:
+                kream_prices = await _fetch_kream_prices_for_model(model)
+            except Exception as e:
+                print(f"[auto_rebid] KREAM 수집 실패 {model}: {e}")
+                for sale in sales_for_model:
+                    _log_auto_rebid(sale.get("order_id"), model, sale.get("size"),
+                                    sale.get("sale_price"), None, None,
+                                    "rebid_failed", f"KREAM fetch failed: {e}")
+                    results["failed"] += 1
+                continue
+
+            for sale in sales_for_model:
+                order_id = sale.get("order_id")
+                size = str(sale.get("size", ""))
+                sold_price = sale.get("sale_price", 0)
+                product_id = sale.get("product_id", "")
+
+                # 하루 한도
+                today_count = _count_today_rebid_success()
+                if today_count + results["success"] >= daily_max:
+                    _log_auto_rebid(order_id, model, size, sold_price, None, None,
+                                    "skipped_daily_limit", f"Today: {today_count}/{daily_max}")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": order_id, "action": "skipped_daily_limit"})
+                    continue
+
+                # 원가 체크
+                conn = sqlite3.connect(str(PRICE_DB))
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute("SELECT * FROM bid_cost WHERE order_id=?", (order_id,))
+                cost_row = c.fetchone()
+                if not cost_row:
+                    # model+size로 재시도
+                    c.execute(
+                        "SELECT * FROM bid_cost WHERE UPPER(model)=? AND size=? ORDER BY created_at DESC LIMIT 1",
+                        ((model or "").upper(), size)
+                    )
+                    cost_row = c.fetchone()
+                conn.close()
+
+                if not cost_row:
+                    _log_auto_rebid(order_id, model, size, sold_price, None, None,
+                                    "skipped_no_cost", "bid_cost not found")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": order_id, "action": "skipped_no_cost"})
+                    continue
+
+                # 루프 가드 (24시간 내 5회)
+                recent_count = _count_recent_rebids(model, size, hours=24)
+                if recent_count >= 5:
+                    _log_auto_rebid(order_id, model, size, sold_price, None, None,
+                                    "skipped_loop_guard", f"{recent_count} rebids in 24h")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": order_id, "action": "skipped_loop_guard"})
+                    try:
+                        health_alerter.alert("auto_rebid_loop_guard",
+                            f"{model} {size} 24시간 내 {recent_count}회 재입찰 - 수동 확인 필요",
+                            cooldown_minutes=1440)
+                    except Exception:
+                        pass
+                    continue
+
+                # 재입찰가 계산
+                competitor_price = kream_prices.get(size) or kream_prices.get(str(size))
+                if not competitor_price:
+                    _log_auto_rebid(order_id, model, size, sold_price, None, None,
+                                    "rebid_failed", f"Size {size} not in KREAM data")
+                    results["failed"] += 1
+                    continue
+
+                # 자기 입찰 제외
+                my_others = _get_my_other_bids(model, size, order_id)
+                if my_others:
+                    my_lowest = min((b.get("price", 0) for b in my_others), default=0)
+                    if my_lowest and my_lowest <= competitor_price:
+                        _log_auto_rebid(order_id, model, size, sold_price, None, None,
+                                        "skipped_margin_low", f"My own bid is lowest ({my_lowest})")
+                        results["skipped"] += 1
+                        continue
+
+                new_bid_price = int(math.ceil((competitor_price - undercut) / 1000) * 1000)
+                if new_bid_price <= 0:
+                    _log_auto_rebid(order_id, model, size, sold_price, new_bid_price, None,
+                                    "rebid_failed", "Calculated price <= 0")
+                    results["failed"] += 1
+                    continue
+
+                # 가격 급변 체크 (±10%)
+                if new_bid_price < sold_price * 0.9 or new_bid_price > sold_price * 1.1:
+                    _log_auto_rebid(order_id, model, size, sold_price, new_bid_price, None,
+                                    "skipped_price_shift",
+                                    f"Sold: {sold_price}, New: {new_bid_price}")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": order_id, "action": "skipped_price_shift",
+                                               "new_bid_price": new_bid_price})
+                    try:
+                        health_alerter.alert("auto_rebid_price_shift",
+                            f"{model} {size} 가격 급변 - 판매가 {sold_price:,} → 재입찰가 {new_bid_price:,}",
+                            cooldown_minutes=1440)
+                    except Exception:
+                        pass
+                    continue
+
+                # 예상 수익 계산
+                cny = dict(cost_row).get("cny_price", 0)
+                rate = dict(cost_row).get("exchange_rate", 0)
+                ship = dict(cost_row).get("overseas_shipping", 8000)
+                other = dict(cost_row).get("other_costs", 0)
+                total_cost = round(cny * rate * 1.03 + ship + other) if cny and rate else None
+                expected_profit = None
+                if total_cost:
+                    settlement = _calc_settlement_for_monitor(new_bid_price)
+                    expected_profit = settlement - total_cost
+
+                # 마진 하한
+                if expected_profit is not None and expected_profit < min_profit:
+                    _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
+                                    expected_profit, "skipped_margin_low",
+                                    f"Profit {expected_profit} < {min_profit}")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": order_id, "action": "skipped_margin_low",
+                                               "expected_profit": expected_profit})
+                    continue
+
+                # 실제 입찰 실행
+                print(f"[auto_rebid] {model} {size}: sold {sold_price:,} → rebid {new_bid_price:,}")
+                try:
+                    bid_result = await _execute_rebid(
+                        product_id=product_id, model=model, size=size,
+                        price=new_bid_price, cny_price=cny,
+                    )
+                    if bid_result.get("success"):
+                        _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
+                                        expected_profit, "auto_rebid_success")
+                        results["success"] += 1
+                        results["details"].append({"order_id": order_id, "action": "auto_rebid_success",
+                                                   "new_bid_price": new_bid_price, "expected_profit": expected_profit})
+                        print(f"[auto_rebid] ✓ 성공")
+                    else:
+                        _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
+                                        expected_profit, "rebid_failed",
+                                        bid_result.get("error", "unknown"))
+                        results["failed"] += 1
+                        print(f"[auto_rebid] ✗ 실패: {bid_result.get('error')}")
+                except Exception as e:
+                    _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
+                                    expected_profit, "rebid_failed", str(e))
+                    results["failed"] += 1
+                    print(f"[auto_rebid] ✗ 예외: {e}")
+
+    # async 실행
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_process())
+    finally:
+        loop.close()
+
+    print(f"[auto_rebid] 완료: 성공 {results['success']}, 건너뜀 {results['skipped']}, 실패 {results['failed']}")
+    return results
+
+
+# ── 자동 재입찰 API ──
+
+@app.route("/api/auto-rebid/status")
+def api_auto_rebid_status():
+    """자동 재입찰 상태"""
+    try:
+        settings = {}
+        if SETTINGS_FILE.exists():
+            try:
+                settings = json.loads(SETTINGS_FILE.read_text())
+            except Exception:
+                pass
+
+        conn = sqlite3.connect(str(PRICE_DB))
+        c = conn.cursor()
+        today_success = c.execute(
+            "SELECT COUNT(*) FROM auto_rebid_log WHERE action='auto_rebid_success' "
+            "AND date(executed_at)=date('now','localtime')").fetchone()[0]
+        today_skipped = c.execute(
+            "SELECT COUNT(*) FROM auto_rebid_log WHERE action LIKE 'skipped_%' "
+            "AND date(executed_at)=date('now','localtime')").fetchone()[0]
+        today_failed = c.execute(
+            "SELECT COUNT(*) FROM auto_rebid_log WHERE action='rebid_failed' "
+            "AND date(executed_at)=date('now','localtime')").fetchone()[0]
+        last_sale = c.execute("SELECT MAX(collected_at) FROM sales_history").fetchone()[0]
+        conn.close()
+
+        return jsonify({
+            "ok": True,
+            "enabled": settings.get("auto_rebid_enabled", False),
+            "daily_max": settings.get("auto_rebid_daily_max", 20),
+            "blacklist": settings.get("auto_rebid_blacklist", []),
+            "today": {"success": today_success, "skipped": today_skipped, "failed": today_failed},
+            "last_sale": last_sale,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto-rebid/toggle", methods=["POST"])
+def api_auto_rebid_toggle():
+    """자동 재입찰 ON/OFF"""
+    try:
+        data = request.json or {}
+        enabled = bool(data.get("enabled", False))
+        existing = {}
+        if SETTINGS_FILE.exists():
+            try:
+                existing = json.loads(SETTINGS_FILE.read_text())
+            except Exception:
+                pass
+        existing["auto_rebid_enabled"] = enabled
+        SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
+        return jsonify({"ok": True, "enabled": enabled})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto-rebid/run-once", methods=["POST"])
+def api_auto_rebid_run_once():
+    """수동 1회 실행 (enabled 무관). 최근 1시간 내 sales_history 대상."""
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT order_id, product_id, model, size, sale_price "
+            "FROM sales_history WHERE collected_at > datetime('now', '-1 hour') "
+            "ORDER BY collected_at DESC"
+        ).fetchall()
+        sales = [dict(r) for r in rows]
+        conn.close()
+
+        if not sales:
+            return jsonify({"ok": True, "message": "최근 1시간 내 판매 없음",
+                            "success": 0, "skipped": 0, "failed": 0})
+
+        # 일시적으로 enabled=true로 설정
+        existing = {}
+        if SETTINGS_FILE.exists():
+            try:
+                existing = json.loads(SETTINGS_FILE.read_text())
+            except Exception:
+                pass
+        original_enabled = existing.get("auto_rebid_enabled", False)
+        existing["auto_rebid_enabled"] = True
+        SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
+
+        try:
+            result = auto_rebid_after_sale(sales)
+        finally:
+            # 원래 상태 복원
+            existing2 = {}
+            if SETTINGS_FILE.exists():
+                try:
+                    existing2 = json.loads(SETTINGS_FILE.read_text())
+                except Exception:
+                    pass
+            existing2["auto_rebid_enabled"] = original_enabled
+            SETTINGS_FILE.write_text(json.dumps(existing2, ensure_ascii=False, indent=2))
+
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto-rebid/history")
+def api_auto_rebid_history():
+    """자동 재입찰 이력"""
+    try:
+        limit = int(request.args.get("limit", 50))
+        filter_type = request.args.get("filter", "all")
+        from_date = request.args.get("from_date", "")
+        to_date = request.args.get("to_date", "")
+
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+
+        query = "SELECT * FROM auto_rebid_log WHERE 1=1"
+        params = []
+        if filter_type == "success":
+            query += " AND action='auto_rebid_success'"
+        elif filter_type == "skipped":
+            query += " AND action LIKE 'skipped_%'"
+        elif filter_type == "failed":
+            query += " AND action='rebid_failed'"
+        if from_date:
+            query += " AND date(executed_at) >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND date(executed_at) <= ?"
+            params.append(to_date)
+        query += " ORDER BY executed_at DESC LIMIT ?"
+        params.append(limit)
+
+        rows = conn.execute(query, params).fetchall()
+        history = [dict(r) for r in rows]
+        conn.close()
+
+        return jsonify({"ok": True, "history": history, "count": len(history)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ═══════════════════════════════════════════

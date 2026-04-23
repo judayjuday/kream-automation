@@ -1,4 +1,74 @@
       <div id="tab-adjust" class="tab-view">
+        <!-- 자동 실행 패널 -->
+        <div class="card" style="border-left:3px solid var(--accent)">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🤖</span> 자동 실행</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button class="btn btn-outline btn-sm" onclick="autoAdjustRunOnce()" id="aa-run-once-btn" style="font-size:12px">수동 1회 실행</button>
+              <button class="btn btn-sm" id="aa-toggle-btn" onclick="toggleAutoAdjust()" style="font-size:13px; padding:6px 16px; font-weight:700">OFF</button>
+            </div>
+          </div>
+          <div class="metrics" id="aa-metrics">
+            <div class="metric">
+              <div class="metric-label">수정</div>
+              <div class="metric-value" id="aa-modified">0건 / <span id="aa-daily-max">10</span>건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">건너뜀</div>
+              <div class="metric-value" id="aa-skipped" style="font-size:14px">0건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">실패</div>
+              <div class="metric-value" id="aa-failed">0건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">마지막 실행</div>
+              <div class="metric-value" id="aa-last-run" style="font-size:14px">-</div>
+            </div>
+          </div>
+          <div id="aa-disabled-reason" style="display:none; margin-top:8px; padding:8px; background:var(--danger); color:#fff; border-radius:6px; font-size:12px"></div>
+          <div id="aa-skip-detail" style="font-size:11px; color:var(--text3); margin-top:6px"></div>
+        </div>
+
+        <!-- 자동 실행 이력 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 자동 실행 이력</span>
+            <div style="display:flex; gap:6px; align-items:center">
+              <select id="aa-hist-filter" onchange="loadAutoAdjustHistory()" style="font-size:12px; padding:2px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--text1)">
+                <option value="all">전체</option>
+                <option value="modified">수정됨</option>
+                <option value="skipped">건너뜀</option>
+                <option value="failed">실패</option>
+              </select>
+              <select id="aa-hist-date" onchange="loadAutoAdjustHistory()" style="font-size:12px; padding:2px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--text1)">
+                <option value="today">오늘</option>
+                <option value="yesterday">어제</option>
+                <option value="7d">7일</option>
+                <option value="30d">30일</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="loadAutoAdjustHistory()" style="font-size:11px; padding:2px 8px">새로고침</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>시각</th>
+                  <th>모델</th>
+                  <th>사이즈</th>
+                  <th>가격 변경</th>
+                  <th>예상수익</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody id="aa-history-body">
+                <tr><td colspan="6" class="text-muted">-</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- 만료 임박 경고 -->
         <div class="card" id="expiring-bids-card" style="display:none; border-left:3px solid var(--danger)">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">

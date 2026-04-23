@@ -655,7 +655,7 @@ function _loadTab(id, tabEl) {
 
 function _onTabShown(id) {
   if (id === 'margin') { try { quickCalc(); } catch(e) {} }
-  if (id === 'sales') { try { sdLoadDashboard(); } catch(e) {} }
+  if (id === 'sales') { try { sdLoadDashboard(); loadAutoRebidStatus(); loadRebidHistory(); } catch(e) {} }
   if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); loadEditLog(); } catch(e) {} }
   if (id === 'logistics') { try { loadLogisticsAll(); } catch(e) {} }
   if (id === 'pattern') { try { loadPatternAnalysis(); } catch(e) {} }
@@ -670,8 +670,8 @@ function _onTabShown(id) {
       } catch(e) {}
     }
   }
-  if (id === 'settings') { try { loadSettings(); loadAlertSettings(); } catch(e) {} }
-  if (id === 'adjust') { try { loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadExpiringBids(); loadEmailPassword(); } catch(e) {} }
+  if (id === 'settings') { try { loadSettings(); loadAlertSettings(); loadAutoAdjustSettings(); loadAutoRebidSettings(); } catch(e) {} }
+  if (id === 'adjust') { try { loadAutoAdjustStatus(); loadAutoAdjustHistory(); loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadExpiringBids(); loadEmailPassword(); } catch(e) {} }
 }
 
 // ═══ 스텝 전환 ═══
@@ -1732,6 +1732,77 @@ function saveSettings() {
   if (typeof queueBuildResults === 'function') queueBuildResults();
 }
 
+// ═══ 자동 조정 설정 ═══
+function saveAutoAdjustSettings() {
+  const enabled = document.getElementById('set-auto-adjust').checked;
+  const dailyMax = parseInt(document.getElementById('set-aa-daily-max').value) || 10;
+  const minProfit = parseInt(document.getElementById('set-aa-min-profit').value) || 4000;
+  const lbl = document.getElementById('auto-adjust-label');
+  if (lbl) lbl.textContent = enabled ? 'ON' : 'OFF';
+
+  fetch('/api/settings').then(r=>r.json()).then(cur=>{
+    cur.auto_adjust_enabled = enabled;
+    cur.auto_adjust_daily_max = dailyMax;
+    cur.auto_adjust_min_profit = minProfit;
+    if (enabled) delete cur.auto_adjust_disabled_reason;
+    fetch('/api/settings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(cur)
+    });
+  });
+}
+
+function loadAutoAdjustSettings() {
+  fetch('/api/auto-adjust/status').then(r=>r.json()).then(data=>{
+    const el = document.getElementById('set-auto-adjust');
+    if (el) {
+      el.checked = data.enabled;
+      const lbl = document.getElementById('auto-adjust-label');
+      if (lbl) lbl.textContent = data.enabled ? 'ON' : 'OFF';
+    }
+    const dmEl = document.getElementById('set-aa-daily-max');
+    if (dmEl) dmEl.value = data.daily_max || 10;
+    const mpEl = document.getElementById('set-aa-min-profit');
+    if (mpEl) mpEl.value = data.min_profit || 4000;
+  }).catch(()=>{});
+}
+
+// ═══ 자동 재입찰 설정 ═══
+function saveAutoRebidSettings() {
+  const enabled = document.getElementById('set-auto-rebid').checked;
+  const dailyMax = parseInt(document.getElementById('set-rebid-daily-max').value) || 20;
+  const blText = (document.getElementById('set-rebid-blacklist')||{}).value || '';
+  const blacklist = blText.split(',').map(s=>s.trim()).filter(s=>s);
+  const lbl = document.getElementById('auto-rebid-label');
+  if (lbl) lbl.textContent = enabled ? 'ON' : 'OFF';
+
+  fetch('/api/settings').then(r=>r.json()).then(cur=>{
+    cur.auto_rebid_enabled = enabled;
+    cur.auto_rebid_daily_max = dailyMax;
+    cur.auto_rebid_blacklist = blacklist;
+    fetch('/api/settings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(cur)
+    });
+  });
+}
+
+function loadAutoRebidSettings() {
+  fetch('/api/auto-rebid/status').then(r=>r.json()).then(data=>{
+    if (!data.ok) return;
+    const el = document.getElementById('set-auto-rebid');
+    if (el) {
+      el.checked = data.enabled;
+      const lbl = document.getElementById('auto-rebid-label');
+      if (lbl) lbl.textContent = data.enabled ? 'ON' : 'OFF';
+    }
+    const dmEl = document.getElementById('set-rebid-daily-max');
+    if (dmEl) dmEl.value = data.daily_max || 20;
+    const blEl = document.getElementById('set-rebid-blacklist');
+    if (blEl) blEl.value = (data.blacklist || []).join(', ');
+  }).catch(()=>{});
+}
+
 // ═══ 경보 알림 설정 ═══
 function saveAlertSettings() {
   const email = (document.getElementById('set-alert-email') || {}).value || '';
@@ -2088,6 +2159,142 @@ function adjExecute() {
     }, 2000);
   })
   .catch(err => adjLog('error', '서버 연결 실패: ' + err.message));
+}
+
+// ═══ 자동 실행 (언더컷 자동 방어) ═══
+
+function loadAutoAdjustStatus() {
+  fetch('/api/auto-adjust/status').then(r=>r.json()).then(data=>{
+    // 토글 버튼
+    const btn = document.getElementById('aa-toggle-btn');
+    if (btn) {
+      btn.textContent = data.enabled ? 'ON' : 'OFF';
+      btn.className = data.enabled
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline';
+      btn.style.fontWeight = '700';
+    }
+    // 통계
+    const modEl = document.getElementById('aa-modified');
+    if (modEl) modEl.textContent = `${data.today_modified}건 / ${data.daily_max}건`;
+    const skipEl = document.getElementById('aa-skipped');
+    if (skipEl) skipEl.textContent = `${data.today_skipped.total}건`;
+    const failEl = document.getElementById('aa-failed');
+    if (failEl) failEl.textContent = `${data.today_failed}건`;
+    const lastEl = document.getElementById('aa-last-run');
+    if (lastEl) lastEl.textContent = data.last_run ? data.last_run.substring(5, 16) : '-';
+    // 건너뜀 상세
+    const detailEl = document.getElementById('aa-skip-detail');
+    if (detailEl && data.today_skipped.total > 0) {
+      const parts = [];
+      if (data.today_skipped.no_cost) parts.push(`원가없음 ${data.today_skipped.no_cost}`);
+      if (data.today_skipped.profit_low) parts.push(`마진부족 ${data.today_skipped.profit_low}`);
+      if (data.today_skipped.cooldown) parts.push(`쿨다운 ${data.today_skipped.cooldown}`);
+      if (data.today_skipped.daily_limit) parts.push(`한도초과 ${data.today_skipped.daily_limit}`);
+      if (data.today_skipped.stale_data) parts.push(`스테일 ${data.today_skipped.stale_data}`);
+      detailEl.textContent = `건너뜀 상세: ${parts.join(' · ')}`;
+    } else if (detailEl) {
+      detailEl.textContent = '';
+    }
+    // disabled 사유
+    const reasonEl = document.getElementById('aa-disabled-reason');
+    if (reasonEl) {
+      if (data.disabled_reason) {
+        reasonEl.style.display = '';
+        reasonEl.textContent = `자동 비활성화: ${data.disabled_reason === 'failure_rate_exceeded' ? '실패율 20% 초과' : data.disabled_reason}`;
+      } else {
+        reasonEl.style.display = 'none';
+      }
+    }
+  }).catch(()=>{});
+}
+
+function toggleAutoAdjust() {
+  fetch('/api/auto-adjust/status').then(r=>r.json()).then(data=>{
+    const newState = !data.enabled;
+    if (newState && !confirm('자동 가격 조정을 활성화합니다.\n조건 통과 건이 자동으로 수정됩니다.\n계속하시겠습니까?')) return;
+    fetch('/api/auto-adjust/toggle', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({enabled: newState})
+    }).then(r=>r.json()).then(()=>loadAutoAdjustStatus());
+  });
+}
+
+function autoAdjustRunOnce() {
+  if (!confirm('수동 1회 실행: 조건 통과 건을 지금 즉시 자동 수정합니다.\n계속하시겠습니까?')) return;
+  const btn = document.getElementById('aa-run-once-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '실행 중...'; }
+
+  fetch('/api/auto-adjust/run-once', {method:'POST'}).then(r=>r.json()).then(res=>{
+    if (res.taskId) {
+      const poll = setInterval(()=>{
+        fetch('/api/task/'+res.taskId).then(r=>r.json()).then(task=>{
+          if (task.status === 'done' || task.status === 'error') {
+            clearInterval(poll);
+            if (btn) { btn.disabled = false; btn.textContent = '수동 1회 실행'; }
+            loadAutoAdjustStatus();
+            loadAutoAdjustHistory();
+            loadPendingAdjustments();
+            if (task.result) {
+              alert(`자동 조정 완료:\n수정: ${task.result.modified}건\n건너뜀: ${task.result.skipped.total}건\n실패: ${task.result.failed}건`);
+            }
+          }
+        });
+      }, 3000);
+    }
+  }).catch(()=>{
+    if (btn) { btn.disabled = false; btn.textContent = '수동 1회 실행'; }
+    alert('요청 실패');
+  });
+}
+
+function loadAutoAdjustHistory() {
+  const filter = (document.getElementById('aa-hist-filter')||{}).value || 'all';
+  const dateRange = (document.getElementById('aa-hist-date')||{}).value || 'today';
+
+  let fromDate = '', toDate = '';
+  const now = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  if (dateRange === 'today') { fromDate = fmt(now); toDate = fmt(now); }
+  else if (dateRange === 'yesterday') { const y = new Date(now); y.setDate(y.getDate()-1); fromDate = fmt(y); toDate = fmt(y); }
+  else if (dateRange === '7d') { const d = new Date(now); d.setDate(d.getDate()-7); fromDate = fmt(d); }
+  else if (dateRange === '30d') { const d = new Date(now); d.setDate(d.getDate()-30); fromDate = fmt(d); }
+
+  let url = `/api/auto-adjust/history?limit=50&filter=${filter}`;
+  if (fromDate) url += `&from_date=${fromDate}`;
+  if (toDate) url += `&to_date=${toDate}`;
+
+  fetch(url).then(r=>r.json()).then(data=>{
+    const tbody = document.getElementById('aa-history-body');
+    if (!tbody) return;
+    const items = data.items || [];
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">이력 없음</td></tr>';
+      return;
+    }
+    let html = '';
+    items.forEach(item => {
+      let badge = '';
+      if (item.action === 'auto_modified') badge = '<span class="badge badge-ok">수정됨</span>';
+      else if (item.action === 'modify_failed') badge = '<span class="badge badge-bad">실패</span>';
+      else badge = `<span class="badge" style="background:var(--bg2);color:var(--text3)">${(item.skip_reason||item.action).replace('skipped_','')}</span>`;
+
+      const time = (item.executed_at||'').substring(5,16);
+      const profitStr = item.expected_profit != null ? `${item.expected_profit.toLocaleString()}원` : '-';
+      const priceStr = item.old_price && item.new_price
+        ? `${item.old_price.toLocaleString()} → ${item.new_price.toLocaleString()}`
+        : '-';
+
+      html += `<tr>
+        <td style="font-size:11px; white-space:nowrap">${time}</td>
+        <td style="font-size:12px">${item.model||'-'}</td>
+        <td>${item.size||'-'}</td>
+        <td style="font-size:12px">${priceStr}</td>
+        <td style="font-size:12px; ${item.expected_profit != null && item.expected_profit < 4000 ? 'color:var(--danger)' : ''}">${profitStr}</td>
+        <td>${badge}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+  }).catch(()=>{});
 }
 
 // ═══ 모니터링 ═══
