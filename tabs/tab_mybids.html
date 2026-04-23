@@ -1,5 +1,89 @@
       <div id="tab-mybids" class="tab-view">
-        <div class="card">
+        <!-- 🧹 자동 입찰 정리 패널 -->
+        <div class="card" id="cleanup-panel">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🧹</span> 자동 입찰 정리</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button class="btn" onclick="cleanupRunOnce()" style="font-size:12px; padding:4px 12px">수동 실행</button>
+              <button class="btn" onclick="cleanupShowPending()" style="font-size:12px; padding:4px 12px">정리 예정 보기</button>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="cleanup-master-toggle" onchange="cleanupToggleMaster(this.checked)">
+                <span style="font-size:13px;font-weight:600" id="cleanup-master-label">OFF</span>
+              </label>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px">
+            <label class="cleanup-type-toggle" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg2);border-radius:8px;cursor:pointer">
+              <input type="checkbox" id="cleanup-type-duplicate_price" onchange="cleanupToggleType('duplicate_price',this.checked)">
+              <div><div style="font-size:12px;font-weight:600">중복(고가)</div><div style="font-size:11px;color:var(--text3)">같은 품번+사이즈 3건↑</div></div>
+            </label>
+            <label class="cleanup-type-toggle" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg2);border-radius:8px;cursor:pointer">
+              <input type="checkbox" id="cleanup-type-expiring_soon" onchange="cleanupToggleType('expiring_soon',this.checked)">
+              <div><div style="font-size:12px;font-weight:600">만료 임박</div><div style="font-size:11px;color:var(--text3)">24시간 이내 (스텁)</div></div>
+            </label>
+            <label class="cleanup-type-toggle" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg2);border-radius:8px;cursor:pointer">
+              <input type="checkbox" id="cleanup-type-margin_low" onchange="cleanupToggleType('margin_low',this.checked)">
+              <div><div style="font-size:12px;font-weight:600">저마진</div><div style="font-size:11px;color:var(--text3)">마진 4,000원 미만</div></div>
+            </label>
+            <label class="cleanup-type-toggle" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg2);border-radius:8px;cursor:pointer">
+              <input type="checkbox" id="cleanup-type-low_rank_duplicate" onchange="cleanupToggleType('low_rank_duplicate',this.checked)">
+              <div><div style="font-size:12px;font-weight:600">순위 밀림</div><div style="font-size:11px;color:var(--text3)">1위 아닌 중복</div></div>
+            </label>
+          </div>
+          <div style="display:flex; gap:16px; font-size:12px; color:var(--text3)">
+            <span>대기: <b id="cleanup-stat-pending" style="color:var(--warning)">0</b>건</span>
+            <span>오늘 삭제: <b id="cleanup-stat-today" style="color:var(--danger)">0</b>건</span>
+            <span>누적 삭제: <b id="cleanup-stat-total">0</b>건</span>
+            <span>취소: <b id="cleanup-stat-cancelled">0</b>건</span>
+            <span>실패: <b id="cleanup-stat-failed">0</b>건</span>
+            <span style="margin-left:auto">유예: <b id="cleanup-stat-grace">60</b>분 | 하루 한도: <b id="cleanup-stat-daily-max">30</b>건</span>
+          </div>
+        </div>
+
+        <!-- 정리 예정 모달 -->
+        <div id="cleanup-pending-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center">
+          <div style="background:var(--bg1); border-radius:12px; padding:24px; max-width:800px; width:90%; max-height:80vh; overflow-y:auto">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+              <h3 style="margin:0">🧹 정리 예정 목록</h3>
+              <div style="display:flex; gap:8px">
+                <button class="btn" onclick="cleanupCancelSelected()" style="color:var(--warning); font-size:12px">선택 취소</button>
+                <button class="btn" onclick="document.getElementById('cleanup-pending-modal').style.display='none'" style="font-size:12px">닫기</button>
+              </div>
+            </div>
+            <table style="width:100%">
+              <thead><tr>
+                <th style="width:30px"><input type="checkbox" id="cleanup-check-all" onchange="document.querySelectorAll('.cleanup-cb').forEach(c=>c.checked=this.checked)"></th>
+                <th>주문번호</th><th>모델</th><th>사이즈</th><th>입찰가</th><th>유형</th><th>사유</th><th>삭제 예정</th>
+              </tr></thead>
+              <tbody id="cleanup-pending-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 정리 이력 -->
+        <div class="card" id="cleanup-history-card" style="margin-top:16px; display:none">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 정리 이력</span>
+            <div style="display:flex; gap:8px">
+              <select id="cleanup-history-filter" onchange="cleanupLoadHistory()" style="font-size:12px; padding:4px 8px; border-radius:6px; background:var(--bg2); color:var(--text1); border:1px solid var(--border)">
+                <option value="">전체</option>
+                <option value="deleted">삭제됨</option>
+                <option value="cancelled">취소됨</option>
+                <option value="failed">실패</option>
+                <option value="pending">대기 중</option>
+              </select>
+              <button class="btn" onclick="cleanupLoadHistory()" style="font-size:12px; padding:4px 12px">조회</button>
+            </div>
+          </div>
+          <table style="width:100%">
+            <thead><tr>
+              <th>시각</th><th>주문번호</th><th>모델</th><th>사이즈</th><th>입찰가</th><th>유형</th><th>상태</th><th>사유</th>
+            </tr></thead>
+            <tbody id="cleanup-history-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-top:16px">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
             <span><span class="icon">📑</span> 내 입찰 목록</span>
             <div style="display:flex; gap:8px">

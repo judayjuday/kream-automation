@@ -176,6 +176,33 @@ def _init_bid_cost_table():
 _init_bid_cost_table()
 
 
+# ── bid_cleanup_log 테이블 ──
+def _init_bid_cleanup_table():
+    """입찰 정리 이력 테이블"""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS bid_cleanup_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT, model TEXT, size TEXT, price INTEGER,
+        cleanup_type TEXT,
+        reason TEXT,
+        status TEXT,
+        detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        scheduled_delete_at DATETIME,
+        executed_at DATETIME,
+        cancel_reason TEXT,
+        snapshot TEXT
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cleanup_status ON bid_cleanup_log(status, scheduled_delete_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cleanup_order ON bid_cleanup_log(order_id, status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cleanup_detected ON bid_cleanup_log(detected_at)")
+    conn.commit()
+    conn.close()
+
+
+_init_bid_cleanup_table()
+
+
 def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
                    overseas_shipping=8000, other_costs=0):
     """입찰 성공 시 원가 정보 저장 (order_id 기준 UPSERT)"""
@@ -4483,6 +4510,21 @@ def _run_monitor_check():
         except Exception as ae:
             print(f"[모니터] 자동 조정 오류: {ae}")
             traceback.print_exc()
+
+        # 모니터링 완료 후 → 자동 입찰 정리 (설정 ON일 때만)
+        try:
+            cleanup_settings = _get_cleanup_settings()
+            if cleanup_settings["enabled"]:
+                print("[모니터] 입찰 정리 실행 중...")
+                # 1) 먼저: 유예 지난 pending 처리
+                exec_r = run_cleanup_execution()
+                print(f"[모니터] 정리 실행: 삭제 {exec_r.get('executed',0)}, 실패 {exec_r.get('failed',0)}")
+                # 2) 나중: 새 후보 탐지
+                det_r = run_cleanup_detection()
+                print(f"[모니터] 정리 탐지: {det_r.get('detected',0)}건 탐지, {det_r.get('saved',0)}건 등록")
+        except Exception as cle:
+            print(f"[모니터] 입찰 정리 오류: {cle}")
+            traceback.print_exc()
     except Exception as e:
         print(f"[모니터] 오류: {e}")
         traceback.print_exc()
@@ -7338,6 +7380,588 @@ def api_auto_rebid_history():
         conn.close()
 
         return jsonify({"ok": True, "history": history, "count": len(history)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════
+# 입찰 정리 도구 (Step 5)
+# ═══════════════════════════════════════════
+
+def _get_cleanup_settings():
+    """정리 설정 조회"""
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    return {
+        "enabled": settings.get("auto_cleanup_enabled", False),
+        "types": settings.get("auto_cleanup_types", {
+            "duplicate_price": False, "expiring_soon": False,
+            "margin_low": False, "low_rank_duplicate": False
+        }),
+        "daily_max": settings.get("auto_cleanup_daily_max", 30),
+        "grace_minutes": settings.get("auto_cleanup_grace_minutes", 60),
+    }
+
+
+def _get_sold_order_ids():
+    """판매 완료 order_id 집합 (정리 제외용)"""
+    sold = set()
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        rows = conn.execute("SELECT order_id FROM sales_history WHERE order_id IS NOT NULL").fetchall()
+        sold = {r[0] for r in rows}
+        conn.close()
+    except Exception:
+        pass
+    return sold
+
+
+def _get_today_cleanup_count():
+    """오늘 삭제/pending_delete 건수"""
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        row = conn.execute(
+            "SELECT COUNT(*) FROM bid_cleanup_log WHERE date(detected_at) = date('now') AND status IN ('pending_delete','deleted')"
+        ).fetchone()
+        conn.close()
+        return row[0] if row else 0
+    except Exception:
+        return 0
+
+
+def _get_pending_cleanup_order_ids():
+    """현재 pending_delete인 order_id 집합"""
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        rows = conn.execute("SELECT order_id FROM bid_cleanup_log WHERE status='pending_delete'").fetchall()
+        conn.close()
+        return {r[0] for r in rows}
+    except Exception:
+        return set()
+
+
+def _load_bids_for_cleanup():
+    """my_bids_local.json에서 현재 입찰 로드"""
+    try:
+        with open("my_bids_local.json", "r") as f:
+            data = json.load(f)
+        return data.get("bids", [])
+    except Exception:
+        return []
+
+
+def _detect_duplicate_price(bids, sold_ids, pending_ids):
+    """같은 품번+사이즈 3건 이상 중 비싼 것부터 탐지 (2건은 확정전략으로 유지)"""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for b in bids:
+        oid = b.get("orderId", "")
+        if oid in sold_ids or oid in pending_ids:
+            continue
+        key = (b.get("model", "").upper(), b.get("size", ""))
+        if key[0]:
+            groups[key].append(b)
+
+    candidates = []
+    for (model, size), group in groups.items():
+        if len(group) < 3:
+            continue
+        # 비싼 순 정렬, 2건은 유지하고 나머지 탐지
+        sorted_bids = sorted(group, key=lambda x: -(x.get("price") or x.get("bidPrice") or 0))
+        for b in sorted_bids[:-2]:  # 가장 싼 2건은 유지
+            price = b.get("price") or b.get("bidPrice") or 0
+            candidates.append({
+                "order_id": b.get("orderId", ""),
+                "model": b.get("model", ""),
+                "size": b.get("size", ""),
+                "price": price,
+                "cleanup_type": "duplicate_price",
+                "reason": f"같은 {model} {size} {len(group)}건 중 고가 (가격: {price:,}원)",
+            })
+    return candidates
+
+
+def _detect_expiring_soon(bids, sold_ids, pending_ids):
+    """만료 24시간 이내 탐지 — 만료 필드 없으면 빈 리스트"""
+    # 현재 입찰 데이터에 만료일 필드 없음 → 스텁
+    print("[정리] expiring_soon: 만료 필드 없음 → 스킵 (향후 KREAM API 지원 시 활성화)")
+    return []
+
+
+def _detect_margin_low(bids, sold_ids, pending_ids):
+    """bid_cost 기준 현재 마진 4,000원 미만 탐지 (원가 없으면 스킵 — 가짜값 금지)"""
+    candidates = []
+    for b in bids:
+        oid = b.get("orderId", "")
+        if oid in sold_ids or oid in pending_ids:
+            continue
+        price = b.get("price") or b.get("bidPrice") or 0
+        if not price:
+            continue
+        total_cost = _find_cost_for_bid(b)
+        if total_cost is None:
+            continue  # 원가 없으면 스킵 (가짜값 금지)
+        settlement = _calc_settlement_for_monitor(price)
+        margin = settlement - total_cost
+        if margin < 4000:
+            candidates.append({
+                "order_id": oid,
+                "model": b.get("model", ""),
+                "size": b.get("size", ""),
+                "price": price,
+                "cleanup_type": "margin_low",
+                "reason": f"마진 {margin:,}원 (정산 {settlement:,} - 원가 {total_cost:,})",
+            })
+    return candidates
+
+
+def _detect_low_rank_duplicate(bids, sold_ids, pending_ids):
+    """내 입찰 중 같은 품번+사이즈에서 순위 1위 아닌 중복 탐지"""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for b in bids:
+        oid = b.get("orderId", "")
+        if oid in sold_ids or oid in pending_ids:
+            continue
+        key = (b.get("model", "").upper(), b.get("size", ""))
+        if key[0]:
+            groups[key].append(b)
+
+    candidates = []
+    for (model, size), group in groups.items():
+        if len(group) < 2:
+            continue
+        # 순위 오름차순 (1위 = 최상), rank 없으면 가격 오름차순
+        sorted_bids = sorted(group, key=lambda x: (
+            x.get("rank") or x.get("bidRank") or 999,
+            x.get("price") or x.get("bidPrice") or 0
+        ))
+        # 1위 유지, 나머지 탐지
+        for b in sorted_bids[1:]:
+            rank = b.get("rank") or b.get("bidRank") or "?"
+            price = b.get("price") or b.get("bidPrice") or 0
+            candidates.append({
+                "order_id": b.get("orderId", ""),
+                "model": b.get("model", ""),
+                "size": b.get("size", ""),
+                "price": price,
+                "cleanup_type": "low_rank_duplicate",
+                "reason": f"{model} {size} 순위 {rank}위 (1위 아닌 중복)",
+            })
+    return candidates
+
+
+def detect_cleanup_candidates():
+    """4가지 유형 탐지 통합"""
+    cs = _get_cleanup_settings()
+    bids = _load_bids_for_cleanup()
+    if not bids:
+        return []
+
+    sold_ids = _get_sold_order_ids()
+    pending_ids = _get_pending_cleanup_order_ids()
+
+    # my_bids_local의 status가 있으면 판매완료 추가 체크
+    for b in bids:
+        st = (b.get("status") or "").lower()
+        if "완료" in st or "sold" in st:
+            sold_ids.add(b.get("orderId", ""))
+
+    all_candidates = []
+    type_map = {
+        "duplicate_price": _detect_duplicate_price,
+        "expiring_soon": _detect_expiring_soon,
+        "margin_low": _detect_margin_low,
+        "low_rank_duplicate": _detect_low_rank_duplicate,
+    }
+
+    for tname, func in type_map.items():
+        if cs["types"].get(tname, False):
+            try:
+                results = func(bids, sold_ids, pending_ids)
+                all_candidates.extend(results)
+            except Exception as e:
+                print(f"[정리] {tname} 탐지 오류: {e}")
+
+    return all_candidates
+
+
+def run_cleanup_detection():
+    """탐지 + pending_delete 기록 + 이메일 알림"""
+    cs = _get_cleanup_settings()
+    today_count = _get_today_cleanup_count()
+    remaining = cs["daily_max"] - today_count
+
+    if remaining <= 0:
+        print(f"[정리] 하루 한도 도달 ({cs['daily_max']}건)")
+        return {"detected": 0, "saved": 0, "reason": "daily_max_reached"}
+
+    candidates = detect_cleanup_candidates()
+    if not candidates:
+        return {"detected": 0, "saved": 0}
+
+    # 하루 한도 적용
+    candidates = candidates[:remaining]
+
+    grace = cs["grace_minutes"]
+    now = datetime.now()
+    scheduled = now + timedelta(minutes=grace)
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    sched_str = scheduled.strftime("%Y-%m-%d %H:%M:%S")
+
+    saved = 0
+    conn = sqlite3.connect(str(PRICE_DB))
+    for c_item in candidates:
+        snapshot = json.dumps(c_item, ensure_ascii=False)
+        try:
+            conn.execute(
+                """INSERT INTO bid_cleanup_log
+                   (order_id, model, size, price, cleanup_type, reason, status, detected_at, scheduled_delete_at, snapshot)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (c_item["order_id"], c_item["model"], c_item["size"], c_item["price"],
+                 c_item["cleanup_type"], c_item["reason"], "pending_delete", now_str, sched_str, snapshot)
+            )
+            saved += 1
+        except Exception as e:
+            print(f"[정리] DB 저장 오류: {e}")
+    conn.commit()
+    conn.close()
+
+    print(f"[정리] 탐지 {len(candidates)}건 → pending_delete {saved}건 (삭제 예정: {sched_str})")
+
+    # 이메일 알림
+    if saved > 0:
+        try:
+            _send_cleanup_email(candidates[:saved])
+        except Exception as e:
+            print(f"[정리] 이메일 발송 오류: {e}")
+
+    return {"detected": len(candidates), "saved": saved}
+
+
+def _send_cleanup_email(items):
+    """정리 대상 이메일 알림"""
+    settings = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    app_password = settings.get("gmail_app_password") or settings.get("emailAppPassword", "")
+    if not app_password:
+        return
+
+    type_labels = {
+        "duplicate_price": "중복(고가)",
+        "expiring_soon": "만료 임박",
+        "margin_low": "저마진",
+        "low_rank_duplicate": "순위 밀림 중복",
+    }
+
+    rows = ""
+    for it in items:
+        rows += (
+            f"<tr>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{it['model']}</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{it['size']}</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{it['price']:,}원</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{type_labels.get(it['cleanup_type'], it['cleanup_type'])}</td>"
+            f"<td style='padding:6px 10px;border:1px solid #ddd'>{it['reason']}</td>"
+            f"</tr>"
+        )
+
+    grace = _get_cleanup_settings()["grace_minutes"]
+    body = f"""<html><body style="font-family:-apple-system,sans-serif">
+<h2 style="color:#111">🧹 입찰 정리 대상 알림</h2>
+<p>{datetime.now().strftime('%Y-%m-%d %H:%M')} 기준, <b>{len(items)}건</b>의 입찰이 정리 대상입니다.</p>
+<p style="color:#e65100;font-weight:600">⏰ {grace}분 유예 후 자동 삭제됩니다. 대시보드에서 취소 가능합니다.</p>
+<table style="border-collapse:collapse;width:100%;font-size:13px">
+<thead><tr style="background:#f5f5f5">
+<th style="padding:8px;border:1px solid #ddd">모델</th>
+<th style="padding:8px;border:1px solid #ddd">사이즈</th>
+<th style="padding:8px;border:1px solid #ddd">입찰가</th>
+<th style="padding:8px;border:1px solid #ddd">유형</th>
+<th style="padding:8px;border:1px solid #ddd">사유</th>
+</tr></thead>
+<tbody>{rows}</tbody>
+</table>
+<p style="margin-top:20px">
+<a href="http://localhost:5001" style="background:#e65100;color:#fff;padding:12px 28px;
+text-decoration:none;border-radius:8px;font-weight:600">대시보드에서 확인</a>
+</p>
+</body></html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[KREAM] 입찰 정리 대상 {len(items)}건 ({grace}분 유예)"
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECEIVER
+    msg.attach(MIMEText(body, "html", "utf-8"))
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(EMAIL_SENDER, app_password)
+            server.send_message(msg)
+        print(f"[정리] 이메일 발송 완료: {len(items)}건")
+    except Exception as e:
+        print(f"[정리] 이메일 발송 실패: {e}")
+
+
+def run_cleanup_execution():
+    """scheduled_delete_at 지난 pending_delete 건 실제 삭제"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM bid_cleanup_log WHERE status='pending_delete' AND scheduled_delete_at <= ?",
+        (now_str,)
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"executed": 0, "failed": 0}
+
+    sold_ids = _get_sold_order_ids()
+    executed = 0
+    failed = 0
+    stale = 0
+
+    for row in rows:
+        row_id = row["id"]
+        order_id = row["order_id"]
+
+        # 5중 안전장치: 판매 완료 건 재확인 (스테일 체크)
+        if order_id in sold_ids:
+            conn = sqlite3.connect(str(PRICE_DB))
+            conn.execute(
+                "UPDATE bid_cleanup_log SET status='stale_skipped', executed_at=? WHERE id=?",
+                (now_str, row_id)
+            )
+            conn.commit()
+            conn.close()
+            stale += 1
+            print(f"[정리] {order_id}: 판매 완료 확인 → 스킵")
+            continue
+
+        # 스테일 체크: 현재 입찰 목록에 아직 존재하는지 확인
+        current_bids = _load_bids_for_cleanup()
+        current_oids = {b.get("orderId", "") for b in current_bids}
+        if order_id not in current_oids:
+            conn = sqlite3.connect(str(PRICE_DB))
+            conn.execute(
+                "UPDATE bid_cleanup_log SET status='stale_skipped', executed_at=?, cancel_reason='입찰 목록에 없음' WHERE id=?",
+                (now_str, row_id)
+            )
+            conn.commit()
+            conn.close()
+            stale += 1
+            print(f"[정리] {order_id}: 입찰 목록에 없음 → 스킵")
+            continue
+
+        # 실제 삭제 실행 (기존 delete_bids 로직 재사용)
+        success = _execute_cleanup_delete(order_id)
+        conn = sqlite3.connect(str(PRICE_DB))
+        if success:
+            conn.execute(
+                "UPDATE bid_cleanup_log SET status='deleted', executed_at=? WHERE id=?",
+                (now_str, row_id)
+            )
+            executed += 1
+            print(f"[정리] {order_id}: 삭제 완료")
+        else:
+            conn.execute(
+                "UPDATE bid_cleanup_log SET status='delete_failed', executed_at=? WHERE id=?",
+                (now_str, row_id)
+            )
+            failed += 1
+            print(f"[정리] {order_id}: 삭제 실패")
+        conn.commit()
+        conn.close()
+
+    print(f"[정리] 실행 완료: 삭제 {executed}, 실패 {failed}, 스테일 {stale}")
+    return {"executed": executed, "failed": failed, "stale": stale}
+
+
+def _execute_cleanup_delete(order_id):
+    """기존 delete_bids 로직 재사용하여 단건 삭제"""
+    try:
+        tid = new_task()
+        add_log(tid, "info", f"[정리] {order_id} 삭제")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(delete_bids([order_id], tid))
+        loop.close()
+        finish_task(tid, result=result)
+        return result.get("success", 0) > 0
+    except Exception as e:
+        print(f"[정리] 삭제 실행 오류 ({order_id}): {e}")
+        return False
+
+
+# ── 입찰 정리 API 6개 ──
+
+@app.route("/api/auto-cleanup/status")
+def api_auto_cleanup_status():
+    """정리 상태 조회"""
+    cs = _get_cleanup_settings()
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        pending_count = conn.execute("SELECT COUNT(*) FROM bid_cleanup_log WHERE status='pending_delete'").fetchone()[0]
+        today_deleted = conn.execute("SELECT COUNT(*) FROM bid_cleanup_log WHERE status='deleted' AND date(executed_at)=date('now')").fetchone()[0]
+        today_detected = conn.execute("SELECT COUNT(*) FROM bid_cleanup_log WHERE date(detected_at)=date('now')").fetchone()[0]
+        total_deleted = conn.execute("SELECT COUNT(*) FROM bid_cleanup_log WHERE status='deleted'").fetchone()[0]
+        total_cancelled = conn.execute("SELECT COUNT(*) FROM bid_cleanup_log WHERE status='cancelled'").fetchone()[0]
+        total_failed = conn.execute("SELECT COUNT(*) FROM bid_cleanup_log WHERE status='delete_failed'").fetchone()[0]
+        conn.close()
+    except Exception:
+        pending_count = today_deleted = today_detected = total_deleted = total_cancelled = total_failed = 0
+
+    return jsonify({
+        "ok": True,
+        "enabled": cs["enabled"],
+        "types": cs["types"],
+        "daily_max": cs["daily_max"],
+        "grace_minutes": cs["grace_minutes"],
+        "stats": {
+            "pending": pending_count,
+            "today_deleted": today_deleted,
+            "today_detected": today_detected,
+            "total_deleted": total_deleted,
+            "total_cancelled": total_cancelled,
+            "total_failed": total_failed,
+        }
+    })
+
+
+@app.route("/api/auto-cleanup/toggle", methods=["POST"])
+def api_auto_cleanup_toggle():
+    """정리 ON/OFF 토글 (enabled 및 types 부분 업데이트 지원)"""
+    data = request.json or {}
+    existing = {}
+    if SETTINGS_FILE.exists():
+        try:
+            existing = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+
+    if "enabled" in data:
+        existing["auto_cleanup_enabled"] = bool(data["enabled"])
+    if "types" in data and isinstance(data["types"], dict):
+        cur_types = existing.get("auto_cleanup_types", {
+            "duplicate_price": False, "expiring_soon": False,
+            "margin_low": False, "low_rank_duplicate": False
+        })
+        for k, v in data["types"].items():
+            if k in cur_types:
+                cur_types[k] = bool(v)
+        existing["auto_cleanup_types"] = cur_types
+    if "daily_max" in data:
+        existing["auto_cleanup_daily_max"] = int(data["daily_max"])
+    if "grace_minutes" in data:
+        existing["auto_cleanup_grace_minutes"] = int(data["grace_minutes"])
+
+    SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
+    return jsonify({
+        "ok": True,
+        "enabled": existing.get("auto_cleanup_enabled", False),
+        "types": existing.get("auto_cleanup_types", {}),
+    })
+
+
+@app.route("/api/auto-cleanup/pending")
+def api_auto_cleanup_pending():
+    """pending_delete 목록 조회"""
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM bid_cleanup_log WHERE status='pending_delete' ORDER BY scheduled_delete_at ASC"
+        ).fetchall()
+        conn.close()
+        return jsonify({"ok": True, "items": [dict(r) for r in rows]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto-cleanup/cancel", methods=["POST"])
+def api_auto_cleanup_cancel():
+    """pending_delete 취소 (Undo)"""
+    data = request.json or {}
+    ids = data.get("ids", [])
+    reason = data.get("reason", "사용자 취소")
+    if not ids:
+        return jsonify({"error": "ids 필요"}), 400
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cancelled = 0
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        for cid in ids:
+            result = conn.execute(
+                "UPDATE bid_cleanup_log SET status='cancelled', executed_at=?, cancel_reason=? WHERE id=? AND status='pending_delete'",
+                (now_str, reason, cid)
+            )
+            if result.rowcount > 0:
+                cancelled += 1
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({"ok": True, "cancelled": cancelled})
+
+
+@app.route("/api/auto-cleanup/run-once", methods=["POST"])
+def api_auto_cleanup_run_once():
+    """수동 1회 실행 (탐지 + 실행)"""
+    try:
+        exec_result = run_cleanup_execution()
+        detect_result = run_cleanup_detection()
+        return jsonify({
+            "ok": True,
+            "execution": exec_result,
+            "detection": detect_result,
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/auto-cleanup/history")
+def api_auto_cleanup_history():
+    """정리 이력 조회"""
+    limit = request.args.get("limit", 50, type=int)
+    filter_type = request.args.get("filter", "")
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+        query = "SELECT * FROM bid_cleanup_log WHERE 1=1"
+        params = []
+        if filter_type == "deleted":
+            query += " AND status='deleted'"
+        elif filter_type == "cancelled":
+            query += " AND status='cancelled'"
+        elif filter_type == "failed":
+            query += " AND status='delete_failed'"
+        elif filter_type == "pending":
+            query += " AND status='pending_delete'"
+        if from_date:
+            query += " AND date(detected_at) >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND date(detected_at) <= ?"
+            params.append(to_date)
+        query += " ORDER BY detected_at DESC LIMIT ?"
+        params.append(limit)
+
+        rows = conn.execute(query, params).fetchall()
+        conn.close()
+        return jsonify({"ok": True, "history": [dict(r) for r in rows], "count": len(rows)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
