@@ -2632,150 +2632,150 @@ async def place_bids_batch(page, product_id, bids, bid_days=30, delay=3.0):
 # ═══════════════════════════════════════════
 
 async def collect_shipments(page, max_pages=10):
-    """판매자센터 발송완료 내역 수집 — partner-api 인터셉트 방식 (2026-04 KREAM DOM 전면 변경 대응).
-
-    이전 방식(`/business/shipments` table DOM 스크래핑)이 다음 이유로 불가능:
-    - URL 변경: `/business/shipments` → `/business/asks/shipment`
-    - DOM 구조 전면 교체: `<table><tbody><tr>` → React/Next.js + CSS Modules div
-    현 방식: 페이지 로드 시 호출되는 `partner-api.kream.co.kr/api/v1/market/asks?status=shipped`
-            응답을 가로채고, 페이징은 컨텍스트 request로 직접 호출.
-    """
-    print("📦 발송관리 내역 수집 시작 (API 인터셉트)...")
+    """판매자센터 /business/shipments 페이지에서 발송완료 내역 수집"""
+    print("📦 발송관리 내역 수집 시작...")
     shipments = []
-    api_marker = "/api/v1/market/asks"
-    captured = {"body": None}
-
-    async def _on_response(resp):
-        if (
-            captured["body"] is None
-            and api_marker in resp.url
-            and "status=shipped" in resp.url
-        ):
-            try:
-                ct = (resp.headers.get("content-type") or "").lower()
-                if "json" in ct:
-                    captured["body"] = await resp.json()
-                    print(f"  → API 응답 캡처: cursor 등 페이징 파라미터 포함 URL")
-            except Exception as ex:
-                print(f"  ⚠ API 응답 파싱 실패: {ex}")
-
-    page.on("response", _on_response)
 
     try:
-        # 페이지 진입 — per_page=100로 한 번에 많이 가져오기
-        await page.goto(
-            f"{PARTNER_URL}/business/asks/shipment?status=shipped&per_page=100",
-            wait_until="domcontentloaded",
-        )
-        try:
-            await page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
-            pass
+        # KREAM 발송관리 URL — 2026-04 변경: /business/shipments → /business/asks/shipment
+        await page.goto(f"{PARTNER_URL}/business/asks/shipment", wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle", timeout=15000)
         await page.wait_for_timeout(2000)
 
-    except Exception as e:
-        print(f"❌ 발송완료 페이지 로드 실패: {e}")
-        traceback.print_exc()
+        # '발송완료' 탭 클릭 — 다중 폴백 + 실패 시 명시적 경고
+        tab_clicked = False
+        seen_texts = []
+
+        # 1차: 명시적 셀렉터 시도 (data-attribute / has-text 기반)
+        explicit_selectors = [
+            '[data-tab="completed"]',
+            '[data-tab*="complet"]',
+            'button[role="tab"]:has-text("발송완료")',
+            'a[role="tab"]:has-text("발송완료")',
+            '[role="tab"]:has-text("발송완료")',
+            'button:has-text("발송완료")',
+            'a:has-text("발송완료")',
+            'button:has-text("발송 완료")',
+            'a:has-text("발송 완료")',
+        ]
+        for sel in explicit_selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=3000)
+                    await el.click()
+                    await page.wait_for_timeout(2000)
+                    print(f"  → 발송완료 탭 클릭 (셀렉터: {sel})")
+                    tab_clicked = True
+                    break
+            except Exception:
+                continue
+
+        # 2차: 텍스트 순회 폴백 — '완료' 단독 매칭 제거(오탐 방지), 정확/공백허용 매칭만
+        if not tab_clicked:
+            try:
+                tabs = page.locator('button, a, [role="tab"]')
+                tab_count = await tabs.count()
+                for i in range(tab_count):
+                    tab = tabs.nth(i)
+                    try:
+                        text = (await tab.inner_text(timeout=1000)).strip()
+                    except Exception:
+                        continue
+                    if text:
+                        seen_texts.append(text[:40])
+                    if text and text.replace(" ", "") == "발송완료":
+                        try:
+                            await tab.click()
+                            await page.wait_for_timeout(2000)
+                            print(f"  → 발송완료 탭 클릭 (텍스트 폴백: {text!r})")
+                            tab_clicked = True
+                            break
+                        except Exception as ce:
+                            print(f"  ⚠ 탭 클릭 실패 ({text!r}): {ce}")
+                            continue
+            except Exception as e:
+                print(f"  ⚠ 탭 순회 오류: {e}")
+
+        # 3차: 실패 시 명시적 경고 (이전엔 조용히 넘어가서 0건으로 종료됨)
+        if not tab_clicked:
+            print("  ⚠⚠ 발송완료 탭을 찾지 못함! KREAM DOM 변경 의심.")
+            print(f"  ⚠⚠ 발견된 button/a/[role=tab] 텍스트 상위 {min(20, len(seen_texts))}개:")
+            for t in seen_texts[:20]:
+                print(f"       - {t!r}")
+            print("  ⚠⚠ 기본 탭 상태에서 수집 시도 (데이터 누락 가능)")
+
+        # 100개씩 보기 설정 시도
         try:
-            page.remove_listener("response", _on_response)
+            page_size_selectors = [
+                'select[class*="page-size"]',
+                'select[class*="pageSize"]',
+                'select[class*="per-page"]',
+                'select[class*="perPage"]',
+                'select[class*="count"]',
+            ]
+            for sel in page_size_selectors:
+                select_el = page.locator(sel)
+                if await select_el.count() > 0:
+                    await select_el.select_option(value="100")
+                    await page.wait_for_timeout(2000)
+                    print("  → 100개씩 보기 설정")
+                    break
         except Exception:
             pass
-        return shipments
 
-    try:
-        page.remove_listener("response", _on_response)
-    except Exception:
-        pass
+        for page_num in range(1, max_pages + 1):
+            print(f"  📄 {page_num}페이지 수집 중...")
 
-    body = captured["body"]
+            # 테이블 행 파싱
+            rows = page.locator('table tbody tr, [class*="table"] [class*="row"]:not([class*="header"])')
+            row_count = await rows.count()
 
-    # 폴백 1: API 자동 캡처 실패 시 context.request로 직접 호출
-    if not isinstance(body, dict):
-        print("  ⚠ API 자동 캡처 실패 — context.request로 직접 호출 폴백")
-        try:
-            api_url = (
-                "https://partner-api.kream.co.kr/api/v1/market/asks"
-                "?status=shipped&per_page=100&cursor=1"
-            )
-            resp = await page.context.request.get(api_url)
-            if resp.ok:
-                body = await resp.json()
-                print(f"  → 직접 호출 성공: total={body.get('total')}")
-            else:
-                print(f"  ❌ 직접 호출 실패: HTTP {resp.status}")
-                return shipments
-        except Exception as e:
-            print(f"  ❌ 직접 호출 예외: {e}")
-            return shipments
-
-    if not isinstance(body, dict):
-        print("  ⚠⚠ 응답 본문 없음")
-        print("📦 발송관리 수집 완료: 0건")
-        return shipments
-
-    # 페이지 순회 (max_pages 제한, KREAM API의 next_page cursor 사용)
-    for page_num in range(1, max_pages + 1):
-        items = body.get("items", []) or []
-        for item in items:
-            sh = _convert_api_item_to_shipment(item)
-            if sh:
-                shipments.append(sh)
-        total = body.get("total", "?")
-        print(f"  📄 page={page_num} 수집 {len(items)}건 (누적 {len(shipments)} / total {total})")
-
-        next_cursor = body.get("next_page")
-        if not next_cursor:
-            break
-        try:
-            api_url = (
-                "https://partner-api.kream.co.kr/api/v1/market/asks"
-                f"?status=shipped&per_page=100&cursor={next_cursor}"
-            )
-            resp = await page.context.request.get(api_url)
-            if not resp.ok:
-                print(f"  ⚠ next page (cursor={next_cursor}) HTTP {resp.status}")
+            if row_count == 0:
+                print(f"  → 데이터 없음, 수집 종료")
                 break
-            body = await resp.json()
-        except Exception as e:
-            print(f"  ⚠ next page 호출 예외: {e}")
-            break
+
+            for i in range(row_count):
+                try:
+                    row = rows.nth(i)
+                    cells = row.locator('td, [class*="cell"]')
+                    cell_count = await cells.count()
+
+                    if cell_count < 3:
+                        continue
+
+                    # 셀 텍스트 추출
+                    cell_texts = []
+                    for j in range(cell_count):
+                        text = (await cells.nth(j).inner_text()).strip()
+                        cell_texts.append(text)
+
+                    # 주문번호, 상품정보, 사이즈, 거래금액 등 파싱
+                    shipment = _parse_shipment_row(cell_texts)
+                    if shipment:
+                        shipments.append(shipment)
+                except Exception as e:
+                    print(f"  ⚠ 행 파싱 오류: {e}")
+                    continue
+
+            # 다음 페이지 이동
+            next_btn = page.locator('button:has-text("다음"), [class*="next"], a:has-text(">")')
+            if await next_btn.count() > 0:
+                is_disabled = await next_btn.first.get_attribute("disabled")
+                if is_disabled:
+                    print(f"  → 마지막 페이지, 수집 종료")
+                    break
+                await next_btn.first.click()
+                await page.wait_for_timeout(2000)
+            else:
+                break
+
+    except Exception as e:
+        print(f"❌ 발송관리 수집 오류: {e}")
+        traceback.print_exc()
 
     print(f"📦 발송관리 수집 완료: {len(shipments)}건")
     return shipments
-
-
-def _convert_api_item_to_shipment(item):
-    """KREAM partner-api `/api/v1/market/asks` item → sales_history 호환 dict."""
-    if not isinstance(item, dict):
-        return None
-    try:
-        product = item.get("product") or {}
-        release = product.get("release") or {}
-        transaction = item.get("transaction") or {}
-
-        def _iso_date(s):
-            return s[:10] if isinstance(s, str) and len(s) >= 10 else ""
-
-        try:
-            sale_price = int(item.get("price") or 0)
-        except (TypeError, ValueError):
-            sale_price = 0
-
-        rid = release.get("id")
-        return {
-            "order_id": item.get("oid", "") or "",
-            "product_id": str(rid) if rid else "",
-            "model": release.get("style_code", "") or "",
-            "product_info": release.get("translated_name") or release.get("name") or "",
-            "size": item.get("product_option_name_display", "") or "",
-            "sale_price": sale_price,
-            "trade_date": _iso_date(transaction.get("date_created", "")),
-            "ship_date": _iso_date(item.get("date_paid", "")),
-            "ship_status": item.get("status_display", "") or "",
-        }
-    except Exception as e:
-        print(f"  ⚠ 항목 변환 실패: {e}")
-        return None
 
 
 def _parse_shipment_row(cells):
