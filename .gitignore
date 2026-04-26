@@ -8,3 +8,11 @@ __pycache__
 debug_screenshots/
 price_history.db
 server.log
+.DS_Store
+**/.DS_Store
+
+# 운영 데이터 (자동 갱신, Git 관리 안 함)
+alert_history.json
+my_bids_local.json
+tunnel.log
+*.log
