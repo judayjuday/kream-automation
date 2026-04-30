@@ -5768,6 +5768,7 @@ def _save_shipments_to_db(shipments):
 # 새 체결건 알림 (대시보드 폴링용)
 _new_sales_alerts = []
 _new_sales_lock = threading.Lock()
+_hubnet_trigger_lock = threading.Lock()  # Step 10: 허브넷 PDF 트리거 동시실행 방지
 
 
 def _run_sales_sync():
@@ -5834,6 +5835,47 @@ def _run_sales_sync():
                 health_alerter.alert("auto_rebid_exception", str(re), cooldown_minutes=60)
             except Exception:
                 pass
+
+    # ───────── Step 10: 허브넷 자동 PDF 다운로드 트리거 ─────────
+    # 격리 원칙: 어떤 예외도 외부로 던지지 않음. 판매 수집 결과(result)는 보존.
+    try:
+        hb_settings = {}
+        if SETTINGS_FILE.exists():
+            hb_settings = json.loads(SETTINGS_FILE.read_text())
+        if hb_settings.get('hubnet_auto_pdf', False):
+            acquired = _hubnet_trigger_lock.acquire(blocking=False)
+            if not acquired:
+                print("[HUBNET_AUTO] 이전 사이클 진행 중 — 이번 사이클 스킵")
+            else:
+                try:
+                    from kream_hubnet_bot import download_pending_invoices
+                    hb_result = download_pending_invoices(
+                        limit=20,
+                        triggered_by='scheduler'
+                    )
+                    print(f"[HUBNET_AUTO] {hb_result}")
+                    if isinstance(hb_result, dict) and hb_result.get('failed', 0) > 0:
+                        try:
+                            health_alerter.alert(
+                                'hubnet_pdf_failed',
+                                f"허브넷 PDF 다운로드 {hb_result['failed']}건 실패",
+                                cooldown_minutes=60
+                            )
+                        except Exception:
+                            pass
+                finally:
+                    _hubnet_trigger_lock.release()
+    except Exception as he:
+        print(f"[HUBNET_AUTO_ERROR] {he}")
+        try:
+            health_alerter.alert(
+                'hubnet_pdf_trigger_error',
+                f"허브넷 자동 PDF 트리거 오류: {he}",
+                cooldown_minutes=60
+            )
+        except Exception:
+            pass
+    # ─────────────────────────────────────────────────────────────
 
     return result
 
