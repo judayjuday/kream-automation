@@ -10,8 +10,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sqlite3
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -842,6 +844,354 @@ def fetch_invoice_html(
     return body
 
 
+# ─── Func 11: html_to_pdf ─────────────────────────────────
+def html_to_pdf(
+    html: str,
+    output_path: Path,
+    base_url: str = "https://kpartner.ehub24.net/",
+) -> dict:
+    """Playwright(sync) headless로 HTML → PDF 변환.
+
+    Q-1A 결정(2026-04-30): 모듈 일관성을 위해 동기로 작성
+    (작업지시서 §3.1의 async def는 작성 시점 추정).
+
+    base_url 처리: HTML head에 <base href="..."> 태그 1회 주입
+    (set_content에는 url 인자가 없으므로 표준 우회 패턴).
+
+    PDF 옵션:
+      - prefer_css_page_size=True → HTML @page CSS 존중 (송장 11.5×16.5cm)
+      - print_background=True → 바코드/색상 보존
+      - margin은 HTML CSS @page에 위임
+
+    Returns:
+        {'success': bool, 'pdf_path': str | None, 'file_size': int, 'error': str | None}
+
+    실패 시 RuntimeError 안 던짐 (dict 반환).
+    절대 규칙 준수: 0바이트/실패 시 부분 파일 즉시 삭제 (빈 PDF 저장 금지).
+    """
+    output_path = Path(output_path)
+    if not html or not html.strip():
+        return {
+            'success': False, 'pdf_path': None, 'file_size': 0,
+            'error': 'html 비어있음',
+        }
+
+    # <base> 주입 (이미 있으면 건너뜀)
+    if not re.search(r'<base\s', html, flags=re.IGNORECASE):
+        new_html, n = re.subn(
+            r'(<head[^>]*>)',
+            r'\1<base href="' + base_url + '">',
+            html, count=1, flags=re.IGNORECASE,
+        )
+        if n == 0:
+            return {
+                'success': False, 'pdf_path': None, 'file_size': 0,
+                'error': '<head> 태그 없음 — base_url 주입 불가',
+            }
+        html = new_html
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        return {
+            'success': False, 'pdf_path': None, 'file_size': 0,
+            'error': f'playwright import 실패: {e}',
+        }
+
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            try:
+                page = browser.new_page()
+                page.set_content(html, wait_until='networkidle', timeout=30000)
+                page.pdf(
+                    path=str(output_path),
+                    prefer_css_page_size=True,
+                    print_background=True,
+                )
+            finally:
+                browser.close()
+    except Exception as e:  # noqa: BLE001 — Playwright 다양한 예외 일괄 처리
+        if output_path.exists():
+            try:
+                output_path.unlink()
+            except OSError:
+                pass
+        return {
+            'success': False, 'pdf_path': None, 'file_size': 0,
+            'error': f'{type(e).__name__}: {e}',
+        }
+
+    if not output_path.exists():
+        return {
+            'success': False, 'pdf_path': None, 'file_size': 0,
+            'error': 'PDF 파일 생성되지 않음 (예외 없이 미생성)',
+        }
+    size = output_path.stat().st_size
+    if size == 0:
+        try:
+            output_path.unlink()
+        except OSError:
+            pass
+        return {
+            'success': False, 'pdf_path': None, 'file_size': 0,
+            'error': '0바이트 PDF 생성됨 → 삭제',
+        }
+
+    logger.info("PDF 생성: %s (%d bytes)", output_path, size)
+    return {
+        'success': True,
+        'pdf_path': str(output_path),
+        'file_size': size,
+        'error': None,
+    }
+
+
+# ─── Func 12: download_invoice_pdf ────────────────────────
+DEFAULT_LABELS_DIR = Path.home() / "Desktop" / "kream_automation" / "labels"
+
+
+def _safe_filename_part(s: str | None) -> str:
+    """파일명 안전 문자열 변환. 슬래시/공백/제어문자 → '_'."""
+    if not s:
+        return "unknown"
+    # 슬래시·공백·콜론·특수문자를 모두 _로 치환, 연속 _ 압축
+    cleaned = re.sub(r"[\s/\\:*?\"<>|\t\r\n]+", "_", str(s).strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned or "unknown"
+
+
+def _extract_yyyymm_yyyymmdd(trade_date: str | None) -> tuple[str, str]:
+    """trade_date('YYYY-MM-DD' 또는 'YYYY-MM-DD HH:MM:SS')에서 YYYYMM, YYYYMMDD 추출.
+    파싱 실패 시 오늘 날짜로 폴백 (날짜 정보 자체가 없으면 가짜 매칭이 아니므로 허용)."""
+    today = datetime.now()
+    if trade_date:
+        m = re.match(r"^\s*(\d{4})-(\d{2})-(\d{2})", str(trade_date))
+        if m:
+            y, mo, d = m.group(1), m.group(2), m.group(3)
+            return f"{y}{mo}", f"{y}{mo}{d}"
+    return today.strftime("%Y%m"), today.strftime("%Y%m%d")
+
+
+def _log_pdf_result(
+    hbl_number: str,
+    kream_order_id: str | None,
+    pdf_path: str | None,
+    file_size: int | None,
+    status: str,
+    error_message: str | None,
+    duration_ms: int | None,
+    triggered_by: str,
+) -> None:
+    """hubnet_pdf_log INSERT. DB 실패가 PDF 결과를 가리지 않도록 광범위 except."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            conn.execute(
+                """INSERT INTO hubnet_pdf_log
+                   (hbl_number, kream_order_id, pdf_path, file_size, status,
+                    error_message, duration_ms, triggered_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (hbl_number, kream_order_id, pdf_path, file_size, status,
+                 error_message, duration_ms, triggered_by),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        logger.error("hubnet_pdf_log 기록 실패: %s (hbl=%s status=%s)",
+                     e, hbl_number, status)
+
+
+def download_invoice_pdf(
+    hbl_number: str,
+    kream_order_id: str | None = None,
+    triggered_by: str = "manual",
+) -> dict:
+    """단일 HBL 송장 PDF 다운로드 + 저장 + DB 로깅 통합.
+
+    흐름: 입력검증 → sales_history 조회(매칭) → 파일경로 생성
+        → 중복 검사(skip) → fetch_invoice_html → html_to_pdf → 로그 INSERT
+
+    절대 규칙:
+      - 매칭 실패 → unknown 폴백 X, status='matching_failed'
+      - 0바이트 PDF 저장 X (html_to_pdf가 1차 방어, 여기서 2차 검증)
+      - 모든 결과는 hubnet_pdf_log에 기록
+
+    Returns:
+        {success, pdf_path, status, file_size, error, duration_ms}
+        status ∈ {'success', 'failed', 'skipped', 'matching_failed'}
+    """
+    # ─ 1) 입력 검증 ──────────────────────────────
+    hbl_number = (hbl_number or "").strip()
+    if not hbl_number:
+        result = {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': 'hbl_number 비어있음',
+            'duration_ms': 0,
+        }
+        _log_pdf_result(hbl_number, kream_order_id, None, None,
+                        'failed', result['error'], 0, triggered_by)
+        return result
+
+    # ─ 2) sales_history 매칭 조회 ─────────────────
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT order_id, model, size, trade_date FROM sales_history "
+                "WHERE hbl_number = ? LIMIT 1",
+                (hbl_number,),
+            )
+            row = cur.fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        result = {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': f'sales_history 조회 실패: {e}',
+            'duration_ms': 0,
+        }
+        _log_pdf_result(hbl_number, kream_order_id, None, None,
+                        'failed', result['error'], 0, triggered_by)
+        return result
+
+    if not row:
+        # 폴백 금지 — unknown 사용 X
+        msg = f"sales_history에 hbl_number={hbl_number} 매칭 없음"
+        logger.warning(msg)
+        _log_pdf_result(hbl_number, kream_order_id, None, None,
+                        'matching_failed', msg, None, triggered_by)
+        return {
+            'success': False, 'pdf_path': None, 'status': 'matching_failed',
+            'file_size': None, 'error': msg, 'duration_ms': 0,
+        }
+
+    sh_order_id, model, size, trade_date = row
+    if kream_order_id and sh_order_id and kream_order_id != sh_order_id:
+        logger.warning(
+            "kream_order_id 인자(%s)가 sales_history.order_id(%s)와 불일치 — 인자 우선 사용",
+            kream_order_id, sh_order_id,
+        )
+    effective_order_id = kream_order_id or sh_order_id
+
+    # ─ 3) 파일경로 생성 ──────────────────────────
+    yyyymm, yyyymmdd = _extract_yyyymm_yyyymmdd(trade_date)
+    settings = _load_settings()
+    base_dir = Path(settings.get("hubnet_pdf_dir") or DEFAULT_LABELS_DIR).expanduser()
+    filename = (
+        f"{_safe_filename_part(hbl_number)}_"
+        f"{_safe_filename_part(model)}_"
+        f"{_safe_filename_part(size)}_"
+        f"{yyyymmdd}.pdf"
+    )
+    output_path = base_dir / yyyymm / filename
+
+    # ─ 4) 폴더 보장 ──────────────────────────────
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        msg = f"출력 폴더 생성 실패: {e} (path={output_path.parent})"
+        _log_pdf_result(hbl_number, effective_order_id, None, None,
+                        'failed', msg, 0, triggered_by)
+        return {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': msg, 'duration_ms': 0,
+        }
+
+    # ─ 5) 중복 검사 ──────────────────────────────
+    if output_path.exists():
+        existing_size = output_path.stat().st_size
+        if existing_size > 0:
+            logger.info("이미 존재 — skip: %s (%d bytes)", output_path, existing_size)
+            _log_pdf_result(hbl_number, effective_order_id, str(output_path),
+                            existing_size, 'skipped', None, None, triggered_by)
+            return {
+                'success': True, 'pdf_path': str(output_path),
+                'status': 'skipped', 'file_size': existing_size,
+                'error': None, 'duration_ms': 0,
+            }
+        # 0바이트 잔재 → 삭제 후 재생성
+        logger.warning("0바이트 PDF 잔재 발견, 삭제 후 재생성: %s", output_path)
+        try:
+            output_path.unlink()
+        except OSError:
+            pass
+
+    # ─ 6) 시간 측정 시작 (실제 변환 작업만 측정) ───
+    start_time = time.monotonic()
+
+    # ─ 7) HTML 수신 ──────────────────────────────
+    try:
+        sess = ensure_hubnet_logged_in()
+    except RuntimeError as e:
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        msg = f"인증 실패: {e}"
+        _log_pdf_result(hbl_number, effective_order_id, None, None,
+                        'failed', msg, duration_ms, triggered_by)
+        return {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': msg, 'duration_ms': duration_ms,
+        }
+
+    try:
+        html = fetch_invoice_html(sess, [hbl_number])
+    except RuntimeError as e:
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        msg = f"fetch_invoice_html 실패: {e}"
+        _log_pdf_result(hbl_number, effective_order_id, None, None,
+                        'failed', msg, duration_ms, triggered_by)
+        return {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': msg, 'duration_ms': duration_ms,
+        }
+
+    # ─ 8) PDF 변환 ───────────────────────────────
+    pdf_result = html_to_pdf(html, output_path)
+    duration_ms = int((time.monotonic() - start_time) * 1000)
+
+    if not pdf_result.get('success'):
+        msg = f"html_to_pdf 실패: {pdf_result.get('error')}"
+        _log_pdf_result(hbl_number, effective_order_id, None, None,
+                        'failed', msg, duration_ms, triggered_by)
+        return {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': msg, 'duration_ms': duration_ms,
+        }
+
+    # 사후 검증: 파일/크기 (html_to_pdf가 이미 보장하지만 2차 방어)
+    file_size = pdf_result.get('file_size') or 0
+    if file_size <= 0 or not output_path.exists():
+        msg = f"PDF 사후 검증 실패: file_size={file_size} exists={output_path.exists()}"
+        try:
+            if output_path.exists():
+                output_path.unlink()
+        except OSError:
+            pass
+        _log_pdf_result(hbl_number, effective_order_id, None, None,
+                        'failed', msg, duration_ms, triggered_by)
+        return {
+            'success': False, 'pdf_path': None, 'status': 'failed',
+            'file_size': None, 'error': msg, 'duration_ms': duration_ms,
+        }
+
+    # ─ 9) 성공 로그 ──────────────────────────────
+    _log_pdf_result(hbl_number, effective_order_id, str(output_path),
+                    file_size, 'success', None, duration_ms, triggered_by)
+    logger.info(
+        "PDF 다운로드 성공: %s (%d bytes, %dms)",
+        output_path, file_size, duration_ms,
+    )
+    return {
+        'success': True, 'pdf_path': str(output_path),
+        'status': 'success', 'file_size': file_size,
+        'error': None, 'duration_ms': duration_ms,
+    }
+
+
 # ─── CLI 진입점 ────────────────────────────────────────────
 def _cli_auth() -> int:
     try:
@@ -917,6 +1267,24 @@ def _cli_fetch(args) -> int:
     return 0
 
 
+def _cli_pdf_test(args) -> int:
+    """--mode pdf-test --hbl <HBL>: download_invoice_pdf 호출 + 결과 출력."""
+    if not args.hbl:
+        logger.error("--hbl 필수 (예: --hbl H2604252301517)")
+        return 2
+    result = download_invoice_pdf(args.hbl, triggered_by="manual")
+    print("\n=== pdf-test 결과 ===")
+    print(f"hbl: {args.hbl}")
+    print(f"status: {result['status']}")
+    print(f"success: {result['success']}")
+    print(f"pdf_path: {result.get('pdf_path')}")
+    print(f"file_size: {result.get('file_size')}")
+    print(f"duration_ms: {result.get('duration_ms')}")
+    if result.get('error'):
+        print(f"error: {result['error']}")
+    return 0 if result['success'] else 1
+
+
 def _cli_html_test(args) -> int:
     """--mode html-test --hbl <HBL>: 단일 HBL HTML을 /tmp/invoice_test.html에 저장."""
     if not args.hbl:
@@ -972,10 +1340,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["auth", "fetch", "match", "html-test"],
+        choices=["auth", "fetch", "match", "html-test", "pdf-test"],
         help=(
             "실행 모드 (auth=로그인 검증, fetch=주문 조회+저장, "
-            "match=KREAM↔허브넷 매칭, html-test=단일 HBL 송장 HTML 저장)"
+            "match=KREAM↔허브넷 매칭, html-test=송장 HTML 저장, "
+            "pdf-test=송장 PDF 다운로드+로깅)"
         ),
     )
     parser.add_argument("--hbl", help="html-test 모드의 HBL 번호 (예: H2604252301517)")
@@ -1006,6 +1375,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cli_match(args)
     if args.mode == "html-test":
         return _cli_html_test(args)
+    if args.mode == "pdf-test":
+        return _cli_pdf_test(args)
     return 2
 
 
