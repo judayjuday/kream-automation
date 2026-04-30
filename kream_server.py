@@ -15,6 +15,7 @@ import random
 import re
 import sqlite3
 import smtplib
+import subprocess
 import threading
 import traceback
 import urllib.request
@@ -121,6 +122,69 @@ monitor_state = {
 }
 _monitor_timer = None
 _monitor_lock = threading.Lock()
+
+# ── 자동 백업 스케줄러 (운영안정화 §1.1) ──
+backup_state = {
+    "running": False,
+    "last_run": None,
+    "last_status": None,
+}
+_backup_timer = None
+BACKUP_INTERVAL_SEC = 24 * 3600  # 24시간 주기
+
+
+def _backup_run_once():
+    """backup_db.sh 1회 실행. 다른 스케줄러에 영향 안 가도록 try/except 격리."""
+    try:
+        script = BASE_DIR / "backup_db.sh"
+        if not script.exists():
+            backup_state["last_status"] = f"script not found: {script}"
+            print(f"[backup] {backup_state['last_status']}")
+            return
+        result = subprocess.run(
+            ["/bin/bash", str(script)],
+            capture_output=True, text=True, timeout=180,
+            cwd=str(BASE_DIR),
+        )
+        backup_state["last_run"] = datetime.now().isoformat()
+        if result.returncode == 0:
+            backup_state["last_status"] = "success"
+            tail = (result.stdout or "").strip().splitlines()
+            print(f"[backup] OK {tail[-1] if tail else ''}")
+        else:
+            backup_state["last_status"] = f"failed rc={result.returncode}"
+            print(
+                f"[backup] FAIL rc={result.returncode} "
+                f"stderr={(result.stderr or '')[:200]}"
+            )
+            try:
+                health_alerter.alert(
+                    "backup_failed",
+                    f"백업 실패 rc={result.returncode}: {(result.stderr or '')[:200]}",
+                )
+            except Exception:
+                pass
+    except subprocess.TimeoutExpired:
+        backup_state["last_status"] = "timeout"
+        print("[backup] TIMEOUT (180s 초과)")
+    except Exception as e:
+        backup_state["last_status"] = f"exception: {e}"
+        print(f"[backup] exception: {e}")
+
+
+def _backup_tick():
+    """24h 주기 트리거. 실행 후 다음 트리거 재등록."""
+    global _backup_timer
+    if not backup_state.get("running"):
+        return
+    try:
+        _backup_run_once()
+    except Exception as e:
+        print(f"[backup] tick exception: {e}")
+    if backup_state.get("running"):
+        _backup_timer = threading.Timer(BACKUP_INTERVAL_SEC, _backup_tick)
+        _backup_timer.daemon = True
+        _backup_timer.start()
 
 
 # ── SQLite WAL 모드 활성화 ──
@@ -6190,6 +6254,7 @@ def api_health():
         result["schedulers"] = {
             "monitor": "running" if monitor_state.get("running") else "stopped",
             "sales": "running" if sales_scheduler_state.get("running") else "stopped",
+            "backup": "running" if backup_state.get("running") else "stopped",
         }
 
         # 마지막 판매 수집
@@ -8316,4 +8381,10 @@ if __name__ == "__main__":
     _health_alert_timer.daemon = True
     _health_alert_timer.start()
     print("  경보 모니터링: 5분 간격")
+    # 자동 백업 스케줄러 (24h 주기, 첫 실행 60초 후 — 단기 시뮬)
+    backup_state["running"] = True
+    _backup_timer = threading.Timer(60, _backup_tick)
+    _backup_timer.daemon = True
+    _backup_timer.start()
+    print("  자동 백업: 60초 후 첫 실행 → 이후 24시간 주기")
     app.run(host="0.0.0.0", port=5001, debug=False)

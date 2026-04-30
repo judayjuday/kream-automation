@@ -1405,13 +1405,16 @@ function loadBatchHistory() {
     batchHistoryData = data.history || [];
     renderBatchHistory();
   }).catch(() => {
-    document.getElementById('batch-history-list').innerHTML =
+    // history 탭은 동적 로드(_loadTab) — page-load 직후 호출 시 batch-history-list가 DOM에 없을 수 있음. null 가드 필수.
+    const el = document.getElementById('batch-history-list');
+    if (el) el.innerHTML =
       '<div class="text-muted" style="padding:20px; text-align:center">이력을 불러올 수 없습니다</div>';
   });
 }
 
 function renderBatchHistory() {
   const container = document.getElementById('batch-history-list');
+  if (!container) return;  // history 탭 미로드 시 silent skip (탭 진입 시 재호출됨)
   if (!batchHistoryData.length) {
     container.innerHTML = '<div class="text-muted" style="padding:20px; text-align:center">아직 실행 이력이 없습니다</div>';
     return;
