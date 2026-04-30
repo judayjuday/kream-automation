@@ -7180,7 +7180,7 @@ async def _execute_rebid(product_id, model, size, price, cny_price):
                 rate = settings.get("cnyRate", 215)
                 try:
                     _save_bid_cost(
-                        order_id=f"{product_id}_{size}_rebid",
+                        order_id=f"{product_id}_{size}_rebid_{int(time.time())}",
                         model=model, size=size,
                         cny_price=float(cny_price),
                         exchange_rate=float(rate),
@@ -7360,6 +7360,18 @@ def auto_rebid_after_sale(sale_records):
                     results["skipped"] += 1
                     results["details"].append({"order_id": order_id, "action": "skipped_margin_low",
                                                "expected_profit": expected_profit})
+                    continue
+
+                # Step 13: dry-run 모드 (실제 입찰 박지 않음, 의사결정만 로그)
+                if settings.get("auto_rebid_dry_run", False):
+                    _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
+                                    expected_profit, "auto_rebid_dry_run",
+                                    f"DRY-RUN: would rebid {new_bid_price}")
+                    results["skipped"] += 1
+                    results["details"].append({"order_id": order_id, "action": "auto_rebid_dry_run",
+                                               "new_bid_price": new_bid_price,
+                                               "expected_profit": expected_profit})
+                    print(f"[auto_rebid] DRY-RUN {model} {size}: sold {sold_price:,} → would rebid {new_bid_price:,}")
                     continue
 
                 # 실제 입찰 실행
