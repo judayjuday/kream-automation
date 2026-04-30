@@ -1192,6 +1192,134 @@ def download_invoice_pdf(
     }
 
 
+# ─── Func 13: download_pending_invoices ───────────────────
+def download_pending_invoices(
+    limit: int | None = None,
+    triggered_by: str = "manual",
+) -> dict:
+    """sales_history에서 hbl_number 있고 pdf_path 비어있는 행 일괄 PDF 다운로드.
+
+    각 행에 download_invoice_pdf 호출 → success/skipped 시
+    sales_history.pdf_path + pdf_downloaded_at 갱신 (양방향 정합성).
+
+    Returns:
+        {'total', 'success', 'skipped', 'matching_failed', 'failed', 'errors'}
+    """
+    result: dict = {
+        'total': 0, 'success': 0, 'skipped': 0,
+        'matching_failed': 0, 'failed': 0, 'errors': [],
+    }
+
+    # 1) 대상 조회
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            cur = conn.cursor()
+            sql = (
+                "SELECT order_id, hbl_number FROM sales_history "
+                "WHERE hbl_number IS NOT NULL AND hbl_number != '' "
+                "  AND (pdf_path IS NULL OR pdf_path = '') "
+                "ORDER BY order_id"
+            )
+            params: tuple = ()
+            if limit and limit > 0:
+                sql += " LIMIT ?"
+                params = (limit,)
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        logger.error("download_pending_invoices 대상 조회 실패: %s", e)
+        result['errors'].append({'reason': f'대상 조회 실패: {e}'})
+        return result
+
+    result['total'] = len(rows)
+    if not rows:
+        logger.info("download_pending_invoices: 대상 없음")
+        return result
+    logger.info("download_pending_invoices: 대상 %d건 (limit=%s)", len(rows), limit)
+
+    # 2) 행 단위 처리
+    for order_id, hbl in rows:
+        try:
+            r = download_invoice_pdf(hbl, kream_order_id=order_id, triggered_by=triggered_by)
+        except Exception as e:  # noqa: BLE001 — 행 단위 격리
+            result['failed'] += 1
+            result['errors'].append({
+                'order_id': order_id, 'hbl_number': hbl,
+                'status': 'exception', 'reason': f'{type(e).__name__}: {e}',
+            })
+            continue
+
+        status = r.get('status')
+        pdf_path = r.get('pdf_path')
+
+        if status == 'success':
+            result['success'] += 1
+        elif status == 'skipped':
+            result['skipped'] += 1
+        elif status == 'matching_failed':
+            # hbl_number가 NOT NULL인 행을 SELECT했으니 정상 흐름엔 발생 X
+            # (download_invoice_pdf 내부 sales_history 재조회 사이 변경 등 이상 케이스만)
+            result['matching_failed'] += 1
+            result['errors'].append({
+                'order_id': order_id, 'hbl_number': hbl,
+                'status': status, 'reason': r.get('error'),
+            })
+            continue
+        else:  # 'failed' 등
+            result['failed'] += 1
+            result['errors'].append({
+                'order_id': order_id, 'hbl_number': hbl,
+                'status': status, 'reason': r.get('error'),
+            })
+            continue
+
+        # 3) success/skipped → sales_history 양방향 갱신
+        if not pdf_path:
+            logger.warning(
+                "pdf_path 없음(status=%s) — sales_history 갱신 skip: order_id=%s",
+                status, order_id,
+            )
+            continue
+        now_iso = datetime.now(timezone.utc).isoformat()
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE sales_history "
+                    "SET pdf_path = ?, pdf_downloaded_at = ? "
+                    "WHERE order_id = ?",
+                    (pdf_path, now_iso, order_id),
+                )
+                if cur.rowcount != 1:
+                    logger.warning(
+                        "sales_history UPDATE rowcount=%d (order_id=%s)",
+                        cur.rowcount, order_id,
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        except sqlite3.Error as e:
+            logger.error(
+                "sales_history pdf_path 갱신 실패: %s (order_id=%s)", e, order_id,
+            )
+            result['errors'].append({
+                'order_id': order_id, 'hbl_number': hbl,
+                'status': 'db_update_failed', 'reason': str(e),
+            })
+
+    logger.info(
+        "download_pending_invoices 완료: total=%d success=%d skipped=%d "
+        "matching_failed=%d failed=%d errors=%d",
+        result['total'], result['success'], result['skipped'],
+        result['matching_failed'], result['failed'], len(result['errors']),
+    )
+    return result
+
+
 # ─── CLI 진입점 ────────────────────────────────────────────
 def _cli_auth() -> int:
     try:
@@ -1267,6 +1395,25 @@ def _cli_fetch(args) -> int:
     return 0
 
 
+def _cli_download_pending(args) -> int:
+    """--mode download-pending [--limit N]: 미다운로드 sales_history 일괄 처리."""
+    limit = args.limit if (args.limit and args.limit > 0) else None
+    result = download_pending_invoices(limit=limit, triggered_by="manual")
+    print("\n=== download-pending 결과 ===")
+    print(
+        f"total={result['total']} success={result['success']} "
+        f"skipped={result['skipped']} matching_failed={result['matching_failed']} "
+        f"failed={result['failed']} errors={len(result['errors'])}"
+    )
+    if result['errors']:
+        print("\n[errors 상세]")
+        for e in result['errors'][:10]:
+            print(f"  - {e}")
+        if len(result['errors']) > 10:
+            print(f"  ... ({len(result['errors']) - 10}건 더)")
+    return 0 if (result['failed'] == 0 and result['matching_failed'] == 0) else 1
+
+
 def _cli_pdf_test(args) -> int:
     """--mode pdf-test --hbl <HBL>: download_invoice_pdf 호출 + 결과 출력."""
     if not args.hbl:
@@ -1340,12 +1487,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["auth", "fetch", "match", "html-test", "pdf-test"],
+        choices=["auth", "fetch", "match", "html-test", "pdf-test", "download-pending"],
         help=(
             "실행 모드 (auth=로그인 검증, fetch=주문 조회+저장, "
             "match=KREAM↔허브넷 매칭, html-test=송장 HTML 저장, "
-            "pdf-test=송장 PDF 다운로드+로깅)"
+            "pdf-test=단일 PDF, download-pending=미다운로드 일괄)"
         ),
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="download-pending 모드의 최대 처리 건수",
     )
     parser.add_argument("--hbl", help="html-test 모드의 HBL 번호 (예: H2604252301517)")
     parser.add_argument("--start", help="조회 시작일 YYYY-MM-DD (fetch 모드 필수)")
@@ -1377,6 +1528,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cli_html_test(args)
     if args.mode == "pdf-test":
         return _cli_pdf_test(args)
+    if args.mode == "download-pending":
+        return _cli_download_pending(args)
     return 2
 
 
