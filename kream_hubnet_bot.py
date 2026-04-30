@@ -1210,7 +1210,7 @@ def download_pending_invoices(
         'matching_failed': 0, 'failed': 0, 'errors': [],
     }
 
-    # 1) 대상 조회
+    # 1) 대상 조회 — 최신 판매 우선 (trade_date DESC, id DESC)
     try:
         conn = sqlite3.connect(str(DB_PATH))
         try:
@@ -1219,7 +1219,7 @@ def download_pending_invoices(
                 "SELECT order_id, hbl_number FROM sales_history "
                 "WHERE hbl_number IS NOT NULL AND hbl_number != '' "
                 "  AND (pdf_path IS NULL OR pdf_path = '') "
-                "ORDER BY order_id"
+                "ORDER BY trade_date DESC, id DESC"
             )
             params: tuple = ()
             if limit and limit > 0:
@@ -1240,8 +1240,19 @@ def download_pending_invoices(
         return result
     logger.info("download_pending_invoices: 대상 %d건 (limit=%s)", len(rows), limit)
 
-    # 2) 행 단위 처리
-    for order_id, hbl in rows:
+    # 2) 사전 인증 체크 — 세션 자체가 죽었으면 루프 진입 의미 없음
+    try:
+        ensure_hubnet_logged_in()
+    except RuntimeError as e:
+        msg = f"인증 실패 — 즉시 중단: {e}"
+        logger.error(msg)
+        result['errors'].append({'reason': msg})
+        result['failed'] = result['total']
+        return result
+
+    # 3) 행 단위 처리 (격리 원칙: 한 건 실패도 루프 계속)
+    for idx, (order_id, hbl) in enumerate(rows, 1):
+        logger.info("[%d/%d] 처리: order_id=%s hbl=%s", idx, len(rows), order_id, hbl)
         try:
             r = download_invoice_pdf(hbl, kream_order_id=order_id, triggered_by=triggered_by)
         except Exception as e:  # noqa: BLE001 — 행 단위 격리
@@ -1276,13 +1287,34 @@ def download_pending_invoices(
             })
             continue
 
-        # 3) success/skipped → sales_history 양방향 갱신
+        # 4) sales_history 양방향 갱신
+        # - success: 항상 갱신 (새 다운로드 결과 반영)
+        # - skipped: pdf_path가 비어있을 때만 보정 (이미 채워져 있으면 건드리지 않음)
         if not pdf_path:
             logger.warning(
                 "pdf_path 없음(status=%s) — sales_history 갱신 skip: order_id=%s",
                 status, order_id,
             )
             continue
+        if status == 'skipped':
+            try:
+                conn = sqlite3.connect(str(DB_PATH))
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT pdf_path FROM sales_history WHERE order_id = ?",
+                        (order_id,),
+                    )
+                    sh_row = cur.fetchone()
+                finally:
+                    conn.close()
+            except sqlite3.Error as e:
+                logger.error("sales_history 보정 사전조회 실패: %s", e)
+                continue
+            if sh_row and sh_row[0]:
+                # 이미 채워져 있음 — 보정 불요, 건드리지 않음
+                continue
+            logger.info("skipped 보정: pdf_path 비어있음 → 갱신 (order_id=%s)", order_id)
         now_iso = datetime.now(timezone.utc).isoformat()
         try:
             conn = sqlite3.connect(str(DB_PATH))
@@ -1405,7 +1437,8 @@ def _cli_download_pending(args) -> int:
         f"skipped={result['skipped']} matching_failed={result['matching_failed']} "
         f"failed={result['failed']} errors={len(result['errors'])}"
     )
-    if result['errors']:
+    # errors 상세는 -v(verbose) 일 때만 출력
+    if args.verbose and result['errors']:
         print("\n[errors 상세]")
         for e in result['errors'][:10]:
             print(f"  - {e}")
