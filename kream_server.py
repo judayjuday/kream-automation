@@ -17,6 +17,7 @@ import sqlite3
 import smtplib
 import subprocess
 import threading
+import time
 import traceback
 import urllib.request
 import urllib.error
@@ -697,6 +698,46 @@ def _init_bid_competition_log():
     conn.close()
 
 _init_bid_competition_log()
+
+
+def _init_size_charts_tables():
+    """Step 12: size_charts + size_conversion_log."""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS size_charts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chart_name TEXT NOT NULL,
+        brand TEXT NOT NULL,
+        gender TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'shoes',
+        purchase_country TEXT DEFAULT 'ALL',
+        eu_size TEXT NOT NULL,
+        us_size TEXT,
+        uk_size TEXT,
+        kream_mm INTEGER NOT NULL,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(brand, gender, category, eu_size, purchase_country)
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_size_charts_brand ON size_charts(brand, gender, category)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_size_charts_eu ON size_charts(eu_size)")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS size_conversion_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand TEXT NOT NULL,
+        model TEXT,
+        raw_size TEXT NOT NULL,
+        normalized_size TEXT,
+        kream_mm INTEGER,
+        rule_applied TEXT,
+        decision_notes TEXT,
+        logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_size_log_brand_model ON size_conversion_log(brand, model)")
+    conn.commit()
+    conn.close()
+
+_init_size_charts_tables()
 
 
 def calc_customer_total(bid_price, category="신발"):
@@ -8397,6 +8438,69 @@ def serve_label_pdf(filename):
     if not full_path.exists() or not full_path.is_file():
         return jsonify({"success": False, "error": "PDF not found"}), 404
     return send_from_directory(labels_dir, filename, mimetype="application/pdf")
+
+
+# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════
+# Step 12: 사이즈 변환 시스템 API
+# ═══════════════════════════════════════════
+
+@app.route("/api/size-charts/import", methods=["POST"])
+def api_size_charts_import():
+    """엑셀 업로드 → size_charts 임포트."""
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "file 필드 없음"}), 400
+    f = request.files["file"]
+    tmp_path = BASE_DIR / f"_tmp_size_chart_{int(time.time())}.xlsx"
+    try:
+        f.save(str(tmp_path))
+        from size_converter import import_size_chart_from_xlsx
+        result = import_size_chart_from_xlsx(str(tmp_path))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+@app.route("/api/size-charts/list")
+def api_size_charts_list():
+    """저장된 사이즈표 목록 (그룹화)."""
+    with sqlite3.connect(str(PRICE_DB)) as conn:
+        rows = conn.execute("""
+            SELECT brand, gender, category, COUNT(*) AS size_count,
+                   MIN(kream_mm) AS min_mm, MAX(kream_mm) AS max_mm
+            FROM size_charts
+            GROUP BY brand, gender, category
+            ORDER BY brand, gender, category
+        """).fetchall()
+    return jsonify({
+        "ok": True,
+        "charts": [
+            {"brand": r[0], "gender": r[1], "category": r[2],
+             "size_count": r[3], "min_mm": r[4], "max_mm": r[5]}
+            for r in rows
+        ]
+    })
+
+
+@app.route("/api/size-charts/test", methods=["POST"])
+def api_size_charts_test():
+    """변환 테스트 (디버깅용). body={brand, gender, category, model, size, model_sizes:[...]}"""
+    data = request.get_json() or {}
+    from size_converter import convert_to_kream_mm
+    mm = convert_to_kream_mm(
+        brand=data.get("brand", "ADIDAS"),
+        gender=data.get("gender", "M"),
+        category=data.get("category", "shoes"),
+        model=data.get("model", "TEST"),
+        size_str=data.get("size", ""),
+        model_sizes_set=set(data.get("model_sizes", [])),
+        purchase_country=data.get("purchase_country", "ALL"),
+        log=False,
+    )
+    return jsonify({"ok": True, "kream_mm": mm})
 
 
 # ═══════════════════════════════════════════
