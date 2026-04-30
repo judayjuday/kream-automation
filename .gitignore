@@ -2,6 +2,7 @@ auth_state.json
 auth_state_kream.json
 auth_state_backup.json
 auth_state_partner_backup.json
+auth_state_hubnet.json
 settings.json
 __pycache__
 *.pyc
