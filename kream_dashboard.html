@@ -1865,22 +1865,26 @@ function loadSettings() {
     // 이전 캐시에서 잘못된 기본값 보정
     // feeRate는 settings.json/localStorage에서 로드 (기본 6%)
     if (!SETTINGS.undercutAmount || SETTINGS.undercutAmount >= 3000) SETTINGS.undercutAmount = 1000;
-    document.getElementById('set-cny-rate').value = SETTINGS.cnyRate;
-    document.getElementById('set-usd-rate').value = SETTINGS.usdRate;
-    document.getElementById('set-fee').value = SETTINGS.feeRate;
-    document.getElementById('set-fixed').value = SETTINGS.fixedFee;
-    document.getElementById('set-ship').value = SETTINGS.defaultShip;
-    document.getElementById('set-target').value = SETTINGS.targetMargin;
-    document.getElementById('set-undercut').value = SETTINGS.undercutAmount || 1000;
+    // settings 탭은 동적 로드(_loadTab) — 페이지 로드 직후엔 set-* 요소가 DOM에 없을 수 있음. null 가드 필수.
+    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    _setVal('set-cny-rate', SETTINGS.cnyRate);
+    _setVal('set-usd-rate', SETTINGS.usdRate);
+    _setVal('set-fee', SETTINGS.feeRate);
+    _setVal('set-fixed', SETTINGS.fixedFee);
+    _setVal('set-ship', SETTINGS.defaultShip);
+    _setVal('set-target', SETTINGS.targetMargin);
+    _setVal('set-undercut', SETTINGS.undercutAmount || 1000);
     if (SETTINGS.headless !== undefined) {
-      document.getElementById('set-headless').checked = SETTINGS.headless;
-      document.getElementById('headless-label').textContent =
-        SETTINGS.headless ? 'ON (백그라운드 실행)' : 'OFF (브라우저 표시)';
+      const hEl = document.getElementById('set-headless');
+      const hLabel = document.getElementById('headless-label');
+      if (hEl) hEl.checked = SETTINGS.headless;
+      if (hLabel) hLabel.textContent = SETTINGS.headless ? 'ON (백그라운드 실행)' : 'OFF (브라우저 표시)';
     }
     if (SETTINGS.autoRenewBids !== undefined) {
-      document.getElementById('set-auto-renew').checked = SETTINGS.autoRenewBids;
-      document.getElementById('auto-renew-label').textContent =
-        SETTINGS.autoRenewBids ? 'ON (자동 갱신)' : 'OFF (수동 승인)';
+      const arEl = document.getElementById('set-auto-renew');
+      const arLabel = document.getElementById('auto-renew-label');
+      if (arEl) arEl.checked = SETTINGS.autoRenewBids;
+      if (arLabel) arLabel.textContent = SETTINGS.autoRenewBids ? 'ON (자동 갱신)' : 'OFF (수동 승인)';
     }
     const reqCnyEl = document.getElementById('set-require-cny');
     if (reqCnyEl) {
@@ -6891,6 +6895,198 @@ function loadLogisticsAll() {
   loadPendingShipments();
   loadShipmentRequests();
   loadLogisticsStats();
+  try { hubnetInit(); } catch(e) { console.error(e); }
+}
+
+// ─── 허브넷 PDF 자동 다운로드 패널 (Step 9) ────────────────
+async function hubnetInit() {
+  await hubnetLoadStatus();
+  await hubnetLoadLog();
+}
+async function hubnetRefresh() {
+  await hubnetLoadStatus();
+  await hubnetLoadLog();
+}
+async function hubnetLoadStatus() {
+  try {
+    const r = await fetch('/api/hubnet/status');
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'status 로드 실패');
+    const s = j.data.session, t = j.data.today;
+    const ind = document.getElementById('hubnet-session-indicator');
+    const det = document.getElementById('hubnet-session-detail');
+    if (s.valid) {
+      ind.textContent = '🟢';
+      det.textContent = '정상 (저장: ' + hubnetRelTime(s.saved_at) + ')';
+    } else {
+      ind.textContent = '🔴';
+      det.textContent = '만료 — 재로그인 필요';
+    }
+    document.getElementById('hubnet-stat-success').textContent = t.success;
+    document.getElementById('hubnet-stat-failed').textContent = t.failed;
+    document.getElementById('hubnet-stat-skipped').textContent = t.skipped;
+    document.getElementById('hubnet-stat-matching-failed').textContent = t.matching_failed;
+    document.getElementById('hubnet-stat-avg-duration').textContent =
+      t.avg_duration_ms ? (t.avg_duration_ms / 1000).toFixed(1) + '초/건' : '데이터 없음';
+    const tg = document.getElementById('hubnet-auto-toggle');
+    tg.checked = !!t.auto_pdf_enabled;
+    tg.disabled = false;
+    document.getElementById('hubnet-auto-label').textContent = t.auto_pdf_enabled ? 'ON' : 'OFF';
+  } catch (e) {
+    document.getElementById('hubnet-session-indicator').textContent = '⚠️';
+    document.getElementById('hubnet-session-detail').textContent = '상태 로드 실패: ' + e.message;
+  }
+}
+async function hubnetLoadLog() {
+  const tbody = document.getElementById('hubnet-log-tbody');
+  try {
+    const r = await fetch('/api/hubnet/pdf/log?limit=20');
+    const j = await r.json();
+    if (!j.success || !j.data.items.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-muted">이력 없음</td></tr>';
+      return;
+    }
+    tbody.innerHTML = j.data.items.map(it => {
+      const action = (it.status === 'success' && it.pdf_path)
+        ? '<a href="' + hubnetPdfUrl(it.pdf_path) + '" target="_blank" title="PDF 열기">📄</a>'
+        : (it.status === 'failed'
+            ? '<button class="btn btn-outline" style="font-size:11px;padding:2px 6px" onclick="hubnetRetry(\'' + (it.hbl_number || '') + '\')">↻</button>'
+            : '');
+      return '<tr><td>' + hubnetTime(it.created_at) + '</td>'
+           + '<td>' + (it.hbl_number || '-') + '</td>'
+           + '<td>' + (it.kream_order_id || '-') + '</td>'
+           + '<td>' + hubnetStatusLabel(it.status) + '</td>'
+           + '<td>' + action + '</td></tr>';
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-muted">이력 로드 실패: ' + e.message + '</td></tr>';
+  }
+}
+function hubnetPdfUrl(absPath) {
+  if (!absPath) return '#';
+  const idx = absPath.indexOf('/labels/');
+  return idx >= 0 ? absPath.slice(idx) : '#';
+}
+function hubnetStatusLabel(s) {
+  return ({success:'✅ 완료', failed:'❌ 실패', skipped:'⏭️ 스킵', matching_failed:'⚠️ 매칭실패'})[s] || s;
+}
+function hubnetTime(iso) {
+  if (!iso) return '-';
+  return iso.replace('T', ' ').slice(5, 19);
+}
+function hubnetRelTime(iso) {
+  if (!iso) return '-';
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return '방금';
+  if (diff < 3600) return Math.floor(diff / 60) + '분 전';
+  if (diff < 86400) return Math.floor(diff / 3600) + '시간 전';
+  return Math.floor(diff / 86400) + '일 전';
+}
+async function hubnetOnAutoToggle(el) {
+  const enabled = el.checked;
+  el.disabled = true;
+  try {
+    const r = await fetch('/api/hubnet/auto-toggle', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({enabled})
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || '토글 실패');
+    document.getElementById('hubnet-auto-label').textContent = enabled ? 'ON' : 'OFF';
+  } catch (e) {
+    el.checked = !enabled;
+    alert('토글 실패: ' + e.message);
+  } finally {
+    el.disabled = false;
+  }
+}
+async function hubnetOnRelogin() {
+  const btn = document.getElementById('hubnet-relogin-btn');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '재로그인 중...';
+  try {
+    const r = await fetch('/api/hubnet/login', {method: 'POST'});
+    const j = await r.json();
+    if (j.success) {
+      alert('재로그인 성공');
+      await hubnetLoadStatus();
+    } else {
+      alert('재로그인 실패: ' + j.error);
+    }
+  } catch (e) {
+    alert('재로그인 오류: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+function hubnetOnOpenSyncModal() {
+  const today = new Date();
+  const wkAgo = new Date(today.getTime() - 7 * 86400000);
+  document.getElementById('hubnet-sync-start').value = wkAgo.toISOString().slice(0, 10);
+  document.getElementById('hubnet-sync-end').value = today.toISOString().slice(0, 10);
+  document.getElementById('hubnet-sync-progress').style.display = 'none';
+  document.getElementById('hubnet-sync-modal').style.display = 'flex';
+}
+function hubnetCloseSyncModal() {
+  document.getElementById('hubnet-sync-modal').style.display = 'none';
+}
+async function hubnetOnSyncConfirm() {
+  const start = document.getElementById('hubnet-sync-start').value;
+  const end = document.getElementById('hubnet-sync-end').value;
+  if (!start || !end) { alert('날짜를 모두 입력하세요'); return; }
+  const progress = document.getElementById('hubnet-sync-progress');
+  const stage = document.getElementById('hubnet-sync-progress-stage');
+  const btn = document.getElementById('hubnet-sync-confirm-btn');
+  btn.disabled = true;
+  progress.style.display = 'block';
+  try {
+    stage.textContent = '데이터 조회 중...';
+    const r1 = await fetch('/api/hubnet/sync', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({start_date: start, end_date: end})
+    });
+    const j1 = await r1.json();
+    if (!j1.success) throw new Error(j1.error);
+    stage.textContent = 'PDF 다운로드 중... (매칭 ' + j1.data.matched + '건)';
+    const r2 = await fetch('/api/hubnet/pdf/batch', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({})
+    });
+    const j2 = await r2.json();
+    if (!j2.success) throw new Error(j2.error);
+    const d2 = j2.data;
+    alert('동기화 완료\n조회: ' + j1.data.fetched + '건\n매칭: ' + j1.data.matched + '건\nPDF: 성공 ' + d2.success + ' / 스킵 ' + d2.skipped + ' / 실패 ' + d2.failed);
+    hubnetCloseSyncModal();
+    await hubnetLoadStatus();
+    await hubnetLoadLog();
+  } catch (e) {
+    alert('동기화 실패: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    progress.style.display = 'none';
+  }
+}
+async function hubnetRetry(hbl) {
+  if (!hbl) return;
+  if (!confirm('HBL ' + hbl + ' 재다운로드?')) return;
+  try {
+    const r = await fetch('/api/hubnet/pdf/download', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({hbl_number: hbl})
+    });
+    const j = await r.json();
+    if (j.success) {
+      alert('재다운로드 결과: ' + j.data.status);
+      await hubnetLoadStatus();
+      await hubnetLoadLog();
+    } else {
+      alert('실패: ' + j.error);
+    }
+  } catch (e) {
+    alert('오류: ' + e.message);
+  }
 }
 
 function loadLogisticsStats() {

@@ -1,4 +1,93 @@
       <div id="tab-logistics" class="tab-view">
+        <!-- 허브넷 PDF 자동 다운로드 (Step 9) -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📦</span> 허브넷 PDF 자동 다운로드</span>
+            <button class="btn btn-outline" onclick="hubnetRefresh()" style="font-size:12px; padding:4px 12px">🔄 새로고침</button>
+          </div>
+
+          <!-- 상태 영역 -->
+          <div style="display:flex; flex-wrap:wrap; gap:24px; align-items:center; margin:8px 0 12px; padding:12px; background:var(--bg2); border-radius:8px; font-size:13px">
+            <span>
+              세션: <span id="hubnet-session-indicator">⏳</span>
+              <span id="hubnet-session-detail" class="text-muted">확인 중...</span>
+            </span>
+            <span style="display:flex; align-items:center; gap:8px">
+              자동 다운로드:
+              <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer">
+                <input type="checkbox" id="hubnet-auto-toggle" disabled onchange="hubnetOnAutoToggle(this)">
+                <span id="hubnet-auto-label" style="font-weight:600">OFF</span>
+              </label>
+            </span>
+          </div>
+
+          <!-- 액션 버튼 -->
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px">
+            <button class="btn btn-outline" id="hubnet-relogin-btn" onclick="hubnetOnRelogin()" style="font-size:12px">수동 재로그인</button>
+            <button class="btn btn-primary" id="hubnet-sync-btn" onclick="hubnetOnOpenSyncModal()" style="font-size:12px">지금 동기화</button>
+          </div>
+
+          <!-- 오늘 통계 -->
+          <div style="margin-bottom:12px">
+            <div style="font-size:12px; color:var(--text3); margin-bottom:6px">📊 오늘 통계</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px">
+              <div style="background:var(--bg2); padding:8px 10px; border-radius:6px; font-size:12px">성공: <span id="hubnet-stat-success" style="font-weight:600">-</span>건</div>
+              <div style="background:var(--bg2); padding:8px 10px; border-radius:6px; font-size:12px">실패: <span id="hubnet-stat-failed" style="font-weight:600">-</span>건</div>
+              <div style="background:var(--bg2); padding:8px 10px; border-radius:6px; font-size:12px">스킵: <span id="hubnet-stat-skipped" style="font-weight:600">-</span>건</div>
+              <div style="background:var(--bg2); padding:8px 10px; border-radius:6px; font-size:12px">매칭실패: <span id="hubnet-stat-matching-failed" style="font-weight:600">-</span>건</div>
+              <div style="background:var(--bg2); padding:8px 10px; border-radius:6px; font-size:12px">평균: <span id="hubnet-stat-avg-duration" style="font-weight:600">-</span></div>
+            </div>
+          </div>
+
+          <!-- 이력 테이블 -->
+          <div>
+            <div style="font-size:12px; color:var(--text3); margin-bottom:6px">📋 최근 다운로드 이력 (최근 20건)</div>
+            <div style="overflow-x:auto">
+              <table>
+                <thead>
+                  <tr>
+                    <th>시각</th>
+                    <th>HBL</th>
+                    <th>주문번호</th>
+                    <th>상태</th>
+                    <th>액션</th>
+                  </tr>
+                </thead>
+                <tbody id="hubnet-log-tbody">
+                  <tr><td colspan="5" class="text-muted">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 동기화 날짜 입력 모달 -->
+        <div id="hubnet-sync-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center">
+          <div style="background:var(--card); border-radius:12px; padding:24px; width:420px; max-width:90vw">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+              <h3 style="margin:0; font-size:16px">허브넷 데이터 동기화</h3>
+              <button onclick="hubnetCloseSyncModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text3)">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px">
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text3)">
+                시작일
+                <input type="date" id="hubnet-sync-start" class="form-input">
+              </label>
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text3)">
+                종료일
+                <input type="date" id="hubnet-sync-end" class="form-input">
+              </label>
+            </div>
+            <div id="hubnet-sync-progress" style="display:none; margin-bottom:12px; padding:8px; background:var(--bg2); border-radius:6px; font-size:12px">
+              <span id="hubnet-sync-progress-stage">동기화 중...</span>
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end">
+              <button class="btn btn-outline" onclick="hubnetCloseSyncModal()" style="font-size:12px">취소</button>
+              <button class="btn btn-primary" id="hubnet-sync-confirm-btn" onclick="hubnetOnSyncConfirm()" style="font-size:12px">동기화 시작</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 현황 카드 -->
         <div class="card">
           <div class="card-title"><span class="icon">🚚</span> 물류 현황</div>

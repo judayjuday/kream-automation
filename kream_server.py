@@ -8017,8 +8017,20 @@ def _hubnet_session_meta() -> dict:
 
 
 def _hubnet_today_stats() -> dict:
-    """hubnet_pdf_log에서 오늘(localtime) 상태별 카운트."""
-    stats = {"success": 0, "failed": 0, "skipped": 0, "matching_failed": 0}
+    """hubnet_pdf_log에서 오늘(localtime) 상태별 카운트 + 평균 duration + 자동토글."""
+    stats = {
+        "success": 0, "failed": 0, "skipped": 0, "matching_failed": 0,
+        "avg_duration_ms": None,
+        "auto_pdf_enabled": False,
+    }
+    # 자동 토글 값
+    try:
+        with open(BASE_DIR / "settings.json", "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        stats["auto_pdf_enabled"] = bool(settings.get("hubnet_auto_pdf", False))
+    except OSError:
+        pass
+    # DB 통계
     try:
         conn = sqlite3.connect(str(PRICE_DB))
         try:
@@ -8031,6 +8043,14 @@ def _hubnet_today_stats() -> dict:
             for status, count in cur.fetchall():
                 if status in stats:
                     stats[status] = count
+            cur.execute(
+                "SELECT AVG(duration_ms) FROM hubnet_pdf_log "
+                "WHERE date(created_at) = date('now', 'localtime') "
+                "  AND duration_ms IS NOT NULL"
+            )
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                stats["avg_duration_ms"] = int(row[0])
         finally:
             conn.close()
     except sqlite3.Error:
@@ -8220,6 +8240,56 @@ def api_hubnet_pdf_log():
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hubnet/auto-toggle", methods=["POST"])
+def api_hubnet_auto_toggle():
+    """settings.json hubnet_auto_pdf 토글. body={"enabled": bool}"""
+    try:
+        body = request.get_json(silent=True) or {}
+        if "enabled" not in body or not isinstance(body["enabled"], bool):
+            return jsonify({
+                "success": False,
+                "error": "enabled (bool) 필수",
+            }), 400
+        new_val = body["enabled"]
+        settings_path = BASE_DIR / "settings.json"
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        previous = bool(settings.get("hubnet_auto_pdf", False))
+        settings["hubnet_auto_pdf"] = new_val
+        # atomic write
+        tmp = settings_path.with_suffix(".json.tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+        tmp.replace(settings_path)
+        return jsonify({
+            "success": True,
+            "data": {"enabled": new_val, "previous": previous},
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/labels/<path:filename>")
+def serve_label_pdf(filename):
+    """labels 폴더 PDF 정적 서빙. settings.json hubnet_pdf_dir 기준.
+
+    보안: '..' 또는 절대경로 차단 (path traversal 방지).
+    Cloudflare Tunnel 호환을 위해 file:// 대신 사용.
+    """
+    if ".." in filename or filename.startswith("/"):
+        return jsonify({"success": False, "error": "잘못된 경로"}), 400
+    try:
+        with open(BASE_DIR / "settings.json", "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        labels_dir = settings.get("hubnet_pdf_dir") or str(BASE_DIR / "labels")
+    except OSError:
+        labels_dir = str(BASE_DIR / "labels")
+    full_path = Path(labels_dir) / filename
+    if not full_path.exists() or not full_path.is_file():
+        return jsonify({"success": False, "error": "PDF not found"}), 404
+    return send_from_directory(labels_dir, filename, mimetype="application/pdf")
 
 
 # ═══════════════════════════════════════════
