@@ -38,6 +38,16 @@ from kream_bot import (
 )
 from playwright.async_api import async_playwright
 from health_alert import HealthAlert
+from kream_hubnet_bot import (
+    ensure_hubnet_logged_in,
+    hubnet_login,
+    save_hubnet_session,
+    fetch_hubnet_orders,
+    upsert_hubnet_orders,
+    match_all_unmatched,
+    download_invoice_pdf,
+    download_pending_invoices,
+)
 
 app = Flask(__name__)
 
@@ -7964,6 +7974,252 @@ def api_auto_cleanup_history():
         return jsonify({"ok": True, "history": [dict(r) for r in rows], "count": len(rows)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════
+# 허브넷 통합 API (Step 8 — 작업지시서 §4.1)
+# 응답 표준: {"success": bool, "data": ...} 또는 {"success": false, "error": "..."}
+# ═══════════════════════════════════════════
+
+def _hubnet_session_meta() -> dict:
+    """auth_state_hubnet.json 세션 메타 + 만료 추정 체크."""
+    meta = {"valid": False, "saved_at": None, "expires_estimate": None}
+    try:
+        with open(BASE_DIR / "settings.json", "r", encoding="utf-8") as f:
+            settings = json.load(f)
+    except OSError:
+        return meta
+    session_path = settings.get("hubnet_session_path") or "auth_state_hubnet.json"
+    p = Path(session_path)
+    if not p.is_absolute():
+        p = BASE_DIR / p
+    if not p.exists():
+        return meta
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return meta
+    meta["saved_at"] = data.get("saved_at")
+    meta["expires_estimate"] = data.get("expires_estimate")
+    meta["valid"] = bool(data.get("cookies"))
+    if meta["expires_estimate"]:
+        try:
+            from datetime import timezone as _tz
+            exp = datetime.fromisoformat(meta["expires_estimate"])
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=_tz.utc)
+            if exp <= datetime.now(_tz.utc):
+                meta["valid"] = False
+        except (ValueError, TypeError):
+            pass
+    return meta
+
+
+def _hubnet_today_stats() -> dict:
+    """hubnet_pdf_log에서 오늘(localtime) 상태별 카운트."""
+    stats = {"success": 0, "failed": 0, "skipped": 0, "matching_failed": 0}
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT status, COUNT(*) FROM hubnet_pdf_log "
+                "WHERE date(created_at) = date('now', 'localtime') "
+                "GROUP BY status"
+            )
+            for status, count in cur.fetchall():
+                if status in stats:
+                    stats[status] = count
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        pass
+    return stats
+
+
+@app.route("/api/hubnet/status")
+def api_hubnet_status():
+    try:
+        return jsonify({
+            "success": True,
+            "data": {
+                "session": _hubnet_session_meta(),
+                "today": _hubnet_today_stats(),
+            },
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hubnet/login", methods=["POST"])
+def api_hubnet_login():
+    try:
+        with open(BASE_DIR / "settings.json", "r", encoding="utf-8") as f:
+            settings = json.load(f)
+        email = settings.get("hubnet_email")
+        password = settings.get("hubnet_password")
+        if not email or not password:
+            return jsonify({
+                "success": False,
+                "error": "settings.json에 hubnet_email/password 없음",
+            }), 400
+        sess = hubnet_login(email, password)
+        session_path = settings.get("hubnet_session_path") or "auth_state_hubnet.json"
+        p = Path(session_path)
+        if not p.is_absolute():
+            p = BASE_DIR / p
+        save_hubnet_session(sess, str(p))
+        meta = _hubnet_session_meta()
+        return jsonify({
+            "success": True,
+            "data": {
+                "saved_at": meta.get("saved_at"),
+                "session_path": str(p),
+            },
+        })
+    except RuntimeError as e:
+        return jsonify({"success": False, "error": str(e)}), 401
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hubnet/sync", methods=["POST"])
+def api_hubnet_sync():
+    try:
+        body = request.get_json(silent=True) or {}
+        start_date = (body.get("start_date") or "").strip()
+        end_date = (body.get("end_date") or "").strip()
+        date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        if not date_re.match(start_date):
+            return jsonify({
+                "success": False,
+                "error": "start_date 형식 오류 (YYYY-MM-DD 필수)",
+            }), 400
+        if not date_re.match(end_date):
+            return jsonify({
+                "success": False,
+                "error": "end_date 형식 오류 (YYYY-MM-DD 필수)",
+            }), 400
+        if start_date > end_date:
+            return jsonify({
+                "success": False,
+                "error": "start_date가 end_date보다 늦음",
+            }), 400
+
+        sess = ensure_hubnet_logged_in()
+        orders = fetch_hubnet_orders(sess, start_date=start_date, end_date=end_date)
+        raw_orders = [o['raw'] for o in orders if isinstance(o, dict) and 'raw' in o]
+        upsert_result = upsert_hubnet_orders(raw_orders)
+        match_result = match_all_unmatched()
+        return jsonify({
+            "success": True,
+            "data": {
+                "fetched": len(orders),
+                "upserted": upsert_result.get('total', 0),
+                "matched": match_result.get('matched', 0),
+            },
+        })
+    except RuntimeError as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hubnet/pdf/download", methods=["POST"])
+def api_hubnet_pdf_download():
+    try:
+        body = request.get_json(silent=True) or {}
+        hbl = (body.get("hbl_number") or "").strip()
+        order_id = (body.get("order_id") or "").strip() or None
+        if not hbl:
+            return jsonify({"success": False, "error": "hbl_number 필수"}), 400
+        result = download_invoice_pdf(
+            hbl, kream_order_id=order_id, triggered_by="manual",
+        )
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hubnet/pdf/batch", methods=["POST"])
+def api_hubnet_pdf_batch():
+    try:
+        body = request.get_json(silent=True) or {}
+        limit = body.get("limit")
+        if limit is not None:
+            try:
+                limit = int(limit)
+            except (TypeError, ValueError):
+                return jsonify({
+                    "success": False,
+                    "error": "limit은 정수여야 함",
+                }), 400
+            if limit <= 0:
+                limit = None
+        result = download_pending_invoices(limit=limit, triggered_by="manual")
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hubnet/pdf/log")
+def api_hubnet_pdf_log():
+    try:
+        try:
+            limit = int(request.args.get("limit", "50"))
+        except (TypeError, ValueError):
+            limit = 50
+        if limit < 1:
+            limit = 50
+        if limit > 500:
+            limit = 500  # clamp
+        status = (request.args.get("status") or "all").strip().lower()
+        valid_statuses = {"all", "success", "failed", "skipped", "matching_failed"}
+        if status not in valid_statuses:
+            return jsonify({
+                "success": False,
+                "error": f"status는 {sorted(valid_statuses)} 중 하나",
+            }), 400
+
+        conn = sqlite3.connect(str(PRICE_DB))
+        try:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            base_cols = (
+                "id, hbl_number, kream_order_id, pdf_path, file_size, "
+                "status, error_message, duration_ms, triggered_by, created_at"
+            )
+            if status == "all":
+                cur.execute(
+                    f"SELECT {base_cols} FROM hubnet_pdf_log "
+                    f"ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                )
+                items = [dict(r) for r in cur.fetchall()]
+                cur.execute("SELECT COUNT(*) FROM hubnet_pdf_log")
+                total = cur.fetchone()[0]
+            else:
+                cur.execute(
+                    f"SELECT {base_cols} FROM hubnet_pdf_log "
+                    f"WHERE status = ? ORDER BY id DESC LIMIT ?",
+                    (status, limit),
+                )
+                items = [dict(r) for r in cur.fetchall()]
+                cur.execute(
+                    "SELECT COUNT(*) FROM hubnet_pdf_log WHERE status = ?",
+                    (status,),
+                )
+                total = cur.fetchone()[0]
+        finally:
+            conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": {"items": items, "total": total},
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ═══════════════════════════════════════════
