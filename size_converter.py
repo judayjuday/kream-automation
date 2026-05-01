@@ -1,8 +1,26 @@
-"""사이즈 변환 시스템 (Step 12).
+"""사이즈 변환 시스템 (Step 12 + Step 15/15b/15d 분수 정책 수정).
 
 흐름:
-1. normalize_size(): '38⅔' 같은 분수 사이즈 → '38' 또는 None
+1. normalize_size(): '38⅔' 같은 분수 사이즈 → '38.5' / '38'
 2. convert_to_kream_mm(): 정규화된 EU 사이즈 → KREAM mm
+
+분수 매핑 정책 (Step 15):
+- "X⅓" → "X"   (예: 39⅓ → 39)
+- "X⅔" → "X.5" (예: 38⅔ → 38.5)
+- "X½" → "X.5" (예: 41½ → 41.5)
+- 그 외 분수 → 정수 (안전한 기본값)
+
+Step 15b 보강:
+- excluded_int_exists 룰 폐기. 같은 모델에 정수와 분수가 함께 들어와도
+  분수를 격리하지 않고 정상 매핑 (识货 데이터에서 동일 사이즈가
+  두 표기로 동시에 들어오는 케이스 대응).
+- model_sizes_set 매개변수는 시그니처 호환을 위해 유지 (사용 안 함).
+
+Step 15d 보강:
+- ⅔ 폴백: convert_to_kream_mm에서 X.5가 size_charts에 없으면 X(정수)로
+  재조회 (예: ADIDAS 52.5 미등록 → 52⅔ → 52 → 345mm).
+- convert_to_kream_mm 반환을 (mm, used_normalized) 튜플로 확장.
+  폴백 발생 시 used_normalized가 정수 문자열이 됨.
 """
 from __future__ import annotations
 
@@ -29,9 +47,12 @@ def is_fraction_size(size_str) -> bool:
 
 def normalize_size(size_str, model_sizes_set):
     """
-    분수 사이즈 처리 룰:
+    분수 사이즈 처리 룰 (Step 15 + 15b):
     - 정수+0.5 단위는 그대로 (35.5는 분수가 아니라 0.5 단위)
-    - ⅓·⅔ 분수: 같은 모델에 정수 EU 있으면 제외, 없으면 정수로 치환
+    - ⅓ → 정수, ⅔ → 다음 0.5, ½ → 0.5
+    - 그 외 분수 표기(1/3 등) → 정수 (안전한 기본값)
+    - excluded_int_exists 룰 폐기 (Step 15b): 같은 모델에 정수와 분수가
+      함께 들어와도 분수도 정상 매핑.
 
     Returns: (정규화된_사이즈, 적용된_룰명)
     """
@@ -46,12 +67,14 @@ def normalize_size(size_str, model_sizes_set):
     m = re.match(r'(\d+)', s)
     if not m:
         return None, 'parse_failed'
-    base = m.group(1)
+    base_int = m.group(1)
 
-    if base in model_sizes_set:
-        return None, 'excluded_int_exists'
+    if '⅔' in s or '½' in s:
+        normalized = f'{base_int}.5'
+    else:
+        normalized = base_int
 
-    return base, 'fraction_to_int'
+    return normalized, 'fraction_to_half_or_int'
 
 
 def convert_to_kream_mm(brand: str, gender: str, category: str,
@@ -59,31 +82,52 @@ def convert_to_kream_mm(brand: str, gender: str, category: str,
                         model_sizes_set,
                         purchase_country: str = 'ALL',
                         log: bool = True):
-    """EU 사이즈 → KREAM mm. 변환 실패 시 None."""
+    """EU 사이즈 → KREAM mm.
+
+    Returns: (kream_mm, used_normalized)
+    - 변환 실패: (None, normalized_or_None)
+    - ⅔ 폴백 발생 시 used_normalized는 폴백된 정수 문자열
+    """
     brand_upper = (brand or '').upper()
 
     normalized, rule = normalize_size(size_str, model_sizes_set or set())
     result_mm = None
+    final_rule = rule
+    used_normalized = normalized
 
     if normalized is not None:
+        sql = """
+            SELECT kream_mm FROM size_charts
+            WHERE brand=? AND gender=? AND category=? AND eu_size=?
+              AND purchase_country IN (?, 'ALL')
+            ORDER BY CASE purchase_country WHEN ? THEN 0 ELSE 1 END
+            LIMIT 1
+        """
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
-            c.execute("""
-                SELECT kream_mm FROM size_charts
-                WHERE brand=? AND gender=? AND category=? AND eu_size=?
-                  AND purchase_country IN (?, 'ALL')
-                ORDER BY CASE purchase_country WHEN ? THEN 0 ELSE 1 END
-                LIMIT 1
-            """, (brand_upper, gender, category, normalized,
-                  purchase_country, purchase_country))
+            c.execute(sql, (brand_upper, gender, category, normalized,
+                            purchase_country, purchase_country))
             row = c.fetchone()
             if row:
                 result_mm = row[0]
-                final_rule = rule
             else:
-                final_rule = f'{rule}_no_chart_match'
-    else:
-        final_rule = rule
+                # Step 15d ⅔ 폴백: X.5 미등록 시 X(정수)로 재조회
+                raw = str(size_str)
+                if (rule == 'fraction_to_half_or_int'
+                        and '⅔' in raw
+                        and normalized.endswith('.5')):
+                    fallback_int = normalized[:-2]
+                    c.execute(sql, (brand_upper, gender, category, fallback_int,
+                                    purchase_country, purchase_country))
+                    row2 = c.fetchone()
+                    if row2:
+                        result_mm = row2[0]
+                        used_normalized = fallback_int
+                        final_rule = 'fraction_to_half_or_int_fallback_int'
+                    else:
+                        final_rule = f'{rule}_no_chart_match'
+                else:
+                    final_rule = f'{rule}_no_chart_match'
 
     if log:
         try:
@@ -92,12 +136,12 @@ def convert_to_kream_mm(brand: str, gender: str, category: str,
                     INSERT INTO size_conversion_log
                     (brand, model, raw_size, normalized_size, kream_mm, rule_applied)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (brand_upper, model, str(size_str), normalized, result_mm, final_rule))
+                """, (brand_upper, model, str(size_str), used_normalized, result_mm, final_rule))
                 conn.commit()
         except Exception:
             pass
 
-    return result_mm
+    return result_mm, used_normalized
 
 
 def import_size_chart_from_xlsx(xlsx_path: str, dry_run: bool = False) -> dict:

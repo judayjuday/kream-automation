@@ -244,6 +244,7 @@ def _init_bid_cost_table():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model ON bid_cost(model)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model_size ON bid_cost(model, size)")
     conn.commit()
     conn.close()
 
@@ -738,6 +739,41 @@ def _init_size_charts_tables():
     conn.close()
 
 _init_size_charts_tables()
+
+
+def _init_shihuo_prices_table():
+    """Step 15: 識货 시장가 임포트 결과 저장 테이블."""
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS shihuo_prices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        brand_raw TEXT,
+        brand_normalized TEXT,
+        category TEXT,
+        model TEXT NOT NULL,
+        color TEXT,
+        size_eu TEXT,
+        size_normalized TEXT,
+        kream_mm INTEGER,
+        cny_price REAL NOT NULL,
+        supplier TEXT,
+        platform TEXT,
+        source_created_at DATETIME,
+        imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        mapping_status TEXT,
+        mapping_note TEXT,
+        UNIQUE(batch_id, model, size_eu)
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_shihuo_active_model ON shihuo_prices(active, model)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_shihuo_active_kream ON shihuo_prices(active, model, kream_mm)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_shihuo_batch ON shihuo_prices(batch_id)")
+    conn.commit()
+    conn.close()
+
+
+_init_shihuo_prices_table()
 
 
 def calc_customer_total(bid_price, category="신발"):
@@ -8502,7 +8538,7 @@ def api_size_charts_test():
     """변환 테스트 (디버깅용). body={brand, gender, category, model, size, model_sizes:[...]}"""
     data = request.get_json() or {}
     from size_converter import convert_to_kream_mm
-    mm = convert_to_kream_mm(
+    mm, used_norm = convert_to_kream_mm(
         brand=data.get("brand", "ADIDAS"),
         gender=data.get("gender", "M"),
         category=data.get("category", "shoes"),
@@ -8512,7 +8548,354 @@ def api_size_charts_test():
         purchase_country=data.get("purchase_country", "ALL"),
         log=False,
     )
-    return jsonify({"ok": True, "kream_mm": mm})
+    return jsonify({"ok": True, "kream_mm": mm, "size_normalized": used_norm})
+
+
+# ═══════════════════════════════════════════
+# Step 15: 識货 시장가 임포트 API
+# ═══════════════════════════════════════════
+
+def normalize_brand(brand_raw, supplier_raw):
+    """品牌名称/供应商 → 정규화 브랜드.
+
+    1. 品牌名称에 'adidas' 포함 (대소문자 무관) → 'ADIDAS'
+    2. 品牌名称가 명확한 ADIDAS 표기 ('三叶草' 단독, 'ADIDAS' 단독) → 'ADIDAS'
+    3. 品牌名称가 '无品牌' 또는 비어있음 → 供应商名称에서 추정
+       - supplier에 'adidas' 포함 → 'ADIDAS'
+       - supplier에 '三叶草' + '官方旗舰店' → 'ADIDAS'
+    4. 그 외 → 'unknown'
+    """
+    b = (brand_raw or "").strip()
+    s = (supplier_raw or "").strip()
+    b_lower = b.lower()
+
+    if "adidas" in b_lower:
+        return "ADIDAS"
+    if b in ("三叶草", "ADIDAS", "Adidas", "adidas"):
+        return "ADIDAS"
+
+    if not b or b == "无品牌":
+        s_lower = s.lower()
+        if "adidas" in s_lower:
+            return "ADIDAS"
+        if "三叶草" in s and "官方旗舰店" in s:
+            return "ADIDAS"
+        return "unknown"
+
+    return "unknown"
+
+
+SHIHUO_REQUIRED_HEADERS = [
+    "产品编号", "产品尺寸欧码", "产品价格", "创建时间",
+    "品牌名称", "产品分类", "供应商名称", "平台名称",
+]
+
+
+def _shihuo_category_to_internal(cat_raw):
+    """产品分类 → size_charts.category (shoes/bags/...)."""
+    c = (cat_raw or "").strip()
+    if "鞋" in c:
+        return "shoes"
+    if "包" in c:
+        return "bags"
+    if "凉" in c or "拖" in c:
+        return "sandals"
+    return "shoes"
+
+
+def _shihuo_is_no_size_category(cat_raw):
+    """가방/액세서리 등 사이즈 차원이 없는 카테고리 판별."""
+    c = (cat_raw or "").strip()
+    return "包" in c
+
+
+@app.route("/api/shihuo/import", methods=["POST"])
+def api_shihuo_import():
+    """識货 엑셀 업로드 → shihuo_prices 임포트.
+
+    응답: {ok, batch_id, total_rows, mapped, no_size, mapping_failed,
+           unknown_brand, models_count, errors[:10]}
+    """
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "file 필드 없음"}), 400
+
+    f = request.files["file"]
+    tmp_path = BASE_DIR / f"_tmp_shihuo_{int(time.time())}.xlsx"
+    try:
+        f.save(str(tmp_path))
+        from openpyxl import load_workbook
+        wb = load_workbook(str(tmp_path), read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if len(rows) < 2:
+            return jsonify({"ok": False, "error": "데이터 없음"}), 400
+
+        header = [str(c).strip() if c else "" for c in rows[0]]
+        missing = [h for h in SHIHUO_REQUIRED_HEADERS if h not in header]
+        if missing:
+            return jsonify({
+                "ok": False,
+                "error": f"필수 헤더 누락: {missing}",
+                "header_found": header,
+            }), 400
+
+        col = {h: header.index(h) for h in SHIHUO_REQUIRED_HEADERS}
+        col_color = header.index("产品颜色") if "产品颜色" in header else None
+
+        # 1) (model, size_eu) 그룹별 MIN(cny_price) 추출
+        grouped = {}
+        for row in rows[1:]:
+            if row is None or all(v is None for v in row):
+                continue
+            model_v = row[col["产品编号"]]
+            if model_v is None or str(model_v).strip() == "":
+                continue
+            try:
+                price_v = row[col["产品价格"]]
+                if price_v is None or str(price_v).strip() == "":
+                    continue
+                price = float(str(price_v).strip())
+            except (ValueError, TypeError):
+                continue
+
+            model = str(model_v).strip()
+            size_v = row[col["产品尺寸欧码"]]
+            size_eu = "" if size_v is None else str(size_v).strip()
+            key = (model, size_eu)
+
+            entry = {
+                "model": model,
+                "size_eu": size_eu,
+                "cny_price": price,
+                "brand_raw": str(row[col["品牌名称"]]).strip() if row[col["品牌名称"]] is not None else "",
+                "category_raw": str(row[col["产品分类"]]).strip() if row[col["产品分类"]] is not None else "",
+                "supplier": str(row[col["供应商名称"]]).strip() if row[col["供应商名称"]] is not None else "",
+                "platform": str(row[col["平台名称"]]).strip() if row[col["平台名称"]] is not None else "",
+                "source_created_at": row[col["创建时间"]],
+                "color": (str(row[col_color]).strip() if col_color is not None and row[col_color] is not None else ""),
+            }
+
+            if key not in grouped or entry["cny_price"] < grouped[key]["cny_price"]:
+                grouped[key] = entry
+
+        # 2) 모델별 사이즈 집합 (분수 매핑 시 모델 내 정수 EU 존재 여부 판단)
+        model_sizes_map = {}
+        for (model, size_eu) in grouped.keys():
+            model_sizes_map.setdefault(model, set()).add(size_eu)
+
+        # 3) batch_id 생성
+        batch_id = f"shihuo_{datetime.now():%Y%m%d_%H%M%S}"
+
+        # 4) 정규화/매핑/INSERT — 단일 트랜잭션
+        from size_converter import convert_to_kream_mm
+        inserted = 0
+        mapped = 0
+        no_size = 0
+        mapping_failed = 0
+        unknown_brand = 0
+        errors = []
+
+        conn = sqlite3.connect(str(PRICE_DB))
+        try:
+            conn.execute("BEGIN")
+            cur = conn.cursor()
+
+            for key, entry in grouped.items():
+                try:
+                    brand_norm = normalize_brand(entry["brand_raw"], entry["supplier"])
+                    category = _shihuo_category_to_internal(entry["category_raw"])
+                    is_no_size = _shihuo_is_no_size_category(entry["category_raw"]) or entry["size_eu"] == ""
+
+                    size_normalized = None
+                    kream_mm = None
+                    mapping_status = None
+                    mapping_note = None
+
+                    if is_no_size:
+                        mapping_status = "no_size"
+                        mapping_note = "가방/사이즈없음"
+                        no_size += 1
+                    elif brand_norm == "unknown":
+                        mapping_status = "unknown_brand"
+                        mapping_note = f"brand_raw={entry['brand_raw']!r}, supplier={entry['supplier']!r}"
+                        unknown_brand += 1
+                    else:
+                        from size_converter import normalize_size as _ns
+                        ns_result, ns_rule = _ns(entry["size_eu"], model_sizes_map.get(entry["model"], set()))
+                        if ns_result is None:
+                            # 분수 정규화 자체 실패 (excluded_int_exists / parse_failed 등)
+                            mapping_status = "mapping_failed"
+                            mapping_note = f"size={entry['size_eu']!r}, rule={ns_rule}"
+                            mapping_failed += 1
+                        else:
+                            kream_mm, used_norm = convert_to_kream_mm(
+                                brand=brand_norm,
+                                gender="M",
+                                category=category,
+                                model=entry["model"],
+                                size_str=entry["size_eu"],
+                                model_sizes_set=model_sizes_map.get(entry["model"], set()),
+                                purchase_country="ALL",
+                                log=False,
+                            )
+                            # Step 15d: 폴백 발생 시 used_norm이 정수로 바뀜
+                            size_normalized = used_norm if used_norm is not None else ns_result
+                            if kream_mm is None:
+                                # size_charts에 해당 EU가 없음
+                                mapping_status = "no_size_chart"
+                                mapping_note = f"size={entry['size_eu']!r}→{ns_result}, brand={brand_norm}"
+                                mapping_failed += 1
+                            else:
+                                mapping_status = "mapped"
+                                mapped += 1
+
+                    src_dt = entry["source_created_at"]
+                    src_str = None
+                    if src_dt is not None:
+                        try:
+                            src_str = src_dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(src_dt, "strftime") else str(src_dt)
+                        except Exception:
+                            src_str = str(src_dt)
+
+                    cur.execute("""
+                        INSERT OR REPLACE INTO shihuo_prices
+                        (batch_id, active, brand_raw, brand_normalized, category,
+                         model, color, size_eu, size_normalized, kream_mm,
+                         cny_price, supplier, platform, source_created_at,
+                         mapping_status, mapping_note)
+                        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        batch_id, entry["brand_raw"], brand_norm, category,
+                        entry["model"], entry["color"], entry["size_eu"],
+                        size_normalized, kream_mm,
+                        entry["cny_price"], entry["supplier"], entry["platform"],
+                        src_str, mapping_status, mapping_note,
+                    ))
+                    inserted += 1
+                except Exception as e:
+                    errors.append(f"{key}: {e}")
+
+            # 5) 모든 INSERT 성공 후에만 옛날 batch active=0
+            cur.execute("UPDATE shihuo_prices SET active=0 WHERE batch_id != ?", (batch_id,))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"ok": False, "error": f"트랜잭션 실패: {e}", "errors": errors[:10]}), 500
+        finally:
+            conn.close()
+
+        return jsonify({
+            "ok": True,
+            "batch_id": batch_id,
+            "total_rows": inserted,
+            "mapped": mapped,
+            "no_size": no_size,
+            "mapping_failed": mapping_failed,
+            "unknown_brand": unknown_brand,
+            "models_count": len(model_sizes_map),
+            "errors": errors[:10],
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+
+@app.route("/api/shihuo/latest")
+def api_shihuo_latest():
+    """현재 활성 batch 요약."""
+    with sqlite3.connect(str(PRICE_DB)) as conn:
+        row = conn.execute("""
+            SELECT batch_id, MIN(imported_at), COUNT(*)
+            FROM shihuo_prices WHERE active=1
+            GROUP BY batch_id LIMIT 1
+        """).fetchone()
+        if not row:
+            return jsonify({"ok": True, "batch_id": None, "total_count": 0})
+        batch_id, imported_at, total = row
+        by_status = dict(conn.execute("""
+            SELECT mapping_status, COUNT(*) FROM shihuo_prices
+            WHERE active=1 GROUP BY mapping_status
+        """).fetchall())
+        by_model = dict(conn.execute("""
+            SELECT model, COUNT(*) FROM shihuo_prices
+            WHERE active=1 GROUP BY model
+        """).fetchall())
+    return jsonify({
+        "ok": True,
+        "batch_id": batch_id,
+        "imported_at": imported_at,
+        "total_count": total,
+        "by_status": by_status,
+        "by_model": by_model,
+    })
+
+
+@app.route("/api/shihuo/by-model/<path:model>")
+def api_shihuo_by_model(model):
+    """특정 모델의 활성 시장가 (사이즈별)."""
+    with sqlite3.connect(str(PRICE_DB)) as conn:
+        rows = conn.execute("""
+            SELECT size_eu, size_normalized, kream_mm, cny_price,
+                   supplier, platform, mapping_status, mapping_note
+            FROM shihuo_prices
+            WHERE active=1 AND model=?
+            ORDER BY CASE WHEN kream_mm IS NULL THEN 1 ELSE 0 END, kream_mm
+        """, (model,)).fetchall()
+    return jsonify({
+        "ok": True,
+        "model": model,
+        "items": [
+            {
+                "size_eu": r[0], "size_normalized": r[1], "kream_mm": r[2],
+                "cny_price": r[3], "supplier": r[4], "platform": r[5],
+                "mapping_status": r[6], "mapping_note": r[7],
+            } for r in rows
+        ]
+    })
+
+
+@app.route("/api/shihuo/unmapped")
+def api_shihuo_unmapped():
+    """매핑 실패/미지정 건 (사람 검토용)."""
+    with sqlite3.connect(str(PRICE_DB)) as conn:
+        rows = conn.execute("""
+            SELECT model, size_eu, brand_raw, brand_normalized,
+                   mapping_status, mapping_note, cny_price, supplier
+            FROM shihuo_prices
+            WHERE active=1 AND mapping_status IN ('no_size_chart','mapping_failed','unknown_brand')
+            ORDER BY mapping_status, model, size_eu
+        """).fetchall()
+    return jsonify({
+        "ok": True,
+        "count": len(rows),
+        "items": [
+            {
+                "model": r[0], "size_eu": r[1], "brand_raw": r[2],
+                "brand_normalized": r[3], "mapping_status": r[4],
+                "mapping_note": r[5], "cny_price": r[6], "supplier": r[7],
+            } for r in rows
+        ]
+    })
+
+
+@app.route("/api/shihuo/rollback/<batch_id>", methods=["POST"])
+def api_shihuo_rollback(batch_id):
+    """특정 batch를 active=1로, 그 외 active=0."""
+    with sqlite3.connect(str(PRICE_DB)) as conn:
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM shihuo_prices WHERE batch_id=?", (batch_id,)
+        ).fetchone()[0]
+        if existing == 0:
+            return jsonify({"ok": False, "error": f"batch_id {batch_id} 존재하지 않음"}), 404
+        conn.execute("UPDATE shihuo_prices SET active=0 WHERE batch_id != ?", (batch_id,))
+        conn.execute("UPDATE shihuo_prices SET active=1 WHERE batch_id = ?", (batch_id,))
+        conn.commit()
+    return jsonify({"ok": True, "batch_id": batch_id, "restored": existing})
 
 
 # ═══════════════════════════════════════════
