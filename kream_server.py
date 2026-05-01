@@ -10,6 +10,7 @@ KREAM 판매자센터 자동화 - Flask 백엔드 서버
 
 import asyncio
 import json
+import logging
 import math
 import random
 import re
@@ -52,6 +53,7 @@ from kream_hubnet_bot import (
 )
 
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
 # ── 경보 시스템 ──
 health_alerter = HealthAlert()
@@ -299,6 +301,22 @@ _init_bid_cleanup_table()
 _ONE_SIZE_TOKENS = ("ONE SIZE", "ONESIZE", "ONE_SIZE", "FREE", "OS")
 
 
+# Step 17-E: model_category DB의 영문 카테고리 → 큐 시스템 한글 카테고리 매핑
+DB_CATEGORY_TO_KR = {
+    "shoes": "신발",
+    "bags": "가방",
+    "clothing": "의류",
+    "unknown": "",  # 미결정 명시
+}
+
+
+def map_db_category_to_kr(db_category):
+    """DB의 영문 카테고리를 큐 시스템의 한글로 변환. unknown/None은 빈 문자열."""
+    if not db_category:
+        return ""
+    return DB_CATEGORY_TO_KR.get(str(db_category).lower(), "")
+
+
 def get_model_category(model):
     """모델의 카테고리/사이즈 필수 여부 반환.
 
@@ -360,6 +378,52 @@ def validate_size_for_bid(model, size, raise_on_error=False):
             return (False, msg, cat_info)
 
     return (True, None, cat_info)
+
+
+def validate_category_for_bid(model, category=None):
+    """Step 17-E: 입찰 전 카테고리 유효성 검증.
+
+    차단 조건:
+    - category가 None / 빈문자열 / "미분류" → 차단
+    - DB 조회 결과와 다르면 logger.warning만 (DB가 진실, 큐 execute에서 0순위로 적용됨)
+
+    반환: (is_valid: bool, error_msg: str)
+    """
+    if not category or str(category).strip() in ("", "미분류"):
+        return (False, f"카테고리 미결정 입찰 차단 (model={model}, category='{category}')")
+
+    if model:
+        try:
+            db_info = get_model_category(model)
+            db_kr = map_db_category_to_kr(db_info.get("category", ""))
+            if db_kr and db_kr != category:
+                logger.warning(
+                    "category mismatch model=%s db=%s current=%s",
+                    model, db_kr, category
+                )
+        except Exception as e:
+            logger.warning("category DB lookup failed model=%s err=%s", model, e)
+
+    return (True, "")
+
+
+def validate_gosi_for_bid(gosi):
+    """Step 17-E 보완: 입찰 전 gosi(고시정보) 결정 검증.
+
+    차단 조건:
+    - gosi가 None / 빈 dict
+    - gosi.type이 None / 빈 문자열 / 공백만
+
+    반환: (is_valid: bool, error_msg: str)
+    """
+    if not gosi:
+        return (False, "고시정보 미결정 (auto_fill_gosi가 None 또는 빈 dict 반환)")
+    if not isinstance(gosi, dict):
+        return (False, f"고시정보 형식 오류 (type={type(gosi).__name__})")
+    gosi_type = gosi.get("type", "")
+    if not gosi_type or not str(gosi_type).strip():
+        return (False, "고시정보 type 미결정")
+    return (True, "")
 
 
 def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
@@ -1421,6 +1485,12 @@ def api_bid():
     if not is_valid:
         return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
 
+    # Step 17-E: 카테고리 미결정 차단
+    bid_category = str(data.get("category", "")).strip()
+    cat_ok, cat_err = validate_category_for_bid(model, bid_category)
+    if not cat_ok:
+        return jsonify({"ok": False, "error": cat_err, "code": "CATEGORY_UNDECIDED"}), 400
+
     tid = new_task()
     add_log(tid, "info", f"입찰 시작: #{product_id} {price:,}원 × {qty}개")
 
@@ -1569,6 +1639,17 @@ def api_register():
     if not is_valid:
         return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
 
+    # Step 17-E: 카테고리 미결정 차단 (data.category > gosi.category > "")
+    bid_category = str(data.get("category", "") or gosi.get("category", "")).strip()
+    cat_ok, cat_err = validate_category_for_bid(model, bid_category)
+    if not cat_ok:
+        return jsonify({"ok": False, "error": cat_err, "code": "CATEGORY_UNDECIDED"}), 400
+
+    # Step 17-E 보완: gosi 미결정 차단 (gosi=None / 빈 dict / type 빈값)
+    gosi_ok, gosi_err = validate_gosi_for_bid(gosi)
+    if not gosi_ok:
+        return jsonify({"ok": False, "error": gosi_err, "code": "GOSI_UNDECIDED"}), 400
+
     # CNY 필수 검증
     require_cny = True
     if SETTINGS_FILE.exists():
@@ -1620,7 +1701,8 @@ def api_register():
 
 
 GOSI_DEFAULTS = {
-    "type": "가방",
+    # Step 17-E: "가방" 폴백 제거 — 카테고리 미결정 시 빈 문자열 (호출자가 처리)
+    "type": "",
     "material": "상품별 상이",
     "color": "상품별 상이",
     "size_info": "상품별 상이",
@@ -2889,9 +2971,12 @@ def detect_category(english_name):
     bag_kw = ['bag', 'backpack', 'tote', 'pouch', 'wallet', 'clutch',
               'purse', 'satchel', 'rucksack', 'crossbody', 'shoulder bag',
               'duffle', 'messenger', 'fanny pack', 'waist bag']
+    # Step 17-E 보강: 신발 일반 키워드 추가 (training/athletic/performance)
+    # ⚠️ court/gym/sport는 부분 매칭 부작용 위험으로 제외
     shoe_kw = ['shoe', 'sneaker', 'boot', 'sandal', 'slipper',
                'runner', 'trainer', 'loafer', 'mule', 'clog',
-               'slide', 'flip flop', 'oxford', 'derby']
+               'slide', 'flip flop', 'oxford', 'derby',
+               'training', 'athletic', 'performance']
     clothing_kw = ['jacket', 'hoodie', 'shirt', 'pants', 'shorts',
                    'dress', 'skirt', 'coat', 'sweater', 'cardigan',
                    'vest', 'tee', 't-shirt', 'jogger', 'track']
@@ -2927,8 +3012,11 @@ def detect_category_kr(korean_name):
     bag_kw = ['숄더백', '토트백', '크로스백', '백팩', '파우치', '지갑', '클러치',
               '더플백', '메신저백', '웨이스트백', '버킷백', '호보백', '에코백',
               '가방', '백 ', '월렛']
+    # Step 17-E 보강: 신발 일반 키워드 추가 (트레이닝/러닝/운동/스포츠)
+    # ⚠️ 코트화는 부분 매칭 부작용 위험으로 제외
     shoe_kw = ['러닝화', '스니커즈', '슬라이드', '샌들', '부츠', '로퍼',
-               '슬리퍼', '트레이너', '운동화', '스니커', '구두']
+               '슬리퍼', '트레이너', '운동화', '스니커', '구두',
+               '트레이닝', '러닝', '운동', '스포츠']
     clothing_kw = ['후드', '자켓', '티셔츠', '팬츠', '쇼츠', '스웨터',
                    '코트', '셔츠', '조거', '베스트', '드레스']
 
@@ -3017,6 +3105,9 @@ def auto_fill_gosi(kream_data):
         ("running shoe", "러닝화"), ("sneaker", "스니커즈"),
         ("slide", "슬라이드"), ("sandal", "샌들"), ("boot", "부츠"),
         ("loafer", "로퍼"), ("trainer", "트레이너"), ("slipper", "슬리퍼"),
+        # Step 17-E 보강: 신발 일반 용어 (모델명 매칭은 X, 일반 카테고리 용어만)
+        ("training", "운동화"), ("athletic", "운동화"),
+        ("performance", "운동화"), ("runner", "러닝화"),
         # 의류
         ("hoodie", "후드"), ("jacket", "자켓"), ("t-shirt", "티셔츠"),
         ("pants", "팬츠"), ("shorts", "쇼츠"), ("sweater", "스웨터"),
@@ -3027,6 +3118,8 @@ def auto_fill_gosi(kream_data):
         "힙색", "웨이스트백", "더플백", "메신저백", "보스턴백", "에코백",
         "쇼퍼백", "호보백", "버킷백",
         "러닝화", "스니커즈", "슬라이드", "샌들", "부츠", "로퍼",
+        # Step 17-E 보강: 신발 일반 한글 용어
+        "트레이닝", "러닝", "운동화", "스포츠",
         "후드", "자켓", "티셔츠", "팬츠", "쇼츠",
     ]
 
@@ -3040,8 +3133,15 @@ def auto_fill_gosi(kream_data):
             if kt in kor_name:
                 detected_type = kt
                 break
-    # 가방 카테고리인데 종류 못 찾으면 "가방"
-    info["type"] = detected_type or GOSI_DEFAULTS["type"]
+    # Step 17-E: detected_type 못 찾으면 None 반환 (가방 폴백 제거)
+    # 호출자(큐 execute)가 None을 받으면 카테고리 미결정으로 처리
+    if not detected_type:
+        logger.warning(
+            "auto_fill_gosi: type detection failed name_en=%r name_kr=%r — returning None",
+            eng_name_raw, kor_name
+        )
+        return None
+    info["type"] = detected_type
 
     # ── 색상: 상품명에서 매칭 ──
     COLOR_MAP_EN = {
@@ -3649,34 +3749,50 @@ def api_queue_execute():
                                 continue
                             item["size"] = "ONE SIZE"
 
-                    # 카테고리 자동 판별
+                    # 카테고리 자동 판별 — Step 17-E: 0순위 model_category DB 추가
                     item["status"] = "계산 중"
+                    decision_source = "preset"  # 사용자가 미리 지정한 경우
                     if not item["category"]:
+                        decision_source = "unresolved"
+                        # 0순위: model_category DB (식货 mapped 등 신뢰 가능 출처)
+                        db_info = get_model_category(model)
+                        db_kr = map_db_category_to_kr(db_info.get("category", ""))
+                        if db_kr:
+                            item["category"] = db_kr
+                            item["categoryAuto"] = True
+                            decision_source = "db"
                         # 1순위: KREAM 카테고리 정보
-                        kream_cat = kream.get("category", "")
-                        if kream_cat:
-                            cat_mapped = _map_kream_category(kream_cat)
-                            if cat_mapped:
-                                item["category"] = cat_mapped
-                                item["categoryAuto"] = True
+                        if not item["category"]:
+                            kream_cat = kream.get("category", "")
+                            if kream_cat:
+                                cat_mapped = _map_kream_category(kream_cat)
+                                if cat_mapped:
+                                    item["category"] = cat_mapped
+                                    item["categoryAuto"] = True
+                                    decision_source = "kream"
                         # 2순위: 영문 상품명 파싱
                         if not item["category"]:
                             cat_info = detect_category(name_en)
                             if cat_info["category"]:
                                 item["category"] = cat_info["category"]
                                 item["categoryAuto"] = True
+                                decision_source = "detect_en"
                         # 3순위: 한글 상품명에서도 시도
                         if not item["category"] and name_kr:
                             cat_info = detect_category_kr(name_kr)
                             if cat_info:
                                 item["category"] = cat_info
                                 item["categoryAuto"] = True
-                        # 못 찾으면 미분류
+                                decision_source = "detect_kr"
+                        # 못 찾으면 미분류 (decision_source는 unresolved 유지)
                         if not item["category"]:
                             item["category"] = "미분류"
                             item["categoryAuto"] = True
 
+                    item["category_decision_source"] = decision_source
+
                     # 고시정보 자동 채움 (카테고리 전달)
+                    # Step 17-E: auto_fill_gosi가 None 반환 = type 결정 실패 → gosi=None
                     gosi = auto_fill_gosi({
                         "english_name": name_en,
                         "product_name": name_kr,
@@ -3684,6 +3800,9 @@ def api_queue_execute():
                         "category": item["category"],
                     })
                     item["gosi"] = gosi
+                    if gosi is None:
+                        add_log(tid, "warn",
+                                f"{model}: gosi.type 결정 실패 — 카테고리 미분류 또는 키워드 매칭 실패")
 
                     # 마진 계산 — 사이즈별 가격이 있으면 각각 계산
                     input_sizes = item.get("sizes", [])
@@ -4125,6 +4244,26 @@ def api_queue_auto_register():
                     add_log(tid, "error", f"[{i}] {model}: {err_msg}")
                     results.append({"productId": str(pid) if pid else "", "model": model,
                         "size": size, "price": price, "success": False, "error": err_msg})
+                    continue
+
+                # Step 17-E: 카테고리 미결정 차단 (큐 execute에서 0순위 DB로 채워졌어야 함)
+                bi_category = str(bi.get("category", "")).strip()
+                cat_ok, cat_err = validate_category_for_bid(model, bi_category)
+                if not cat_ok:
+                    add_log(tid, "error", f"[{i}] {model}: {cat_err}")
+                    results.append({"productId": str(pid) if pid else "", "model": model,
+                        "size": size, "price": price, "success": False,
+                        "error": cat_err, "skip_reason": "category_undecided"})
+                    continue
+
+                # Step 17-E 보완: gosi 미결정 차단 (큐 execute에서 auto_fill_gosi 실패한 항목)
+                bi_gosi = bi.get("gosi")
+                gosi_ok, gosi_err = validate_gosi_for_bid(bi_gosi)
+                if not gosi_ok:
+                    add_log(tid, "error", f"[{i}] {model}: {gosi_err}")
+                    results.append({"productId": str(pid) if pid else "", "model": model,
+                        "size": size, "price": price, "success": False,
+                        "error": gosi_err, "skip_reason": "gosi_undecided"})
                     continue
 
                 if not pid or str(pid) == "0":
