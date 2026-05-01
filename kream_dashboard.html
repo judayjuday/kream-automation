@@ -2275,7 +2275,7 @@ function loadAutoAdjustHistory() {
     if (!tbody) return;
     const items = data.items || [];
     if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">이력 없음</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-muted">이력 없음</td></tr>';
       return;
     }
     let html = '';
@@ -2287,21 +2287,41 @@ function loadAutoAdjustHistory() {
 
       const time = (item.executed_at||'').substring(5,16);
       const profitStr = item.expected_profit != null ? `${item.expected_profit.toLocaleString()}원` : '-';
-      const priceStr = item.old_price && item.new_price
-        ? `${item.old_price.toLocaleString()} → ${item.new_price.toLocaleString()}`
-        : '-';
+      // Step 17-C: 가격 변경 컬럼 보강 — 변경 후 아래에 "(경쟁자 N - 차이)" 작은 글씨
+      let priceStr = '-';
+      if (item.old_price && item.new_price) {
+        priceStr = `${item.old_price.toLocaleString()} → ${item.new_price.toLocaleString()}`;
+        if (item.competitor_price && item.action === 'auto_modified') {
+          const diff = item.competitor_price - item.new_price;
+          priceStr += `<br><span style="font-size:10px; color:var(--text3)">(경쟁자 ${item.competitor_price.toLocaleString()}${diff > 0 ? ' - ' + diff.toLocaleString() : ''})</span>`;
+        }
+      }
+      const competitorStr = item.competitor_price != null
+        ? `${item.competitor_price.toLocaleString()}원`
+        : '<span style="color:var(--text3)">-</span>';
+      const sourceStr = formatCnySource(item.bc_cny_source);
 
       html += `<tr>
         <td style="font-size:11px; white-space:nowrap">${time}</td>
         <td style="font-size:12px">${item.model||'-'}</td>
         <td>${item.size||'-'}</td>
         <td style="font-size:12px">${priceStr}</td>
+        <td style="font-size:12px">${competitorStr}</td>
         <td style="font-size:12px; ${item.expected_profit != null && item.expected_profit < 4000 ? 'color:var(--danger)' : ''}">${profitStr}</td>
+        <td style="font-size:11px">${sourceStr}</td>
         <td>${badge}</td>
       </tr>`;
     });
     tbody.innerHTML = html;
   }).catch(()=>{});
+}
+
+// Step 17-C: bid_cost.cny_source 한글화 (시장가/수동입력/미설정/없음)
+function formatCnySource(src) {
+  if (src === 'shihuo') return '<span style="color:var(--accent)">시장가</span>';
+  if (src === 'manual') return '<span style="color:var(--text1)">수동입력</span>';
+  if (src === 'unknown') return '<span style="color:var(--text3)">미설정</span>';
+  return '<span style="color:var(--text3)">없음</span>';
 }
 
 // ═══ 모니터링 ═══
@@ -2412,7 +2432,7 @@ function renderPendingTable() {
   if (countEl) countEl.textContent = _pendingData.length;
 
   if (_pendingData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-muted">조정 대기 없음</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-muted">조정 대기 없음</td></tr>';
     return;
   }
 
@@ -2461,6 +2481,7 @@ function renderPendingTable() {
       <td style="color:var(--danger)">${adj.competitor_price.toLocaleString()}원</td>
       <td style="color:${isDeficit ? 'var(--danger)' : 'var(--accent)'}; font-weight:700">${isDeficit ? '조정 불가' : adj.new_price.toLocaleString() + '원'}<br><span style="font-size:11px; font-weight:400; color:var(--text3)">${isDeficit ? '적자 발생' : '-' + diff.toLocaleString() + '원'}</span></td>
       <td>${profitStr}</td>
+      <td style="font-size:11px">${formatCnySource(adj.bc_cny_source)}</td>
       <td>${statusBadge}</td>
       <td style="font-size:11px; color:var(--text3)">${adj.created_at || ''}</td>
       <td>

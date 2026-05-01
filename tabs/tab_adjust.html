@@ -30,6 +30,126 @@
           <div id="aa-skip-detail" style="font-size:11px; color:var(--text3); margin-top:6px"></div>
         </div>
 
+        <!-- ── Step 16-A: 시장가 ↔ 등록 원가 차이 보기 (미니멈 인라인) ── -->
+        <!-- 변수명/주석은 shihuo 유지(데이터 출처 식货). 사용자 노출 텍스트만 한글화 -->
+        <div class="card" style="margin-top:16px; border-left:3px solid var(--info, #3b82f6)">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🔍</span> 시장가 ↔ 등록 원가 차이</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <span id="shihuo-diff-meta" style="font-size:12px; color:var(--text3)">조회 중…</span>
+              <button class="btn btn-outline btn-sm" onclick="loadShihuoDiff()" style="font-size:12px">차이 보기</button>
+            </div>
+          </div>
+          <div id="shihuo-diff-empty" style="display:none; font-size:12px; color:var(--text3); margin-top:8px">차이 없음</div>
+        </div>
+
+        <!-- 차이 보기 모달 -->
+        <div id="shihuoDiffModal" style="display:none; position:fixed; top:5%; left:5%; right:5%; bottom:5%; background:var(--bg1, #fff); border:1px solid var(--border, #ccc); border-radius:8px; padding:16px; overflow:auto; z-index:1000; box-shadow:0 8px 32px rgba(0,0,0,.25)">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+            <h3 style="margin:0">시장가 활성 배치 vs 등록 원가 차이</h3>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('shihuoDiffModal').style.display='none'">닫기</button>
+          </div>
+          <div id="shihuoDiffMetaModal" style="font-size:13px; color:var(--text2); margin-bottom:8px"></div>
+          <table id="shihuoDiffTable" style="width:100%; border-collapse:collapse; font-size:13px">
+            <thead>
+              <tr style="background:var(--bg2, #f3f4f6)">
+                <th style="padding:6px; border:1px solid var(--border)">order_id</th>
+                <th style="padding:6px; border:1px solid var(--border)">model</th>
+                <th style="padding:6px; border:1px solid var(--border)">size</th>
+                <th style="padding:6px; border:1px solid var(--border)">등록 CNY</th>
+                <th style="padding:6px; border:1px solid var(--border)">source</th>
+                <th style="padding:6px; border:1px solid var(--border)">시장가 CNY</th>
+                <th style="padding:6px; border:1px solid var(--border)">차이 CNY</th>
+                <th style="padding:6px; border:1px solid var(--border)">차이 %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!--
+          탭 동적 로드 시 부모(kream_dashboard.html)가 tabEl.innerHTML 으로
+          이 HTML을 삽입하는데, HTML5 스펙상 innerHTML로 삽입된 <script>는 실행되지 않음.
+          → 기존 코드의 refreshShihuoDiffMeta() 자동 호출이 이뤄지지 않아
+            "활성 batch: 로딩 중…" 텍스트가 영구 표시되던 버그.
+          해결: 함수 정의는 <script id="..."> 태그에 보존하고,
+                <img onerror>로 textContent를 읽어 동적 <script> 엘리먼트를 만들어 실행.
+                동적 생성 스크립트는 정상 실행되므로 함수가 전역 등록됨.
+                탭 재진입 시에도 onerror가 다시 발화 → refreshShihuoDiffMeta() 재호출.
+        -->
+        <script id="shihuo-diff-init-script">
+        window.loadShihuoDiff = async function(){
+          let r;
+          try { r = await fetch('/api/bid-cost/shihuo-diff').then(x=>x.json()); }
+          catch(e){ r = null; }
+          if(!r || !r.ok){ alert('시장가 차이 API 조회 실패'); return; }
+          const batch = r.active_batch_id ? ('활성 batch: ' + r.active_batch_id) : '활성 batch 없음';
+          const text = batch + ' | 차이 ' + (r.count != null ? r.count : 0) + '건';
+          const meta = document.getElementById('shihuo-diff-meta');
+          if(meta) meta.textContent = text;
+          const metaModal = document.getElementById('shihuoDiffMetaModal');
+          if(metaModal) metaModal.textContent = text;
+          const tb = document.querySelector('#shihuoDiffTable tbody');
+          if(tb) tb.innerHTML = '';
+          const empty = document.getElementById('shihuo-diff-empty');
+          const modal = document.getElementById('shihuoDiffModal');
+          if(r.count === 0){
+            if(empty){ empty.style.display = 'block'; empty.textContent = '차이 없음'; }
+            if(modal) modal.style.display = 'block';
+            return;
+          }
+          if(empty) empty.style.display = 'none';
+          (r.items || []).forEach(function(it){
+            const tr = document.createElement('tr');
+            const warn = (it.bc_source === 'manual') ? ' ⚠️' : '';
+            tr.innerHTML =
+              '<td style="padding:6px; border:1px solid var(--border)">' + (it.order_id || '') + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border)">' + (it.model || '') + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border)">' + (it.size || '') + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border); text-align:right">' + Number(it.bc_cny || 0).toFixed(2) + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border)">' + (it.bc_source || '') + warn + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border); text-align:right">' + Number(it.sh_cny || 0).toFixed(2) + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border); text-align:right">' + Number(it.diff_cny || 0).toFixed(2) + '</td>' +
+              '<td style="padding:6px; border:1px solid var(--border); text-align:right">' + (it.diff_pct != null ? Number(it.diff_pct).toFixed(2) + '%' : '-') + '</td>';
+            if(tb) tb.appendChild(tr);
+          });
+          if(modal) modal.style.display = 'block';
+        };
+
+        window.refreshShihuoDiffMeta = async function(){
+          const meta = document.getElementById('shihuo-diff-meta');
+          if(!meta) return;
+          try {
+            const r = await fetch('/api/bid-cost/shihuo-diff').then(x=>x.json());
+            if(!r || !r.ok){ meta.textContent = '조회 실패'; return; }
+            if(!r.active_batch_id){
+              meta.textContent = '활성 batch 없음';
+            } else {
+              const cnt = (r.count != null) ? r.count : 0;
+              meta.textContent = '활성 batch: ' + r.active_batch_id + ' | 차이 ' + cnt + '건';
+            }
+          } catch(e){
+            meta.textContent = '조회 실패';
+            console.error('shihuo-diff meta load error:', e);
+          }
+        };
+        </script>
+
+        <img src="" alt="" style="display:none" onerror="
+          this.remove();
+          if(typeof window.refreshShihuoDiffMeta !== 'function'){
+            var src = document.getElementById('shihuo-diff-init-script');
+            if(src && src.textContent){
+              var s = document.createElement('script');
+              s.textContent = src.textContent;
+              document.body.appendChild(s);
+            }
+          }
+          if(typeof window.refreshShihuoDiffMeta === 'function'){
+            setTimeout(function(){ try { window.refreshShihuoDiffMeta(); } catch(e){ console.error(e); } }, 50);
+          }
+        ">
+
         <!-- 자동 실행 이력 -->
         <div class="card" style="margin-top:16px">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
@@ -58,12 +178,14 @@
                   <th>모델</th>
                   <th>사이즈</th>
                   <th>가격 변경</th>
+                  <th>경쟁자가</th>
                   <th>예상수익</th>
+                  <th>원가 출처</th>
                   <th>결과</th>
                 </tr>
               </thead>
               <tbody id="aa-history-body">
-                <tr><td colspan="6" class="text-muted">-</td></tr>
+                <tr><td colspan="8" class="text-muted">-</td></tr>
               </tbody>
             </table>
           </div>
@@ -157,13 +279,14 @@
                   <th>경쟁자 최저가</th>
                   <th>추천가</th>
                   <th>예상 수익</th>
+                  <th>원가 출처</th>
                   <th>상태</th>
                   <th>생성 시간</th>
                   <th>작업</th>
                 </tr>
               </thead>
               <tbody id="pending-table-body">
-                <tr><td colspan="10" class="text-muted">로딩 중...</td></tr>
+                <tr><td colspan="11" class="text-muted">로딩 중...</td></tr>
               </tbody>
             </table>
           </div>

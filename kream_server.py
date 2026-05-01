@@ -245,7 +245,20 @@ def _init_bid_cost_table():
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model ON bid_cost(model)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model_size ON bid_cost(model, size)")
-    conn.commit()
+
+    # ── Step 16-A: cny_source 컬럼 추가 (idempotent, 트랜잭션 보장) ──
+    cols = [r[1] for r in c.execute("PRAGMA table_info(bid_cost)").fetchall()]
+    if "cny_source" not in cols:
+        c.execute("BEGIN")
+        try:
+            c.execute("ALTER TABLE bid_cost ADD COLUMN cny_source TEXT")
+            c.execute("UPDATE bid_cost SET cny_source='unknown' WHERE cny_source IS NULL")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    else:
+        conn.commit()
     conn.close()
 
 
@@ -279,26 +292,150 @@ def _init_bid_cleanup_table():
 _init_bid_cleanup_table()
 
 
-def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
-                   overseas_shipping=8000, other_costs=0):
-    """입찰 성공 시 원가 정보 저장 (order_id 기준 UPSERT)"""
-    if not order_id or not cny_price:
-        return
+# ═══════════════════════════════════════════
+# Step 17-A: 카테고리 판정 + 사이즈 유효성 검증
+# ═══════════════════════════════════════════
+
+_ONE_SIZE_TOKENS = ("ONE SIZE", "ONESIZE", "ONE_SIZE", "FREE", "OS")
+
+
+def get_model_category(model):
+    """모델의 카테고리/사이즈 필수 여부 반환.
+
+    우선순위: model_category 캐시 → shihuo_prices(active=1) 직접 조회 → 보수적 디폴트.
+    반환: {"category": str, "needs_size": bool, "source": str}
+    """
+    if not model:
+        return {"category": "unknown", "needs_size": True, "source": "default"}
+
     conn = sqlite3.connect(str(PRICE_DB))
-    conn.execute(
-        """INSERT INTO bid_cost (order_id, model, size, cny_price, exchange_rate,
-           overseas_shipping, other_costs)
-           VALUES (?,?,?,?,?,?,?)
-           ON CONFLICT(order_id) DO UPDATE SET
-             cny_price=excluded.cny_price,
-             exchange_rate=excluded.exchange_rate,
-             overseas_shipping=excluded.overseas_shipping,
-             other_costs=excluded.other_costs""",
-        (order_id, model or "", size or "", float(cny_price),
-         float(exchange_rate), int(overseas_shipping), int(other_costs))
-    )
-    conn.commit()
-    conn.close()
+    try:
+        row = conn.execute(
+            "SELECT category, needs_size, source FROM model_category WHERE model=?",
+            (model,)
+        ).fetchone()
+        if row:
+            return {"category": row[0], "needs_size": bool(row[1]), "source": row[2]}
+
+        row = conn.execute(
+            "SELECT category FROM shihuo_prices WHERE active=1 AND model=? LIMIT 1",
+            (model,)
+        ).fetchone()
+        if row:
+            cat = row[0] or "unknown"
+            needs = 0 if cat == "bags" else 1
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO model_category (model, category, source, needs_size, notes) VALUES (?,?,?,?,?)",
+                    (model, cat, "shihuo", needs, "shihuo_prices 활성 batch 추론")
+                )
+                conn.commit()
+            except Exception:
+                pass
+            return {"category": cat, "needs_size": bool(needs), "source": "shihuo"}
+    finally:
+        conn.close()
+
+    # 보수적 디폴트: 사이즈 필수
+    return {"category": "unknown", "needs_size": True, "source": "default"}
+
+
+def validate_size_for_bid(model, size, raise_on_error=False):
+    """입찰 전 사이즈 유효성 검증.
+
+    needs_size=1 카테고리에서 size가 빈값/ONE SIZE/FREE → 차단.
+    needs_size=0(가방) 카테고리는 통과.
+
+    반환: (is_valid, error_msg, category_info)
+    """
+    cat_info = get_model_category(model)
+    size_clean = (size or "").strip().upper()
+
+    if cat_info["needs_size"]:
+        if not size_clean or size_clean in _ONE_SIZE_TOKENS:
+            msg = (f"카테고리 '{cat_info['category']}'은(는) 사이즈 필수입니다 "
+                   f"(model={model}, size='{size}')")
+            if raise_on_error:
+                raise ValueError(msg)
+            return (False, msg, cat_info)
+
+    return (True, None, cat_info)
+
+
+def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
+                   overseas_shipping=8000, other_costs=0,
+                   cny_source=None):
+    """입찰 시점의 원가 저장 (UPSERT by order_id).
+
+    cny_price가 None/0이면 shihuo_prices(active=1) 매칭으로 자동 채택 시도.
+    매칭 키: model 정확 일치 + CAST(size AS INTEGER) = kream_mm.
+    매칭 실패 + manual 없음 → 저장 스킵 (가짜 값 채우기 금지).
+    """
+    if not order_id:
+        return None
+    # Step 17-A: size 빈값/None 차단 (ONE SIZE 디폴트 제거 후 명시 강제)
+    if size is None or not str(size).strip():
+        raise ValueError(
+            f"size required for bid_cost (order_id={order_id}, model={model})"
+        )
+
+    resolved_cny = float(cny_price) if cny_price and float(cny_price) > 0 else None
+    resolved_source = cny_source
+
+    # manual 명시 입력이 우선 — 식货 절대 덮어쓰지 않음 (절대 규칙 #3)
+    if resolved_cny is not None:
+        if not resolved_source:
+            resolved_source = "manual"
+
+    rate_f = float(exchange_rate) if exchange_rate else 0.0
+
+    conn = sqlite3.connect(str(PRICE_DB))
+    try:
+        cur = conn.cursor()
+
+        # manual 미지정 → shihuo 자동 채택 시도
+        if resolved_cny is None:
+            try:
+                size_int = int(str(size).strip())
+            except (ValueError, TypeError):
+                size_int = None
+
+            if model and size_int is not None:
+                row = cur.execute(
+                    """SELECT cny_price FROM shihuo_prices
+                       WHERE active=1 AND model=? AND kream_mm=?
+                       ORDER BY imported_at DESC LIMIT 1""",
+                    (model, size_int)
+                ).fetchone()
+                if row and row[0]:
+                    resolved_cny = float(row[0])
+                    resolved_source = "shihuo"
+
+        if resolved_cny is None:
+            # 매칭 실패 + manual 없음 → 저장 스킵 (절대 규칙 #4)
+            print(f"[bid_cost] 스킵: order_id={order_id} model={model} size={size} — cny_price 없음 + 식货 매칭 실패")
+            return None
+
+        if not resolved_source:
+            resolved_source = "unknown"
+
+        cur.execute(
+            """INSERT INTO bid_cost (order_id, model, size, cny_price, exchange_rate,
+                  overseas_shipping, other_costs, cny_source)
+               VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(order_id) DO UPDATE SET
+                 cny_price=excluded.cny_price,
+                 exchange_rate=excluded.exchange_rate,
+                 overseas_shipping=excluded.overseas_shipping,
+                 other_costs=excluded.other_costs,
+                 cny_source=excluded.cny_source""",
+            (order_id, model or "", size or "", resolved_cny, rate_f,
+             int(overseas_shipping), int(other_costs), resolved_source)
+        )
+        conn.commit()
+        return {"cny_price": resolved_cny, "cny_source": resolved_source}
+    finally:
+        conn.close()
 
 
 def _init_auto_adjust_log_table():
@@ -1272,11 +1409,17 @@ def api_bid():
     data = request.json or {}
     product_id = str(data.get("productId", "")).strip()
     price = int(data.get("price", 0))
-    size = str(data.get("size", "ONE SIZE")).strip()
+    size = str(data.get("size", "")).strip()
     qty = int(data.get("quantity", 1))
+    model = str(data.get("model", "")).strip()
 
     if not product_id or not price:
         return jsonify({"error": "productId, price 필요"}), 400
+
+    # Step 17-A: 카테고리별 사이즈 필수 검증 (신발은 ONE SIZE 차단)
+    is_valid, err_msg, _cat = validate_size_for_bid(model, size)
+    if not is_valid:
+        return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
 
     tid = new_task()
     add_log(tid, "info", f"입찰 시작: #{product_id} {price:,}원 × {qty}개")
@@ -1286,7 +1429,7 @@ def api_bid():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
-                run_bid(product_id, price, size, qty, tid)
+                run_bid(product_id, price, size, qty, tid, model=model)
             )
             loop.close()
             finish_task(tid, result=result)
@@ -1299,7 +1442,7 @@ def api_bid():
     return jsonify({"taskId": tid})
 
 
-async def run_bid(product_id, price, size, qty, tid):
+async def run_bid(product_id, price, size, qty, tid, model=""):
     async with async_playwright() as p:
         browser = await create_browser(p, headless=get_headless())
         context = await create_context(browser, STATE_FILE)
@@ -1313,6 +1456,7 @@ async def run_bid(product_id, price, size, qty, tid):
 
         bid_data = {
             "product_id": product_id,
+            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": qty,
@@ -1406,7 +1550,7 @@ def api_register():
     data = request.json or {}
     product_id = str(data.get("productId", "")).strip()
     price = int(data.get("price", 0))
-    size = str(data.get("size", "ONE SIZE")).strip()
+    size = str(data.get("size", "")).strip()
     qty = int(data.get("quantity", 1))
     gosi_already = data.get("gosiAlready", False)
     gosi = data.get("gosi", {})
@@ -1419,6 +1563,11 @@ def api_register():
     exchange_rate = data.get("exchange_rate", 0)
     overseas_shipping = data.get("overseas_shipping", 8000)
     model = str(data.get("model", "")).strip()
+
+    # Step 17-A: 카테고리별 사이즈 필수 검증 (신발은 ONE SIZE 차단)
+    is_valid, err_msg, _cat = validate_size_for_bid(model, size)
+    if not is_valid:
+        return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
 
     # CNY 필수 검증
     require_cny = True
@@ -1444,21 +1593,21 @@ def api_register():
             )
             loop.close()
 
-            # 입찰 성공 시 bid_cost 저장
+            # 입찰 성공 시 bid_cost 저장 (식货 매칭 시 자동 채택)
             if result and result.get("success"):
-                if cny_price and float(cny_price) > 0:
-                    try:
-                        _save_bid_cost(
-                            order_id=result.get("orderId") or f"{product_id}_{size}",
-                            model=model, size=size,
-                            cny_price=float(cny_price),
-                            exchange_rate=float(exchange_rate) if exchange_rate else 0,
-                            overseas_shipping=int(overseas_shipping),
-                        )
-                    except Exception:
-                        pass
-                else:
-                    print(f"[bid_cost] 경고: #{product_id} 원가(cny_price) 없음 — bid_cost 미저장")
+                try:
+                    saved = _save_bid_cost(
+                        order_id=result.get("orderId") or f"{product_id}_{size}",
+                        model=model, size=size,
+                        cny_price=float(cny_price) if cny_price else None,
+                        exchange_rate=float(exchange_rate) if exchange_rate else 0,
+                        overseas_shipping=int(overseas_shipping),
+                        cny_source=("manual" if cny_price and float(cny_price) > 0 else None),
+                    )
+                    if not saved:
+                        print(f"[bid_cost] #{product_id} 원가 미저장 (manual 없음 + 식货 매칭 실패)")
+                except Exception as e:
+                    print(f"[bid_cost] 저장 실패: {e}")
 
             finish_task(tid, result=result)
         except Exception as e:
@@ -1576,6 +1725,7 @@ async def run_full_register(product_id, price, size, qty, gosi_already, gosi, ti
         add_log(tid, "info", f"판매 입찰 등록 중... {price:,}원 × {qty}개 ({bid_days}일)")
         bid_data = {
             "product_id": product_id,
+            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": qty,
@@ -1639,7 +1789,7 @@ async def _run_bid_only(product_id, price, size, qty, bid_days, tid, model=""):
             await browser.close()
             return {"success": False}
         bid_data = {
-            "product_id": product_id, "사이즈": size,
+            "product_id": product_id, "model": model, "사이즈": size,
             "입찰가격": price, "수량": qty, "bid_days": bid_days,
         }
         success = await place_bid(page, bid_data, delay=2.0)
@@ -1784,13 +1934,20 @@ def api_bulk_generate():
     # 3행: 필수/선택
     ws.append(["필수", "필수", "필수", "필수", "필수", "필수", "선택", "선택"])
 
-    # 4행~: 데이터
+    # 4행~: 데이터 (Step 17-A: 신발인데 사이즈 누락된 항목은 skip)
+    skipped = []
     for item in items:
+        _model = item.get("model", "")
+        _size = item.get("size", "")
+        is_valid, err_msg, _cat = validate_size_for_bid(_model, _size)
+        if not is_valid:
+            skipped.append({"model": _model, "size": _size, "reason": err_msg})
+            continue
         ws.append([
             item.get("productId", ""),
-            item.get("model", ""),
+            _model,
             item.get("nameEn", ""),
-            item.get("size", "ONE SIZE"),
+            _size or "ONE SIZE",
             item.get("price", ""),
             item.get("quantity", 1),
             item.get("deadline", ""),
@@ -1798,7 +1955,12 @@ def api_bulk_generate():
         ])
 
     wb.save(str(output_path))
-    return jsonify({"ok": True, "path": str(output_path), "count": len(items)})
+    return jsonify({
+        "ok": True,
+        "path": str(output_path),
+        "count": len(items) - len(skipped),
+        "skipped": skipped,
+    })
 
 
 @app.route("/api/bulk/download")
@@ -3469,11 +3631,22 @@ def api_queue_execute():
                     recent_trade = kream.get("recent_trade_price") or kream.get("display_price")  # 과거 체결가
 
                     # 사이즈 자동 설정
+                    # Step 17-A: 사이즈 정보가 없을 때 신발 모델은 ONE SIZE 자동 설정 차단
                     if not item.get("sizes") and not item.get("size"):
                         kream_sizes = kream.get("sizes", [])
                         if kream_sizes:
                             item["size"] = "전사이즈"
                         else:
+                            _cat_info = get_model_category(model)
+                            if _cat_info["needs_size"]:
+                                item["status"] = "사이즈 필요"
+                                item["result"] = {
+                                    "error": (f"카테고리 '{_cat_info['category']}'은 사이즈 필수인데 "
+                                              f"KREAM 사이즈 정보가 없습니다 (model={model})")
+                                }
+                                add_log(tid, "error",
+                                        f"{model}: 신발 카테고리 사이즈 누락 — 자동 등록 스킵")
+                                continue
                             item["size"] = "ONE SIZE"
 
                     # 카테고리 자동 판별
@@ -3943,8 +4116,16 @@ def api_queue_auto_register():
             for i, bi in enumerate(bid_items, 1):
                 pid = bi.get("productId") or 0
                 price = bi["price"]
-                size = bi.get("size", "ONE SIZE")
+                size = bi.get("size", "")
                 model = bi.get("model", "")
+
+                # Step 17-A: 사이즈 필수 검증 (신발 ONE SIZE 차단)
+                is_valid, err_msg, _cat = validate_size_for_bid(model, size)
+                if not is_valid:
+                    add_log(tid, "error", f"[{i}] {model}: {err_msg}")
+                    results.append({"productId": str(pid) if pid else "", "model": model,
+                        "size": size, "price": price, "success": False, "error": err_msg})
+                    continue
 
                 if not pid or str(pid) == "0":
                     if model:
@@ -4056,19 +4237,19 @@ def api_queue_auto_register():
                                 save_bid_local(pid, model=model, size=bi_result["size"],
                                               price=bi_result["price"], source="placed")
                                 _cny = matched_bi.get("cny_price", 0)
-                                if _cny and float(_cny) > 0:
-                                    try:
-                                        _save_bid_cost(
-                                            order_id=bi_result.get("orderId") or f"{pid}_{bi_result['size']}",
-                                            model=model, size=bi_result["size"],
-                                            cny_price=float(_cny),
-                                            exchange_rate=float(matched_bi.get("exchange_rate", 0)),
-                                            overseas_shipping=int(matched_bi.get("overseas_shipping", 8000)),
-                                        )
-                                    except Exception:
-                                        pass
-                                else:
-                                    add_log(tid, "warn", f"  [{model} {bi_result['size']}] 원가(cny_price) 없음 — bid_cost 미저장")
+                                try:
+                                    saved = _save_bid_cost(
+                                        order_id=bi_result.get("orderId") or f"{pid}_{bi_result['size']}",
+                                        model=model, size=bi_result["size"],
+                                        cny_price=float(_cny) if _cny else None,
+                                        exchange_rate=float(matched_bi.get("exchange_rate", 0)),
+                                        overseas_shipping=int(matched_bi.get("overseas_shipping", 8000)),
+                                        cny_source=("manual" if _cny and float(_cny) > 0 else None),
+                                    )
+                                    if not saved:
+                                        add_log(tid, "warn", f"  [{model} {bi_result['size']}] 원가 미저장 (식货 매칭 실패)")
+                                except Exception as e:
+                                    add_log(tid, "error", f"  bid_cost 저장 실패: {e}")
                     except Exception as e:
                         add_log(tid, "error", f"  일괄 입찰 오류: {e}")
                         for bi in group:
@@ -4095,19 +4276,19 @@ def api_queue_auto_register():
                             save_bid_local(pid, model=model, size=size,
                                           price=price, source="placed")
                             _cny = bi.get("cny_price", 0)
-                            if _cny and float(_cny) > 0:
-                                try:
-                                    _save_bid_cost(
-                                        order_id=result.get("orderId") or f"{pid}_{size}",
-                                        model=model, size=size,
-                                        cny_price=float(_cny),
-                                        exchange_rate=float(bi.get("exchange_rate", 0)),
-                                        overseas_shipping=int(bi.get("overseas_shipping", 8000)),
-                                    )
-                                except Exception:
-                                    pass
-                            else:
-                                add_log(tid, "warn", f"  [{model} {size}] 원가(cny_price) 없음 — bid_cost 미저장")
+                            try:
+                                saved = _save_bid_cost(
+                                    order_id=result.get("orderId") or f"{pid}_{size}",
+                                    model=model, size=size,
+                                    cny_price=float(_cny) if _cny else None,
+                                    exchange_rate=float(bi.get("exchange_rate", 0)),
+                                    overseas_shipping=int(bi.get("overseas_shipping", 8000)),
+                                    cny_source=("manual" if _cny and float(_cny) > 0 else None),
+                                )
+                                if not saved:
+                                    add_log(tid, "warn", f"  [{model} {size}] 원가 미저장 (식货 매칭 실패)")
+                            except Exception as e:
+                                add_log(tid, "error", f"  bid_cost 저장 실패: {e}")
                     except Exception as e:
                         add_log(tid, "error", f"  입찰 오류: {e}")
                         results.append({"productId": pid, "model": model,
@@ -4888,7 +5069,8 @@ def api_adjust_pending():
     c = conn.cursor()
     c.execute(
         """SELECT pa.*,
-                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs
+                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs,
+                  bc.cny_source AS bc_cny_source
            FROM price_adjustments pa
            LEFT JOIN bid_cost bc ON pa.order_id = bc.order_id
            WHERE pa.status IN ('pending', 'profit_low', 'deficit')
@@ -5077,6 +5259,7 @@ def api_bid_cost_upsert():
         exchange_rate=rate_f,
         overseas_shipping=ship_i,
         other_costs=other_i,
+        cny_source="manual",
     )
 
     # pending 조정 건의 expected_profit + status 갱신
@@ -5161,6 +5344,71 @@ def api_bid_cost_missing():
     return jsonify({"groups": list(groups_dict.values()), "total": len(rows)})
 
 
+@app.route("/api/bid-cost/shihuo-diff")
+def api_bid_cost_shihuo_diff():
+    """등록된 bid_cost와 식货 활성 배치의 cny_price 차이 리포트.
+
+    매칭: bc.model = sh.model AND CAST(bc.size AS INTEGER) = sh.kream_mm AND sh.active=1.
+    가격 차이가 있는 행만 반환. ONE SIZE 등 캐스팅 불가 항목은 자동 제외(매칭 0).
+    """
+    conn = sqlite3.connect(str(PRICE_DB))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    active_batch = c.execute(
+        "SELECT batch_id FROM shihuo_prices WHERE active=1 ORDER BY imported_at DESC LIMIT 1"
+    ).fetchone()
+    active_batch_id = active_batch[0] if active_batch else None
+
+    rows = c.execute("""
+        SELECT bc.order_id, bc.model, bc.size,
+               bc.cny_price        AS bc_cny,
+               bc.cny_source       AS bc_source,
+               bc.exchange_rate    AS bc_rate,
+               sh.cny_price        AS sh_cny,
+               sh.batch_id         AS sh_batch,
+               sh.kream_mm         AS sh_kream_mm,
+               sh.size_eu          AS sh_size_eu
+          FROM bid_cost bc
+          JOIN shihuo_prices sh
+            ON sh.active=1
+           AND sh.model = bc.model
+           AND sh.kream_mm IS NOT NULL
+           AND sh.kream_mm = CAST(bc.size AS INTEGER)
+         WHERE sh.cny_price <> bc.cny_price
+         ORDER BY ABS(sh.cny_price - bc.cny_price) DESC
+    """).fetchall()
+    conn.close()
+
+    items = []
+    for r in rows:
+        bc_cny = float(r["bc_cny"] or 0)
+        sh_cny = float(r["sh_cny"] or 0)
+        diff = sh_cny - bc_cny
+        diff_pct = (diff / bc_cny * 100.0) if bc_cny else None
+        items.append({
+            "order_id": r["order_id"],
+            "model": r["model"],
+            "size": r["size"],
+            "bc_cny": bc_cny,
+            "bc_source": r["bc_source"],
+            "sh_cny": sh_cny,
+            "diff_cny": round(diff, 2),
+            "diff_pct": round(diff_pct, 2) if diff_pct is not None else None,
+            "sh_batch": r["sh_batch"],
+            "sh_size_eu": r["sh_size_eu"],
+            "sh_kream_mm": r["sh_kream_mm"],
+            "exchange_rate": r["bc_rate"],
+        })
+
+    return jsonify({
+        "ok": True,
+        "active_batch_id": active_batch_id,
+        "count": len(items),
+        "items": items,
+    })
+
+
 @app.route("/api/bid-cost/bulk-upsert", methods=["POST"])
 def api_bid_cost_bulk_upsert():
     """여러 건 원가 한번에 저장 + price_adjustments 재계산"""
@@ -5202,6 +5450,7 @@ def api_bid_cost_bulk_upsert():
                 order_id=oid, model=model, size=size,
                 cny_price=cny_f, exchange_rate=rate_f,
                 overseas_shipping=ship_i, other_costs=other_i,
+                cny_source="manual",
             )
 
             # pending 건 expected_profit 재계산
@@ -7043,24 +7292,34 @@ def api_auto_adjust_history():
     conn = sqlite3.connect(str(PRICE_DB))
     conn.row_factory = sqlite3.Row
 
-    query = "SELECT * FROM auto_adjust_log WHERE 1=1"
+    # Step 17-C: competitor_price (price_adjustments 최근 1건) + bc_cny_source (bid_cost) JOIN
+    query = (
+        "SELECT aal.*, "
+        "(SELECT pa.competitor_price FROM price_adjustments pa "
+        "  WHERE pa.order_id = aal.order_id "
+        "  ORDER BY pa.created_at DESC LIMIT 1) AS competitor_price, "
+        "bc.cny_source AS bc_cny_source "
+        "FROM auto_adjust_log aal "
+        "LEFT JOIN bid_cost bc ON bc.order_id = aal.order_id "
+        "WHERE 1=1"
+    )
     params = []
 
     if action_filter == "modified":
-        query += " AND action='auto_modified'"
+        query += " AND aal.action='auto_modified'"
     elif action_filter == "skipped":
-        query += " AND action LIKE 'skipped_%'"
+        query += " AND aal.action LIKE 'skipped_%'"
     elif action_filter == "failed":
-        query += " AND action='modify_failed'"
+        query += " AND aal.action='modify_failed'"
 
     if from_date:
-        query += " AND date(executed_at) >= ?"
+        query += " AND date(aal.executed_at) >= ?"
         params.append(from_date)
     if to_date:
-        query += " AND date(executed_at) <= ?"
+        query += " AND date(aal.executed_at) <= ?"
         params.append(to_date)
 
-    query += " ORDER BY executed_at DESC LIMIT ?"
+    query += " ORDER BY aal.executed_at DESC LIMIT ?"
     params.append(limit)
 
     c = conn.cursor()
@@ -7191,6 +7450,7 @@ async def _execute_rebid(product_id, model, size, price, cny_price):
 
         bid_data = {
             "product_id": str(product_id),
+            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": 1,
@@ -7205,25 +7465,24 @@ async def _execute_rebid(product_id, model, size, price, cny_price):
 
         if success:
             await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
-            # bid_cost 저장
-            if cny_price and float(cny_price) > 0:
-                settings = {}
-                if SETTINGS_FILE.exists():
-                    try:
-                        settings = json.loads(SETTINGS_FILE.read_text())
-                    except Exception:
-                        pass
-                rate = settings.get("cnyRate", 215)
+            settings = {}
+            if SETTINGS_FILE.exists():
                 try:
-                    _save_bid_cost(
-                        order_id=f"{product_id}_{size}_rebid_{int(time.time())}",
-                        model=model, size=size,
-                        cny_price=float(cny_price),
-                        exchange_rate=float(rate),
-                        overseas_shipping=8000,
-                    )
+                    settings = json.loads(SETTINGS_FILE.read_text())
                 except Exception:
                     pass
+            rate = settings.get("cnyRate", 215)
+            try:
+                _save_bid_cost(
+                    order_id=f"{product_id}_{size}_rebid",  # v3 확정: timestamp 제거 → UPSERT 보존
+                    model=model, size=size,
+                    cny_price=float(cny_price) if cny_price else None,
+                    exchange_rate=float(rate),
+                    overseas_shipping=8000,
+                    cny_source=("manual" if cny_price and float(cny_price) > 0 else None),
+                )
+            except Exception as e:
+                print(f"[auto_rebid] bid_cost 실패: {e}")
 
         await browser.close()
         return {"success": success}
@@ -8883,9 +9142,9 @@ def api_shihuo_unmapped():
     })
 
 
-@app.route("/api/shihuo/rollback/<batch_id>", methods=["POST"])
-def api_shihuo_rollback(batch_id):
-    """특정 batch를 active=1로, 그 외 active=0."""
+@app.route("/api/shihuo/activate/<batch_id>", methods=["POST"])
+def api_shihuo_activate(batch_id):
+    """지정 batch_id를 active=1로, 그 외 active=0으로 전환."""
     with sqlite3.connect(str(PRICE_DB)) as conn:
         existing = conn.execute(
             "SELECT COUNT(*) FROM shihuo_prices WHERE batch_id=?", (batch_id,)
@@ -8895,7 +9154,24 @@ def api_shihuo_rollback(batch_id):
         conn.execute("UPDATE shihuo_prices SET active=0 WHERE batch_id != ?", (batch_id,))
         conn.execute("UPDATE shihuo_prices SET active=1 WHERE batch_id = ?", (batch_id,))
         conn.commit()
-    return jsonify({"ok": True, "batch_id": batch_id, "restored": existing})
+    return jsonify({"ok": True, "batch_id": batch_id, "activated": existing})
+
+
+@app.route("/api/shihuo/deactivate", methods=["POST"])
+def api_shihuo_deactivate():
+    """현재 active 배치를 모두 끔 — 진짜 비활성화."""
+    with sqlite3.connect(str(PRICE_DB)) as conn:
+        cur = conn.execute("UPDATE shihuo_prices SET active=0 WHERE active=1")
+        conn.commit()
+        cnt = cur.rowcount
+    return jsonify({"ok": True, "deactivated": cnt})
+
+
+# 백워드 호환 — 한 분기 유지 후 v17에서 제거 예정
+@app.route("/api/shihuo/rollback/<batch_id>", methods=["POST"])
+def api_shihuo_rollback(batch_id):
+    """[DEPRECATED] /api/shihuo/activate/<batch_id> 사용 권장."""
+    return api_shihuo_activate(batch_id)
 
 
 # ═══════════════════════════════════════════

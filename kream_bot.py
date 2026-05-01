@@ -25,6 +25,7 @@ import email as email_lib
 import imaplib
 import json
 import re
+import sqlite3
 import sys
 import time
 import traceback
@@ -38,6 +39,55 @@ EXCEL_PATH = "kream_data_template.xlsx"
 PARTNER_URL = "https://partner.kream.co.kr"
 KREAM_URL = "https://kream.co.kr"
 STATE_FILE = "auth_state.json"
+
+# Step 17-A: 입찰 직전 사이즈 필수 검증 (defense in depth)
+_PRICE_DB_BOT = Path(__file__).resolve().parent / "price_history.db"
+_ONE_SIZE_TOKENS_BOT = ("ONE SIZE", "ONESIZE", "ONE_SIZE", "FREE", "OS")
+
+
+def _check_size_required_bot(model, size):
+    """입찰 직전 가드: 신발 카테고리에서 ONE SIZE/빈값 입찰 차단.
+
+    호출 진입점(api_bid/api_register/큐 자동 등록)에서 이미 검증되지만,
+    Step 13 자동 재입찰 등 우회 경로 방어용 2차 검증.
+
+    반환: (ok: bool, err: str or None)
+    """
+    size_clean = (size or "").strip().upper()
+    is_one_size = (not size_clean) or size_clean in _ONE_SIZE_TOKENS_BOT
+    if not is_one_size:
+        return (True, None)
+    if not model:
+        return (False, "model 정보 없이 ONE SIZE 입찰 차단")
+    try:
+        conn = sqlite3.connect(str(_PRICE_DB_BOT))
+        try:
+            row = conn.execute(
+                "SELECT needs_size, category FROM model_category WHERE model=?",
+                (model,)
+            ).fetchone()
+            if row is not None:
+                if row[0]:
+                    return (False,
+                            f"카테고리 '{row[1]}'은 사이즈 필수 (model={model}, size='{size}')")
+                return (True, None)
+            row = conn.execute(
+                "SELECT category FROM shihuo_prices WHERE active=1 AND model=? LIMIT 1",
+                (model,)
+            ).fetchone()
+            if row:
+                cat = row[0] or "unknown"
+                if cat != "bags":
+                    return (False,
+                            f"카테고리 '{cat}'은 사이즈 필수 (model={model}, size='{size}')")
+                return (True, None)
+        finally:
+            conn.close()
+    except Exception as e:
+        return (False, f"size 검증 DB 조회 실패: {e} (model={model})")
+    # 캐시 미스 + shihuo 미스 → 보수적 차단
+    return (False,
+            f"카테고리 미상 모델 ONE SIZE 입찰 차단 (model={model}, size='{size}')")
 STATE_FILE_KREAM = "auth_state_kream.json"
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
@@ -1733,10 +1783,17 @@ async def place_bid(page, bid, delay=3.0):
     7. 결과 확인 (성공/실패 판별)
     """
     product_id = str(bid["product_id"])
-    size = str(bid.get("사이즈", "ONE SIZE"))
+    size = str(bid.get("사이즈", ""))
+    model = str(bid.get("model", "")).strip()
     price = str(int(bid.get("입찰가격", 0)))
     qty = int(bid.get("수량", 1))
     bid_days = int(bid.get("bid_days", 30))
+
+    # Step 17-A: 사이즈 필수 검증 (신발 ONE SIZE 차단, 가방 ONE SIZE 통과)
+    _ok, _err = _check_size_required_bot(model, size)
+    if not _ok:
+        print(f"  ❌ 입찰 차단: {_err}")
+        return False
 
     print(f"\n{'='*60}")
     print(f"💰 입찰 시작: 상품 #{product_id}")
