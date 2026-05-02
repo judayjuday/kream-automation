@@ -1,6 +1,219 @@
 {
   "history": [
     {
+      "executed_at": "2026-05-01T23:13:08",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 75087,
+          "instant_buy": 0,
+          "margin": "+12,077 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-05-01T23:12:49",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 110000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-05-01T23:00:49",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "IX7694",
+          "name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
+          "size": "ONE SIZE",
+          "bid_price": null,
+          "cost": 75087,
+          "instant_buy": 0,
+          "margin": "+12,077 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-05-01T23:00:05",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "FAKE99999",
+          "name": "아디다스 사틴 스몰 숄더 백 블랙",
+          "size": "250",
+          "bid_price": null,
+          "cost": 119812,
+          "instant_buy": 40000,
+          "margin": "+18,722 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-05-01T22:59:31",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 110000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-05-01T22:58:47",
+      "type": "검색+마진계산",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 110000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
+      "executed_at": "2026-05-01T20:18:42",
+      "type": "검색+마진계산",
+      "total": 9,
+      "success": 9,
+      "failed": 0,
+      "items": [
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "215",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 0,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "220",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 110000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "225",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 98000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "230",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 88000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "235",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 92000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "240",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 80000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "245",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 88000,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "250",
+          "bid_price": null,
+          "cost": 90517,
+          "instant_buy": 0,
+          "margin": "+14,393 (0.0%)",
+          "status": "완료"
+        },
+        {
+          "model": "JQ4110",
+          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
+          "size": "255",
+          "bid_price": null,
+          "cost": 90741,
+          "instant_buy": 0,
+          "margin": "+14,169 (0.0%)",
+          "status": "완료"
+        }
+      ]
+    },
+    {
       "executed_at": "2026-04-19T02:55:23",
       "type": "검색+마진계산",
       "total": 12,
@@ -1192,243 +1405,6 @@
           "instant_buy": 80000,
           "margin": "+13,628 (0.0%)",
           "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-15T10:23:14",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "1183B480-250",
-          "name": "229명이 보고 있어요",
-          "size": "",
-          "bid_price": null,
-          "cost": 126633,
-          "instant_buy": 110000,
-          "margin": "+19,373 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-15T10:21:50",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "1183B480-250",
-          "name": "229명이 보고 있어요",
-          "size": "",
-          "bid_price": null,
-          "cost": 126633,
-          "instant_buy": 110000,
-          "margin": "+19,373 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T23:54:39",
-      "type": "검색+마진계산",
-      "total": 1,
-      "success": 1,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) 아디다스 오즈가이아 트리플 블랙",
-          "size": "",
-          "bid_price": null,
-          "cost": 90813,
-          "instant_buy": 85000,
-          "margin": "+14,097 (0.0%)",
-          "status": "완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T23:33:37",
-      "type": "자동입찰",
-      "total": 4,
-      "success": 4,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W215",
-          "bid_price": 128000,
-          "margin": null,
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W220",
-          "bid_price": 114000,
-          "margin": null,
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W250",
-          "bid_price": 115000,
-          "margin": null,
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W255",
-          "bid_price": 146000,
-          "margin": null,
-          "status": "입찰완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T23:23:13",
-      "type": "자동입찰",
-      "total": 2,
-      "success": 2,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W220",
-          "bid_price": 114000,
-          "margin": null,
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W250",
-          "bid_price": 115000,
-          "margin": null,
-          "status": "입찰완료"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T23:10:16",
-      "type": "자동입찰",
-      "total": 4,
-      "success": 0,
-      "failed": 4,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W215",
-          "bid_price": 128000,
-          "margin": null,
-          "status": "실패"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W220",
-          "bid_price": 114000,
-          "margin": null,
-          "status": "실패"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W250",
-          "bid_price": 115000,
-          "margin": null,
-          "status": "실패"
-        },
-        {
-          "model": "JQ4110",
-          "name": "-",
-          "size": "W255",
-          "bid_price": 146000,
-          "margin": null,
-          "status": "실패"
-        }
-      ]
-    },
-    {
-      "executed_at": "2026-04-14T23:00:52",
-      "type": "자동입찰",
-      "total": 8,
-      "success": 8,
-      "failed": 0,
-      "items": [
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "215",
-          "bid_price": 128000,
-          "margin": "+26,239 (28.9%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "220",
-          "bid_price": 114000,
-          "margin": "+13,163 (14.5%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "250",
-          "bid_price": 115000,
-          "margin": "+14,097 (15.5%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "255",
-          "bid_price": 146000,
-          "margin": "+43,051 (47.4%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "215",
-          "bid_price": 124000,
-          "margin": "+22,503 (24.8%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "220",
-          "bid_price": 113000,
-          "margin": "+12,229 (13.5%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "250",
-          "bid_price": 114000,
-          "margin": "+13,163 (14.5%)",
-          "status": "입찰완료"
-        },
-        {
-          "model": "JQ4110",
-          "name": "(W) Adidas Ozgaia Triple Black",
-          "size": "255",
-          "bid_price": 139000,
-          "margin": "+36,513 (40.2%)",
-          "status": "입찰완료"
         }
       ]
     }

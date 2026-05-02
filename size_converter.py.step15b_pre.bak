@@ -1,0 +1,192 @@
+"""사이즈 변환 시스템 (Step 12 + Step 15 분수 정책 수정).
+
+흐름:
+1. normalize_size(): '38⅔' 같은 분수 사이즈 → '38.5' / '38' / None
+2. convert_to_kream_mm(): 정규화된 EU 사이즈 → KREAM mm
+
+분수 매핑 정책 (Step 15):
+- "X⅓" → "X"   (예: 39⅓ → 39)
+- "X⅔" → "X.5" (예: 38⅔ → 38.5)
+- "X½" → "X.5" (예: 41½ → 41.5)
+- 그 외 분수 → 정수 (안전한 기본값)
+"""
+from __future__ import annotations
+
+import re
+import sqlite3
+from pathlib import Path
+
+DB_PATH = Path(__file__).parent / 'price_history.db'
+
+FRACTION_REGEX = re.compile(r'\d+\s*[⅓⅔½]|\d+\s*\d+\s*/\s*\d+')
+
+
+def is_fraction_size(size_str) -> bool:
+    """⅓·⅔·½ 또는 1/3, 2/3 같은 분수 표기인지 판별. 0.5는 분수 아님(소수)."""
+    if size_str is None:
+        return False
+    s = str(size_str).strip()
+    if any(c in s for c in '⅓⅔½'):
+        return True
+    if re.search(r'\d+\s*/\s*\d+', s):
+        return True
+    return False
+
+
+def normalize_size(size_str, model_sizes_set):
+    """
+    분수 사이즈 처리 룰 (Step 15):
+    - 정수+0.5 단위는 그대로 (35.5는 분수가 아니라 0.5 단위)
+    - ⅓ → 정수, ⅔ → 다음 0.5, ½ → 0.5
+    - 같은 모델에 동일한 정규화 결과(정수)가 이미 있으면 제외 (중복 방지)
+
+    Returns: (정규화된_사이즈, 적용된_룰명)
+    """
+    if size_str is None or str(size_str).strip() == '':
+        return None, 'empty_input'
+
+    s = str(size_str).strip()
+
+    if not is_fraction_size(s):
+        return s, 'direct_match'
+
+    m = re.match(r'(\d+)', s)
+    if not m:
+        return None, 'parse_failed'
+    base_int = m.group(1)
+
+    if '⅔' in s:
+        normalized = f'{base_int}.5'
+        rule = 'fraction_to_half_or_int'
+    elif '½' in s:
+        normalized = f'{base_int}.5'
+        rule = 'fraction_to_half_or_int'
+    elif '⅓' in s:
+        normalized = base_int
+        rule = 'fraction_to_half_or_int'
+    elif re.search(r'\d+\s*/\s*\d+', s):
+        normalized = base_int
+        rule = 'fraction_to_half_or_int'
+    else:
+        normalized = base_int
+        rule = 'fraction_to_half_or_int'
+
+    if normalized == base_int and base_int in model_sizes_set:
+        return None, 'excluded_int_exists'
+
+    return normalized, rule
+
+
+def convert_to_kream_mm(brand: str, gender: str, category: str,
+                        model: str, size_str: str,
+                        model_sizes_set,
+                        purchase_country: str = 'ALL',
+                        log: bool = True):
+    """EU 사이즈 → KREAM mm. 변환 실패 시 None."""
+    brand_upper = (brand or '').upper()
+
+    normalized, rule = normalize_size(size_str, model_sizes_set or set())
+    result_mm = None
+
+    if normalized is not None:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT kream_mm FROM size_charts
+                WHERE brand=? AND gender=? AND category=? AND eu_size=?
+                  AND purchase_country IN (?, 'ALL')
+                ORDER BY CASE purchase_country WHEN ? THEN 0 ELSE 1 END
+                LIMIT 1
+            """, (brand_upper, gender, category, normalized,
+                  purchase_country, purchase_country))
+            row = c.fetchone()
+            if row:
+                result_mm = row[0]
+                final_rule = rule
+            else:
+                final_rule = f'{rule}_no_chart_match'
+    else:
+        final_rule = rule
+
+    if log:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("""
+                    INSERT INTO size_conversion_log
+                    (brand, model, raw_size, normalized_size, kream_mm, rule_applied)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (brand_upper, model, str(size_str), normalized, result_mm, final_rule))
+                conn.commit()
+        except Exception:
+            pass
+
+    return result_mm
+
+
+def import_size_chart_from_xlsx(xlsx_path: str, dry_run: bool = False) -> dict:
+    """엑셀 → size_charts 임포트. 헤더: 차트명/브랜드/성별/매입국가/EU/US/UK/CM/비고."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(xlsx_path, read_only=True, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        return {'ok': False, 'error': '데이터 없음'}
+
+    expected = ['차트명', '브랜드', '성별', '매입국가', 'EU', 'US', 'UK', 'CM']
+    header = [str(c).strip() if c else '' for c in rows[0][:8]]
+    if header[:8] != expected:
+        return {'ok': False, 'error': f'헤더 불일치: {header}'}
+
+    inserted, skipped, failed = 0, 0, 0
+    errors = []
+
+    for i, row in enumerate(rows[1:], start=2):
+        if row[0] is None:
+            continue
+        try:
+            chart_name = str(row[0]).strip()
+            brand = str(row[1]).strip().upper()
+            gender = str(row[2]).strip().upper()
+            country = str(row[3]).strip().upper() if row[3] else 'ALL'
+            eu_size = str(row[4]).strip()
+            us_size = str(row[5]).strip() if row[5] is not None else None
+            uk_size = str(row[6]).strip() if row[6] is not None else None
+            kream_mm = int(str(row[7]).strip())
+            notes = str(row[8]).strip() if len(row) > 8 and row[8] else None
+
+            category = 'shoes'
+            cn_upper = chart_name.upper()
+            if 'SANDAL' in cn_upper or 'SANDAL' in (notes or '').upper():
+                category = 'sandals'
+            elif 'APPAREL' in cn_upper or 'CLOTHING' in cn_upper:
+                category = 'apparel'
+
+            if dry_run:
+                inserted += 1
+                continue
+
+            with sqlite3.connect(DB_PATH) as conn:
+                cur = conn.execute("""
+                    INSERT OR IGNORE INTO size_charts
+                    (chart_name, brand, gender, category, purchase_country,
+                     eu_size, us_size, uk_size, kream_mm, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (chart_name, brand, gender, category, country,
+                      eu_size, us_size, uk_size, kream_mm, notes))
+                if cur.rowcount > 0:
+                    inserted += 1
+                else:
+                    skipped += 1
+                conn.commit()
+        except Exception as e:
+            failed += 1
+            errors.append(f'행 {i}: {e}')
+
+    return {
+        'ok': True,
+        'inserted': inserted,
+        'skipped': skipped,
+        'failed': failed,
+        'errors': errors[:10],
+    }

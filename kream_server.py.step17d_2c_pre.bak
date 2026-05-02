@@ -240,17 +240,8 @@ def _refresh_session_if_stale(target):
             return {"target": target, "action": "skip", "success": True,
                     "message": "kream auto-relogin not implemented"}
     except Exception as e:
-        msg = str(e)[:200]
-        try:
-            safe_send_alert(
-                subject=f"[KREAM] 세션 사전 갱신 실패: {target}",
-                body=f"target={target}\nmessage={msg}",
-                alert_type="auth_failure",
-            )
-        except Exception as _ae:
-            print(f"[session_refresh] safe_send_alert 실패: {_ae}")
         return {"target": target, "action": "failed", "success": False,
-                "message": msg}
+                "message": str(e)[:200]}
 
 
 def _session_refresh_worker():
@@ -822,17 +813,9 @@ def _init_notifications_table():
         message TEXT,
         action_url TEXT,
         is_read INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL,
-        dismissed INTEGER DEFAULT 0
+        created_at TEXT NOT NULL
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(is_read)")
-    # 기존 DB에 dismissed 컬럼 없으면 추가 (idempotent)
-    try:
-        cols = [r[1] for r in c.execute("PRAGMA table_info(notifications)").fetchall()]
-        if "dismissed" not in cols:
-            c.execute("ALTER TABLE notifications ADD COLUMN dismissed INTEGER DEFAULT 0")
-    except Exception as _e:
-        print(f"[notifications] dismissed migrate fail: {_e}")
     conn.commit()
     conn.close()
 
@@ -850,38 +833,6 @@ def add_notification(ntype, title, message="", action_url=""):
     )
     conn.commit()
     conn.close()
-
-
-def safe_send_alert(subject, body, alert_type='info'):
-    """알림 발송 안전 wrapper. 실패해도 서버 동작에 영향 X.
-    1) DB notifications 테이블에 누적, 2) 이메일 시도, 두 단계 모두 try/except.
-    기존 notifications 스키마(title/message)를 그대로 사용 (subject→title, body→message).
-    """
-    import sys
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO notifications (type, title, message, created_at) VALUES (?,?,?,?)",
-            (alert_type, str(subject)[:500], str(body)[:4000],
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"[ALERT-DB-FAIL] {e}", file=sys.stderr)
-
-    try:
-        # 기존 health_alerter(HealthAlert) 우선 사용, 없으면 send_alert 시도
-        try:
-            health_alerter.alert(alert_type, f"{subject}\n{body}")
-        except Exception:
-            from health_alert import send_alert  # type: ignore
-            send_alert(subject=subject, body=body)
-    except ImportError:
-        print(f"[ALERT-EMAIL] (health_alert 없음) {subject}: {str(body)[:200]}", file=sys.stderr)
-    except Exception as e:
-        print(f"[ALERT-EMAIL-FAIL] {e}", file=sys.stderr)
 
 
 # 판매 수집 스케줄러 상태
@@ -2940,54 +2891,6 @@ def api_notifications_read():
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
-
-
-@app.route("/api/notifications/auth-failures", methods=["GET"])
-def api_auth_failures():
-    """auth_failure 알림 최근 24시간 조회 (대시보드 배너용)."""
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, title, message, created_at, dismissed
-            FROM notifications
-            WHERE type = 'auth_failure'
-              AND datetime(created_at) > datetime('now', '-24 hours', 'localtime')
-              AND (dismissed IS NULL OR dismissed = 0)
-            ORDER BY created_at DESC
-            LIMIT 10
-        """)
-        rows = c.fetchall()
-        conn.close()
-        return jsonify({
-            "ok": True,
-            "count": len(rows),
-            "items": [
-                {"id": r[0], "subject": r[1], "body": r[2],
-                 "created_at": r[3], "dismissed": r[4]}
-                for r in rows
-            ],
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/notifications/dismiss", methods=["POST"])
-def api_notifications_dismiss():
-    """알림 dismiss (배너 닫기)."""
-    data = request.get_json(silent=True) or {}
-    nid = data.get("id")
-    if not nid:
-        return jsonify({"ok": False, "error": "id required"}), 400
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("UPDATE notifications SET dismissed = 1 WHERE id = ?", (nid,))
-        conn.commit()
-        conn.close()
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/session/status")

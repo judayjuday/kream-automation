@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/syntax-check.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/dangerous-command-check.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "작업 완료 전 검증: CLAUDE.md의 체크리스트를 모두 확인했는가? 변경한 Python 파일 문법 체크, API health 응답, 프론트엔드 콘솔 에러, DB 마이그레이션 확인 모두 완료됐는지 검증하라. 미확인 항목이 있으면 확인 후 완료 선언하라."
+          }
+        ]
+      }
+    ]
+  }
+}

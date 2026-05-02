@@ -10,7 +10,6 @@ KREAM 판매자센터 자동화 - Flask 백엔드 서버
 
 import asyncio
 import json
-import logging
 import math
 import random
 import re
@@ -18,7 +17,6 @@ import sqlite3
 import smtplib
 import subprocess
 import threading
-import time
 import traceback
 import urllib.request
 import urllib.error
@@ -53,7 +51,6 @@ from kream_hubnet_bot import (
 )
 
 app = Flask(__name__)
-logger = logging.getLogger(__name__)
 
 # ── 경보 시스템 ──
 health_alerter = HealthAlert()
@@ -190,120 +187,6 @@ def _backup_tick():
         _backup_timer.start()
 
 
-# ── 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B) ──
-_session_refresh_lock = threading.Lock()
-_session_refresh_thread = None
-_session_refresh_stop = threading.Event()
-_session_refresh_status = {
-    "enabled": True,
-    "last_run": None,
-    "last_result": None,
-    "next_run": None,
-    "interval_hours": 12,
-    "trigger_threshold_hours": 18,
-}
-
-
-def _refresh_session_if_stale(target):
-    """target='partner'|'kream'|'hubnet'. 18h 초과 + 토큰 valid 시 사전 재로그인."""
-    state_paths = {
-        "partner": BASE_DIR / "auth_state.json",
-        "kream": BASE_DIR / "auth_state_kream.json",
-        "hubnet": BASE_DIR / "auth_state_hubnet.json",
-    }
-    path = state_paths.get(target)
-    if not path or not path.exists():
-        return {"target": target, "action": "skip", "success": False,
-                "message": "state file not found"}
-
-    age_hours = (time.time() - path.stat().st_mtime) / 3600
-    threshold = _session_refresh_status["trigger_threshold_hours"]
-    if age_hours < threshold:
-        return {"target": target, "action": "skip", "success": True,
-                "message": f"still fresh (age={age_hours:.1f}h)"}
-
-    try:
-        if target == "hubnet":
-            sess = ensure_hubnet_logged_in()
-            cookie_count = len(sess.cookies) if sess is not None else 0
-            return {"target": target, "action": "refreshed", "success": True,
-                    "message": f"cookies={cookie_count}"}
-        elif target == "partner":
-            async def _do():
-                from kream_bot import login_auto_partner
-                async with async_playwright() as p:
-                    return await login_auto_partner(p)
-            asyncio.run(_do())
-            return {"target": target, "action": "refreshed", "success": True,
-                    "message": "partner re-logged in"}
-        elif target == "kream":
-            return {"target": target, "action": "skip", "success": True,
-                    "message": "kream auto-relogin not implemented"}
-    except Exception as e:
-        msg = str(e)[:200]
-        try:
-            safe_send_alert(
-                subject=f"[KREAM] 세션 사전 갱신 실패: {target}",
-                body=f"target={target}\nmessage={msg}",
-                alert_type="auth_failure",
-            )
-        except Exception as _ae:
-            print(f"[session_refresh] safe_send_alert 실패: {_ae}")
-        return {"target": target, "action": "failed", "success": False,
-                "message": msg}
-
-
-def _session_refresh_worker():
-    """백그라운드 스레드. 12h 주기로 partner/hubnet 사전 갱신 점검."""
-    while not _session_refresh_stop.is_set():
-        try:
-            with _session_refresh_lock:
-                if _session_refresh_status["enabled"]:
-                    results = []
-                    for target in ("partner", "hubnet"):
-                        results.append(_refresh_session_if_stale(target))
-                    _session_refresh_status["last_run"] = datetime.now().isoformat()
-                    _session_refresh_status["last_result"] = results
-
-                    failures = [r for r in results if r.get("action") == "failed"]
-                    if failures:
-                        try:
-                            health_alerter.alert(
-                                "session_refresh_failed",
-                                f"세션 사전 갱신 실패: {failures}",
-                            )
-                        except Exception as ae:
-                            print(f"[session_refresh] alert 실패: {ae}")
-
-            interval_sec = _session_refresh_status["interval_hours"] * 3600
-            _session_refresh_status["next_run"] = (
-                datetime.now() + timedelta(seconds=interval_sec)
-            ).isoformat()
-
-            for _ in range(int(interval_sec)):
-                if _session_refresh_stop.is_set():
-                    break
-                time.sleep(1)
-        except Exception as e:
-            print(f"[session_refresh] worker exception: {e}")
-            time.sleep(60)
-
-
-def start_session_refresh_scheduler():
-    """서버 시작 시 호출. 이미 실행 중이면 no-op."""
-    global _session_refresh_thread
-    if _session_refresh_thread is not None and _session_refresh_thread.is_alive():
-        return
-    _session_refresh_stop.clear()
-    _session_refresh_thread = threading.Thread(
-        target=_session_refresh_worker,
-        daemon=True,
-        name="session_refresh_scheduler",
-    )
-    _session_refresh_thread.start()
-    print("[session_refresh] 사전 갱신 스케줄러 시작 (12h 주기, 18h 임계)")
-
-
 # ── SQLite WAL 모드 활성화 ──
 def _enable_wal_mode():
     """price_history.db를 WAL 모드로 변경 (동시 읽기/쓰기 성능 향상)"""
@@ -360,21 +243,7 @@ def _init_bid_cost_table():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model ON bid_cost(model)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_bc_model_size ON bid_cost(model, size)")
-
-    # ── Step 16-A: cny_source 컬럼 추가 (idempotent, 트랜잭션 보장) ──
-    cols = [r[1] for r in c.execute("PRAGMA table_info(bid_cost)").fetchall()]
-    if "cny_source" not in cols:
-        c.execute("BEGIN")
-        try:
-            c.execute("ALTER TABLE bid_cost ADD COLUMN cny_source TEXT")
-            c.execute("UPDATE bid_cost SET cny_source='unknown' WHERE cny_source IS NULL")
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-    else:
-        conn.commit()
+    conn.commit()
     conn.close()
 
 
@@ -408,212 +277,26 @@ def _init_bid_cleanup_table():
 _init_bid_cleanup_table()
 
 
-# ═══════════════════════════════════════════
-# Step 17-A: 카테고리 판정 + 사이즈 유효성 검증
-# ═══════════════════════════════════════════
-
-_ONE_SIZE_TOKENS = ("ONE SIZE", "ONESIZE", "ONE_SIZE", "FREE", "OS")
-
-
-# Step 17-E: model_category DB의 영문 카테고리 → 큐 시스템 한글 카테고리 매핑
-DB_CATEGORY_TO_KR = {
-    "shoes": "신발",
-    "bags": "가방",
-    "clothing": "의류",
-    "unknown": "",  # 미결정 명시
-}
-
-
-def map_db_category_to_kr(db_category):
-    """DB의 영문 카테고리를 큐 시스템의 한글로 변환. unknown/None은 빈 문자열."""
-    if not db_category:
-        return ""
-    return DB_CATEGORY_TO_KR.get(str(db_category).lower(), "")
-
-
-def get_model_category(model):
-    """모델의 카테고리/사이즈 필수 여부 반환.
-
-    우선순위: model_category 캐시 → shihuo_prices(active=1) 직접 조회 → 보수적 디폴트.
-    반환: {"category": str, "needs_size": bool, "source": str}
-    """
-    if not model:
-        return {"category": "unknown", "needs_size": True, "source": "default"}
-
-    conn = sqlite3.connect(str(PRICE_DB))
-    try:
-        row = conn.execute(
-            "SELECT category, needs_size, source FROM model_category WHERE model=?",
-            (model,)
-        ).fetchone()
-        if row:
-            return {"category": row[0], "needs_size": bool(row[1]), "source": row[2]}
-
-        row = conn.execute(
-            "SELECT category FROM shihuo_prices WHERE active=1 AND model=? LIMIT 1",
-            (model,)
-        ).fetchone()
-        if row:
-            cat = row[0] or "unknown"
-            needs = 0 if cat == "bags" else 1
-            try:
-                conn.execute(
-                    "INSERT OR IGNORE INTO model_category (model, category, source, needs_size, notes) VALUES (?,?,?,?,?)",
-                    (model, cat, "shihuo", needs, "shihuo_prices 활성 batch 추론")
-                )
-                conn.commit()
-            except Exception:
-                pass
-            return {"category": cat, "needs_size": bool(needs), "source": "shihuo"}
-    finally:
-        conn.close()
-
-    # 보수적 디폴트: 사이즈 필수
-    return {"category": "unknown", "needs_size": True, "source": "default"}
-
-
-def validate_size_for_bid(model, size, raise_on_error=False):
-    """입찰 전 사이즈 유효성 검증.
-
-    needs_size=1 카테고리에서 size가 빈값/ONE SIZE/FREE → 차단.
-    needs_size=0(가방) 카테고리는 통과.
-
-    반환: (is_valid, error_msg, category_info)
-    """
-    cat_info = get_model_category(model)
-    size_clean = (size or "").strip().upper()
-
-    if cat_info["needs_size"]:
-        if not size_clean or size_clean in _ONE_SIZE_TOKENS:
-            msg = (f"카테고리 '{cat_info['category']}'은(는) 사이즈 필수입니다 "
-                   f"(model={model}, size='{size}')")
-            if raise_on_error:
-                raise ValueError(msg)
-            return (False, msg, cat_info)
-
-    return (True, None, cat_info)
-
-
-def validate_category_for_bid(model, category=None):
-    """Step 17-E: 입찰 전 카테고리 유효성 검증.
-
-    차단 조건:
-    - category가 None / 빈문자열 / "미분류" → 차단
-    - DB 조회 결과와 다르면 logger.warning만 (DB가 진실, 큐 execute에서 0순위로 적용됨)
-
-    반환: (is_valid: bool, error_msg: str)
-    """
-    if not category or str(category).strip() in ("", "미분류"):
-        return (False, f"카테고리 미결정 입찰 차단 (model={model}, category='{category}')")
-
-    if model:
-        try:
-            db_info = get_model_category(model)
-            db_kr = map_db_category_to_kr(db_info.get("category", ""))
-            if db_kr and db_kr != category:
-                logger.warning(
-                    "category mismatch model=%s db=%s current=%s",
-                    model, db_kr, category
-                )
-        except Exception as e:
-            logger.warning("category DB lookup failed model=%s err=%s", model, e)
-
-    return (True, "")
-
-
-def validate_gosi_for_bid(gosi):
-    """Step 17-E 보완: 입찰 전 gosi(고시정보) 결정 검증.
-
-    차단 조건:
-    - gosi가 None / 빈 dict
-    - gosi.type이 None / 빈 문자열 / 공백만
-
-    반환: (is_valid: bool, error_msg: str)
-    """
-    if not gosi:
-        return (False, "고시정보 미결정 (auto_fill_gosi가 None 또는 빈 dict 반환)")
-    if not isinstance(gosi, dict):
-        return (False, f"고시정보 형식 오류 (type={type(gosi).__name__})")
-    gosi_type = gosi.get("type", "")
-    if not gosi_type or not str(gosi_type).strip():
-        return (False, "고시정보 type 미결정")
-    return (True, "")
-
-
 def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
-                   overseas_shipping=8000, other_costs=0,
-                   cny_source=None):
-    """입찰 시점의 원가 저장 (UPSERT by order_id).
-
-    cny_price가 None/0이면 shihuo_prices(active=1) 매칭으로 자동 채택 시도.
-    매칭 키: model 정확 일치 + CAST(size AS INTEGER) = kream_mm.
-    매칭 실패 + manual 없음 → 저장 스킵 (가짜 값 채우기 금지).
-    """
-    if not order_id:
-        return None
-    # Step 17-A: size 빈값/None 차단 (ONE SIZE 디폴트 제거 후 명시 강제)
-    if size is None or not str(size).strip():
-        raise ValueError(
-            f"size required for bid_cost (order_id={order_id}, model={model})"
-        )
-
-    resolved_cny = float(cny_price) if cny_price and float(cny_price) > 0 else None
-    resolved_source = cny_source
-
-    # manual 명시 입력이 우선 — 식货 절대 덮어쓰지 않음 (절대 규칙 #3)
-    if resolved_cny is not None:
-        if not resolved_source:
-            resolved_source = "manual"
-
-    rate_f = float(exchange_rate) if exchange_rate else 0.0
-
+                   overseas_shipping=8000, other_costs=0):
+    """입찰 성공 시 원가 정보 저장 (order_id 기준 UPSERT)"""
+    if not order_id or not cny_price:
+        return
     conn = sqlite3.connect(str(PRICE_DB))
-    try:
-        cur = conn.cursor()
-
-        # manual 미지정 → shihuo 자동 채택 시도
-        if resolved_cny is None:
-            try:
-                size_int = int(str(size).strip())
-            except (ValueError, TypeError):
-                size_int = None
-
-            if model and size_int is not None:
-                row = cur.execute(
-                    """SELECT cny_price FROM shihuo_prices
-                       WHERE active=1 AND model=? AND kream_mm=?
-                       ORDER BY imported_at DESC LIMIT 1""",
-                    (model, size_int)
-                ).fetchone()
-                if row and row[0]:
-                    resolved_cny = float(row[0])
-                    resolved_source = "shihuo"
-
-        if resolved_cny is None:
-            # 매칭 실패 + manual 없음 → 저장 스킵 (절대 규칙 #4)
-            print(f"[bid_cost] 스킵: order_id={order_id} model={model} size={size} — cny_price 없음 + 식货 매칭 실패")
-            return None
-
-        if not resolved_source:
-            resolved_source = "unknown"
-
-        cur.execute(
-            """INSERT INTO bid_cost (order_id, model, size, cny_price, exchange_rate,
-                  overseas_shipping, other_costs, cny_source)
-               VALUES (?,?,?,?,?,?,?,?)
-               ON CONFLICT(order_id) DO UPDATE SET
-                 cny_price=excluded.cny_price,
-                 exchange_rate=excluded.exchange_rate,
-                 overseas_shipping=excluded.overseas_shipping,
-                 other_costs=excluded.other_costs,
-                 cny_source=excluded.cny_source""",
-            (order_id, model or "", size or "", resolved_cny, rate_f,
-             int(overseas_shipping), int(other_costs), resolved_source)
-        )
-        conn.commit()
-        return {"cny_price": resolved_cny, "cny_source": resolved_source}
-    finally:
-        conn.close()
+    conn.execute(
+        """INSERT INTO bid_cost (order_id, model, size, cny_price, exchange_rate,
+           overseas_shipping, other_costs)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(order_id) DO UPDATE SET
+             cny_price=excluded.cny_price,
+             exchange_rate=excluded.exchange_rate,
+             overseas_shipping=excluded.overseas_shipping,
+             other_costs=excluded.other_costs""",
+        (order_id, model or "", size or "", float(cny_price),
+         float(exchange_rate), int(overseas_shipping), int(other_costs))
+    )
+    conn.commit()
+    conn.close()
 
 
 def _init_auto_adjust_log_table():
@@ -822,17 +505,9 @@ def _init_notifications_table():
         message TEXT,
         action_url TEXT,
         is_read INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL,
-        dismissed INTEGER DEFAULT 0
+        created_at TEXT NOT NULL
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(is_read)")
-    # 기존 DB에 dismissed 컬럼 없으면 추가 (idempotent)
-    try:
-        cols = [r[1] for r in c.execute("PRAGMA table_info(notifications)").fetchall()]
-        if "dismissed" not in cols:
-            c.execute("ALTER TABLE notifications ADD COLUMN dismissed INTEGER DEFAULT 0")
-    except Exception as _e:
-        print(f"[notifications] dismissed migrate fail: {_e}")
     conn.commit()
     conn.close()
 
@@ -850,38 +525,6 @@ def add_notification(ntype, title, message="", action_url=""):
     )
     conn.commit()
     conn.close()
-
-
-def safe_send_alert(subject, body, alert_type='info'):
-    """알림 발송 안전 wrapper. 실패해도 서버 동작에 영향 X.
-    1) DB notifications 테이블에 누적, 2) 이메일 시도, 두 단계 모두 try/except.
-    기존 notifications 스키마(title/message)를 그대로 사용 (subject→title, body→message).
-    """
-    import sys
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO notifications (type, title, message, created_at) VALUES (?,?,?,?)",
-            (alert_type, str(subject)[:500], str(body)[:4000],
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"[ALERT-DB-FAIL] {e}", file=sys.stderr)
-
-    try:
-        # 기존 health_alerter(HealthAlert) 우선 사용, 없으면 send_alert 시도
-        try:
-            health_alerter.alert(alert_type, f"{subject}\n{body}")
-        except Exception:
-            from health_alert import send_alert  # type: ignore
-            send_alert(subject=subject, body=body)
-    except ImportError:
-        print(f"[ALERT-EMAIL] (health_alert 없음) {subject}: {str(body)[:200]}", file=sys.stderr)
-    except Exception as e:
-        print(f"[ALERT-EMAIL-FAIL] {e}", file=sys.stderr)
 
 
 # 판매 수집 스케줄러 상태
@@ -1054,81 +697,6 @@ def _init_bid_competition_log():
     conn.close()
 
 _init_bid_competition_log()
-
-
-def _init_size_charts_tables():
-    """Step 12: size_charts + size_conversion_log."""
-    conn = sqlite3.connect(str(PRICE_DB))
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS size_charts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        chart_name TEXT NOT NULL,
-        brand TEXT NOT NULL,
-        gender TEXT NOT NULL,
-        category TEXT NOT NULL DEFAULT 'shoes',
-        purchase_country TEXT DEFAULT 'ALL',
-        eu_size TEXT NOT NULL,
-        us_size TEXT,
-        uk_size TEXT,
-        kream_mm INTEGER NOT NULL,
-        notes TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(brand, gender, category, eu_size, purchase_country)
-    )""")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_size_charts_brand ON size_charts(brand, gender, category)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_size_charts_eu ON size_charts(eu_size)")
-
-    c.execute("""CREATE TABLE IF NOT EXISTS size_conversion_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        brand TEXT NOT NULL,
-        model TEXT,
-        raw_size TEXT NOT NULL,
-        normalized_size TEXT,
-        kream_mm INTEGER,
-        rule_applied TEXT,
-        decision_notes TEXT,
-        logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )""")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_size_log_brand_model ON size_conversion_log(brand, model)")
-    conn.commit()
-    conn.close()
-
-_init_size_charts_tables()
-
-
-def _init_shihuo_prices_table():
-    """Step 15: 識货 시장가 임포트 결과 저장 테이블."""
-    conn = sqlite3.connect(str(PRICE_DB))
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS shihuo_prices (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        batch_id TEXT NOT NULL,
-        active INTEGER DEFAULT 1,
-        brand_raw TEXT,
-        brand_normalized TEXT,
-        category TEXT,
-        model TEXT NOT NULL,
-        color TEXT,
-        size_eu TEXT,
-        size_normalized TEXT,
-        kream_mm INTEGER,
-        cny_price REAL NOT NULL,
-        supplier TEXT,
-        platform TEXT,
-        source_created_at DATETIME,
-        imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        mapping_status TEXT,
-        mapping_note TEXT,
-        UNIQUE(batch_id, model, size_eu)
-    )""")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_shihuo_active_model ON shihuo_prices(active, model)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_shihuo_active_kream ON shihuo_prices(active, model, kream_mm)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_shihuo_batch ON shihuo_prices(batch_id)")
-    conn.commit()
-    conn.close()
-
-
-_init_shihuo_prices_table()
 
 
 def calc_customer_total(bid_price, category="신발"):
@@ -1627,23 +1195,11 @@ def api_bid():
     data = request.json or {}
     product_id = str(data.get("productId", "")).strip()
     price = int(data.get("price", 0))
-    size = str(data.get("size", "")).strip()
+    size = str(data.get("size", "ONE SIZE")).strip()
     qty = int(data.get("quantity", 1))
-    model = str(data.get("model", "")).strip()
 
     if not product_id or not price:
         return jsonify({"error": "productId, price 필요"}), 400
-
-    # Step 17-A: 카테고리별 사이즈 필수 검증 (신발은 ONE SIZE 차단)
-    is_valid, err_msg, _cat = validate_size_for_bid(model, size)
-    if not is_valid:
-        return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
-
-    # Step 17-E: 카테고리 미결정 차단
-    bid_category = str(data.get("category", "")).strip()
-    cat_ok, cat_err = validate_category_for_bid(model, bid_category)
-    if not cat_ok:
-        return jsonify({"ok": False, "error": cat_err, "code": "CATEGORY_UNDECIDED"}), 400
 
     tid = new_task()
     add_log(tid, "info", f"입찰 시작: #{product_id} {price:,}원 × {qty}개")
@@ -1653,7 +1209,7 @@ def api_bid():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
-                run_bid(product_id, price, size, qty, tid, model=model)
+                run_bid(product_id, price, size, qty, tid)
             )
             loop.close()
             finish_task(tid, result=result)
@@ -1666,7 +1222,7 @@ def api_bid():
     return jsonify({"taskId": tid})
 
 
-async def run_bid(product_id, price, size, qty, tid, model=""):
+async def run_bid(product_id, price, size, qty, tid):
     async with async_playwright() as p:
         browser = await create_browser(p, headless=get_headless())
         context = await create_context(browser, STATE_FILE)
@@ -1680,7 +1236,6 @@ async def run_bid(product_id, price, size, qty, tid, model=""):
 
         bid_data = {
             "product_id": product_id,
-            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": qty,
@@ -1774,7 +1329,7 @@ def api_register():
     data = request.json or {}
     product_id = str(data.get("productId", "")).strip()
     price = int(data.get("price", 0))
-    size = str(data.get("size", "")).strip()
+    size = str(data.get("size", "ONE SIZE")).strip()
     qty = int(data.get("quantity", 1))
     gosi_already = data.get("gosiAlready", False)
     gosi = data.get("gosi", {})
@@ -1787,22 +1342,6 @@ def api_register():
     exchange_rate = data.get("exchange_rate", 0)
     overseas_shipping = data.get("overseas_shipping", 8000)
     model = str(data.get("model", "")).strip()
-
-    # Step 17-A: 카테고리별 사이즈 필수 검증 (신발은 ONE SIZE 차단)
-    is_valid, err_msg, _cat = validate_size_for_bid(model, size)
-    if not is_valid:
-        return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
-
-    # Step 17-E: 카테고리 미결정 차단 (data.category > gosi.category > "")
-    bid_category = str(data.get("category", "") or gosi.get("category", "")).strip()
-    cat_ok, cat_err = validate_category_for_bid(model, bid_category)
-    if not cat_ok:
-        return jsonify({"ok": False, "error": cat_err, "code": "CATEGORY_UNDECIDED"}), 400
-
-    # Step 17-E 보완: gosi 미결정 차단 (gosi=None / 빈 dict / type 빈값)
-    gosi_ok, gosi_err = validate_gosi_for_bid(gosi)
-    if not gosi_ok:
-        return jsonify({"ok": False, "error": gosi_err, "code": "GOSI_UNDECIDED"}), 400
 
     # CNY 필수 검증
     require_cny = True
@@ -1828,21 +1367,21 @@ def api_register():
             )
             loop.close()
 
-            # 입찰 성공 시 bid_cost 저장 (식货 매칭 시 자동 채택)
+            # 입찰 성공 시 bid_cost 저장
             if result and result.get("success"):
-                try:
-                    saved = _save_bid_cost(
-                        order_id=result.get("orderId") or f"{product_id}_{size}",
-                        model=model, size=size,
-                        cny_price=float(cny_price) if cny_price else None,
-                        exchange_rate=float(exchange_rate) if exchange_rate else 0,
-                        overseas_shipping=int(overseas_shipping),
-                        cny_source=("manual" if cny_price and float(cny_price) > 0 else None),
-                    )
-                    if not saved:
-                        print(f"[bid_cost] #{product_id} 원가 미저장 (manual 없음 + 식货 매칭 실패)")
-                except Exception as e:
-                    print(f"[bid_cost] 저장 실패: {e}")
+                if cny_price and float(cny_price) > 0:
+                    try:
+                        _save_bid_cost(
+                            order_id=result.get("orderId") or f"{product_id}_{size}",
+                            model=model, size=size,
+                            cny_price=float(cny_price),
+                            exchange_rate=float(exchange_rate) if exchange_rate else 0,
+                            overseas_shipping=int(overseas_shipping),
+                        )
+                    except Exception:
+                        pass
+                else:
+                    print(f"[bid_cost] 경고: #{product_id} 원가(cny_price) 없음 — bid_cost 미저장")
 
             finish_task(tid, result=result)
         except Exception as e:
@@ -1855,8 +1394,7 @@ def api_register():
 
 
 GOSI_DEFAULTS = {
-    # Step 17-E: "가방" 폴백 제거 — 카테고리 미결정 시 빈 문자열 (호출자가 처리)
-    "type": "",
+    "type": "가방",
     "material": "상품별 상이",
     "color": "상품별 상이",
     "size_info": "상품별 상이",
@@ -1961,7 +1499,6 @@ async def run_full_register(product_id, price, size, qty, gosi_already, gosi, ti
         add_log(tid, "info", f"판매 입찰 등록 중... {price:,}원 × {qty}개 ({bid_days}일)")
         bid_data = {
             "product_id": product_id,
-            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": qty,
@@ -2025,7 +1562,7 @@ async def _run_bid_only(product_id, price, size, qty, bid_days, tid, model=""):
             await browser.close()
             return {"success": False}
         bid_data = {
-            "product_id": product_id, "model": model, "사이즈": size,
+            "product_id": product_id, "사이즈": size,
             "입찰가격": price, "수량": qty, "bid_days": bid_days,
         }
         success = await place_bid(page, bid_data, delay=2.0)
@@ -2170,20 +1707,13 @@ def api_bulk_generate():
     # 3행: 필수/선택
     ws.append(["필수", "필수", "필수", "필수", "필수", "필수", "선택", "선택"])
 
-    # 4행~: 데이터 (Step 17-A: 신발인데 사이즈 누락된 항목은 skip)
-    skipped = []
+    # 4행~: 데이터
     for item in items:
-        _model = item.get("model", "")
-        _size = item.get("size", "")
-        is_valid, err_msg, _cat = validate_size_for_bid(_model, _size)
-        if not is_valid:
-            skipped.append({"model": _model, "size": _size, "reason": err_msg})
-            continue
         ws.append([
             item.get("productId", ""),
-            _model,
+            item.get("model", ""),
             item.get("nameEn", ""),
-            _size or "ONE SIZE",
+            item.get("size", "ONE SIZE"),
             item.get("price", ""),
             item.get("quantity", 1),
             item.get("deadline", ""),
@@ -2191,12 +1721,7 @@ def api_bulk_generate():
         ])
 
     wb.save(str(output_path))
-    return jsonify({
-        "ok": True,
-        "path": str(output_path),
-        "count": len(items) - len(skipped),
-        "skipped": skipped,
-    })
+    return jsonify({"ok": True, "path": str(output_path), "count": len(items)})
 
 
 @app.route("/api/bulk/download")
@@ -2942,54 +2467,6 @@ def api_notifications_read():
     return jsonify({"ok": True})
 
 
-@app.route("/api/notifications/auth-failures", methods=["GET"])
-def api_auth_failures():
-    """auth_failure 알림 최근 24시간 조회 (대시보드 배너용)."""
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, title, message, created_at, dismissed
-            FROM notifications
-            WHERE type = 'auth_failure'
-              AND datetime(created_at) > datetime('now', '-24 hours', 'localtime')
-              AND (dismissed IS NULL OR dismissed = 0)
-            ORDER BY created_at DESC
-            LIMIT 10
-        """)
-        rows = c.fetchall()
-        conn.close()
-        return jsonify({
-            "ok": True,
-            "count": len(rows),
-            "items": [
-                {"id": r[0], "subject": r[1], "body": r[2],
-                 "created_at": r[3], "dismissed": r[4]}
-                for r in rows
-            ],
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/notifications/dismiss", methods=["POST"])
-def api_notifications_dismiss():
-    """알림 dismiss (배너 닫기)."""
-    data = request.get_json(silent=True) or {}
-    nid = data.get("id")
-    if not nid:
-        return jsonify({"ok": False, "error": "id required"}), 400
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("UPDATE notifications SET dismissed = 1 WHERE id = ?", (nid,))
-        conn.commit()
-        conn.close()
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
 @app.route("/api/session/status")
 def api_session_status():
     """KREAM + 판매자센터 세션 상태 확인"""
@@ -3067,38 +2544,6 @@ def api_session_relogin():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"taskId": tid})
-
-
-# ── 사전 갱신 스케줄러 API (Step 17-D Phase 2-B) ──
-
-@app.route("/api/session/refresh-status", methods=["GET"])
-def api_session_refresh_status():
-    """사전 갱신 스케줄러 상태 조회."""
-    alive = bool(_session_refresh_thread and _session_refresh_thread.is_alive())
-    return jsonify({"ok": True, "thread_alive": alive, **_session_refresh_status})
-
-
-@app.route("/api/session/refresh-toggle", methods=["POST"])
-def api_session_refresh_toggle():
-    """사전 갱신 스케줄러 ON/OFF (런타임)."""
-    data = request.get_json(silent=True) or {}
-    enabled = bool(data.get("enabled", True))
-    with _session_refresh_lock:
-        _session_refresh_status["enabled"] = enabled
-    return jsonify({"ok": True, "enabled": enabled})
-
-
-@app.route("/api/session/refresh-run-once", methods=["POST"])
-def api_session_refresh_run_once():
-    """수동 1회 실행 (디버깅용). target='all'|'partner'|'hubnet'."""
-    data = request.get_json(silent=True) or {}
-    target = data.get("target", "all")
-    targets = ["partner", "hubnet"] if target == "all" else [target]
-    results = []
-    with _session_refresh_lock:
-        for t in targets:
-            results.append(_refresh_session_if_stale(t))
-    return jsonify({"ok": True, "results": results})
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -3205,12 +2650,9 @@ def detect_category(english_name):
     bag_kw = ['bag', 'backpack', 'tote', 'pouch', 'wallet', 'clutch',
               'purse', 'satchel', 'rucksack', 'crossbody', 'shoulder bag',
               'duffle', 'messenger', 'fanny pack', 'waist bag']
-    # Step 17-E 보강: 신발 일반 키워드 추가 (training/athletic/performance)
-    # ⚠️ court/gym/sport는 부분 매칭 부작용 위험으로 제외
     shoe_kw = ['shoe', 'sneaker', 'boot', 'sandal', 'slipper',
                'runner', 'trainer', 'loafer', 'mule', 'clog',
-               'slide', 'flip flop', 'oxford', 'derby',
-               'training', 'athletic', 'performance']
+               'slide', 'flip flop', 'oxford', 'derby']
     clothing_kw = ['jacket', 'hoodie', 'shirt', 'pants', 'shorts',
                    'dress', 'skirt', 'coat', 'sweater', 'cardigan',
                    'vest', 'tee', 't-shirt', 'jogger', 'track']
@@ -3246,11 +2688,8 @@ def detect_category_kr(korean_name):
     bag_kw = ['숄더백', '토트백', '크로스백', '백팩', '파우치', '지갑', '클러치',
               '더플백', '메신저백', '웨이스트백', '버킷백', '호보백', '에코백',
               '가방', '백 ', '월렛']
-    # Step 17-E 보강: 신발 일반 키워드 추가 (트레이닝/러닝/운동/스포츠)
-    # ⚠️ 코트화는 부분 매칭 부작용 위험으로 제외
     shoe_kw = ['러닝화', '스니커즈', '슬라이드', '샌들', '부츠', '로퍼',
-               '슬리퍼', '트레이너', '운동화', '스니커', '구두',
-               '트레이닝', '러닝', '운동', '스포츠']
+               '슬리퍼', '트레이너', '운동화', '스니커', '구두']
     clothing_kw = ['후드', '자켓', '티셔츠', '팬츠', '쇼츠', '스웨터',
                    '코트', '셔츠', '조거', '베스트', '드레스']
 
@@ -3339,9 +2778,6 @@ def auto_fill_gosi(kream_data):
         ("running shoe", "러닝화"), ("sneaker", "스니커즈"),
         ("slide", "슬라이드"), ("sandal", "샌들"), ("boot", "부츠"),
         ("loafer", "로퍼"), ("trainer", "트레이너"), ("slipper", "슬리퍼"),
-        # Step 17-E 보강: 신발 일반 용어 (모델명 매칭은 X, 일반 카테고리 용어만)
-        ("training", "운동화"), ("athletic", "운동화"),
-        ("performance", "운동화"), ("runner", "러닝화"),
         # 의류
         ("hoodie", "후드"), ("jacket", "자켓"), ("t-shirt", "티셔츠"),
         ("pants", "팬츠"), ("shorts", "쇼츠"), ("sweater", "스웨터"),
@@ -3352,8 +2788,6 @@ def auto_fill_gosi(kream_data):
         "힙색", "웨이스트백", "더플백", "메신저백", "보스턴백", "에코백",
         "쇼퍼백", "호보백", "버킷백",
         "러닝화", "스니커즈", "슬라이드", "샌들", "부츠", "로퍼",
-        # Step 17-E 보강: 신발 일반 한글 용어
-        "트레이닝", "러닝", "운동화", "스포츠",
         "후드", "자켓", "티셔츠", "팬츠", "쇼츠",
     ]
 
@@ -3367,15 +2801,8 @@ def auto_fill_gosi(kream_data):
             if kt in kor_name:
                 detected_type = kt
                 break
-    # Step 17-E: detected_type 못 찾으면 None 반환 (가방 폴백 제거)
-    # 호출자(큐 execute)가 None을 받으면 카테고리 미결정으로 처리
-    if not detected_type:
-        logger.warning(
-            "auto_fill_gosi: type detection failed name_en=%r name_kr=%r — returning None",
-            eng_name_raw, kor_name
-        )
-        return None
-    info["type"] = detected_type
+    # 가방 카테고리인데 종류 못 찾으면 "가방"
+    info["type"] = detected_type or GOSI_DEFAULTS["type"]
 
     # ── 색상: 상품명에서 매칭 ──
     COLOR_MAP_EN = {
@@ -3965,68 +3392,41 @@ def api_queue_execute():
                     recent_trade = kream.get("recent_trade_price") or kream.get("display_price")  # 과거 체결가
 
                     # 사이즈 자동 설정
-                    # Step 17-A: 사이즈 정보가 없을 때 신발 모델은 ONE SIZE 자동 설정 차단
                     if not item.get("sizes") and not item.get("size"):
                         kream_sizes = kream.get("sizes", [])
                         if kream_sizes:
                             item["size"] = "전사이즈"
                         else:
-                            _cat_info = get_model_category(model)
-                            if _cat_info["needs_size"]:
-                                item["status"] = "사이즈 필요"
-                                item["result"] = {
-                                    "error": (f"카테고리 '{_cat_info['category']}'은 사이즈 필수인데 "
-                                              f"KREAM 사이즈 정보가 없습니다 (model={model})")
-                                }
-                                add_log(tid, "error",
-                                        f"{model}: 신발 카테고리 사이즈 누락 — 자동 등록 스킵")
-                                continue
                             item["size"] = "ONE SIZE"
 
-                    # 카테고리 자동 판별 — Step 17-E: 0순위 model_category DB 추가
+                    # 카테고리 자동 판별
                     item["status"] = "계산 중"
-                    decision_source = "preset"  # 사용자가 미리 지정한 경우
                     if not item["category"]:
-                        decision_source = "unresolved"
-                        # 0순위: model_category DB (식货 mapped 등 신뢰 가능 출처)
-                        db_info = get_model_category(model)
-                        db_kr = map_db_category_to_kr(db_info.get("category", ""))
-                        if db_kr:
-                            item["category"] = db_kr
-                            item["categoryAuto"] = True
-                            decision_source = "db"
                         # 1순위: KREAM 카테고리 정보
-                        if not item["category"]:
-                            kream_cat = kream.get("category", "")
-                            if kream_cat:
-                                cat_mapped = _map_kream_category(kream_cat)
-                                if cat_mapped:
-                                    item["category"] = cat_mapped
-                                    item["categoryAuto"] = True
-                                    decision_source = "kream"
+                        kream_cat = kream.get("category", "")
+                        if kream_cat:
+                            cat_mapped = _map_kream_category(kream_cat)
+                            if cat_mapped:
+                                item["category"] = cat_mapped
+                                item["categoryAuto"] = True
                         # 2순위: 영문 상품명 파싱
                         if not item["category"]:
                             cat_info = detect_category(name_en)
                             if cat_info["category"]:
                                 item["category"] = cat_info["category"]
                                 item["categoryAuto"] = True
-                                decision_source = "detect_en"
                         # 3순위: 한글 상품명에서도 시도
                         if not item["category"] and name_kr:
                             cat_info = detect_category_kr(name_kr)
                             if cat_info:
                                 item["category"] = cat_info
                                 item["categoryAuto"] = True
-                                decision_source = "detect_kr"
-                        # 못 찾으면 미분류 (decision_source는 unresolved 유지)
+                        # 못 찾으면 미분류
                         if not item["category"]:
                             item["category"] = "미분류"
                             item["categoryAuto"] = True
 
-                    item["category_decision_source"] = decision_source
-
                     # 고시정보 자동 채움 (카테고리 전달)
-                    # Step 17-E: auto_fill_gosi가 None 반환 = type 결정 실패 → gosi=None
                     gosi = auto_fill_gosi({
                         "english_name": name_en,
                         "product_name": name_kr,
@@ -4034,9 +3434,6 @@ def api_queue_execute():
                         "category": item["category"],
                     })
                     item["gosi"] = gosi
-                    if gosi is None:
-                        add_log(tid, "warn",
-                                f"{model}: gosi.type 결정 실패 — 카테고리 미분류 또는 키워드 매칭 실패")
 
                     # 마진 계산 — 사이즈별 가격이 있으면 각각 계산
                     input_sizes = item.get("sizes", [])
@@ -4469,36 +3866,8 @@ def api_queue_auto_register():
             for i, bi in enumerate(bid_items, 1):
                 pid = bi.get("productId") or 0
                 price = bi["price"]
-                size = bi.get("size", "")
+                size = bi.get("size", "ONE SIZE")
                 model = bi.get("model", "")
-
-                # Step 17-A: 사이즈 필수 검증 (신발 ONE SIZE 차단)
-                is_valid, err_msg, _cat = validate_size_for_bid(model, size)
-                if not is_valid:
-                    add_log(tid, "error", f"[{i}] {model}: {err_msg}")
-                    results.append({"productId": str(pid) if pid else "", "model": model,
-                        "size": size, "price": price, "success": False, "error": err_msg})
-                    continue
-
-                # Step 17-E: 카테고리 미결정 차단 (큐 execute에서 0순위 DB로 채워졌어야 함)
-                bi_category = str(bi.get("category", "")).strip()
-                cat_ok, cat_err = validate_category_for_bid(model, bi_category)
-                if not cat_ok:
-                    add_log(tid, "error", f"[{i}] {model}: {cat_err}")
-                    results.append({"productId": str(pid) if pid else "", "model": model,
-                        "size": size, "price": price, "success": False,
-                        "error": cat_err, "skip_reason": "category_undecided"})
-                    continue
-
-                # Step 17-E 보완: gosi 미결정 차단 (큐 execute에서 auto_fill_gosi 실패한 항목)
-                bi_gosi = bi.get("gosi")
-                gosi_ok, gosi_err = validate_gosi_for_bid(bi_gosi)
-                if not gosi_ok:
-                    add_log(tid, "error", f"[{i}] {model}: {gosi_err}")
-                    results.append({"productId": str(pid) if pid else "", "model": model,
-                        "size": size, "price": price, "success": False,
-                        "error": gosi_err, "skip_reason": "gosi_undecided"})
-                    continue
 
                 if not pid or str(pid) == "0":
                     if model:
@@ -4610,19 +3979,19 @@ def api_queue_auto_register():
                                 save_bid_local(pid, model=model, size=bi_result["size"],
                                               price=bi_result["price"], source="placed")
                                 _cny = matched_bi.get("cny_price", 0)
-                                try:
-                                    saved = _save_bid_cost(
-                                        order_id=bi_result.get("orderId") or f"{pid}_{bi_result['size']}",
-                                        model=model, size=bi_result["size"],
-                                        cny_price=float(_cny) if _cny else None,
-                                        exchange_rate=float(matched_bi.get("exchange_rate", 0)),
-                                        overseas_shipping=int(matched_bi.get("overseas_shipping", 8000)),
-                                        cny_source=("manual" if _cny and float(_cny) > 0 else None),
-                                    )
-                                    if not saved:
-                                        add_log(tid, "warn", f"  [{model} {bi_result['size']}] 원가 미저장 (식货 매칭 실패)")
-                                except Exception as e:
-                                    add_log(tid, "error", f"  bid_cost 저장 실패: {e}")
+                                if _cny and float(_cny) > 0:
+                                    try:
+                                        _save_bid_cost(
+                                            order_id=bi_result.get("orderId") or f"{pid}_{bi_result['size']}",
+                                            model=model, size=bi_result["size"],
+                                            cny_price=float(_cny),
+                                            exchange_rate=float(matched_bi.get("exchange_rate", 0)),
+                                            overseas_shipping=int(matched_bi.get("overseas_shipping", 8000)),
+                                        )
+                                    except Exception:
+                                        pass
+                                else:
+                                    add_log(tid, "warn", f"  [{model} {bi_result['size']}] 원가(cny_price) 없음 — bid_cost 미저장")
                     except Exception as e:
                         add_log(tid, "error", f"  일괄 입찰 오류: {e}")
                         for bi in group:
@@ -4649,19 +4018,19 @@ def api_queue_auto_register():
                             save_bid_local(pid, model=model, size=size,
                                           price=price, source="placed")
                             _cny = bi.get("cny_price", 0)
-                            try:
-                                saved = _save_bid_cost(
-                                    order_id=result.get("orderId") or f"{pid}_{size}",
-                                    model=model, size=size,
-                                    cny_price=float(_cny) if _cny else None,
-                                    exchange_rate=float(bi.get("exchange_rate", 0)),
-                                    overseas_shipping=int(bi.get("overseas_shipping", 8000)),
-                                    cny_source=("manual" if _cny and float(_cny) > 0 else None),
-                                )
-                                if not saved:
-                                    add_log(tid, "warn", f"  [{model} {size}] 원가 미저장 (식货 매칭 실패)")
-                            except Exception as e:
-                                add_log(tid, "error", f"  bid_cost 저장 실패: {e}")
+                            if _cny and float(_cny) > 0:
+                                try:
+                                    _save_bid_cost(
+                                        order_id=result.get("orderId") or f"{pid}_{size}",
+                                        model=model, size=size,
+                                        cny_price=float(_cny),
+                                        exchange_rate=float(bi.get("exchange_rate", 0)),
+                                        overseas_shipping=int(bi.get("overseas_shipping", 8000)),
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                add_log(tid, "warn", f"  [{model} {size}] 원가(cny_price) 없음 — bid_cost 미저장")
                     except Exception as e:
                         add_log(tid, "error", f"  입찰 오류: {e}")
                         results.append({"productId": pid, "model": model,
@@ -5442,8 +4811,7 @@ def api_adjust_pending():
     c = conn.cursor()
     c.execute(
         """SELECT pa.*,
-                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs,
-                  bc.cny_source AS bc_cny_source
+                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs
            FROM price_adjustments pa
            LEFT JOIN bid_cost bc ON pa.order_id = bc.order_id
            WHERE pa.status IN ('pending', 'profit_low', 'deficit')
@@ -5632,7 +5000,6 @@ def api_bid_cost_upsert():
         exchange_rate=rate_f,
         overseas_shipping=ship_i,
         other_costs=other_i,
-        cny_source="manual",
     )
 
     # pending 조정 건의 expected_profit + status 갱신
@@ -5717,71 +5084,6 @@ def api_bid_cost_missing():
     return jsonify({"groups": list(groups_dict.values()), "total": len(rows)})
 
 
-@app.route("/api/bid-cost/shihuo-diff")
-def api_bid_cost_shihuo_diff():
-    """등록된 bid_cost와 식货 활성 배치의 cny_price 차이 리포트.
-
-    매칭: bc.model = sh.model AND CAST(bc.size AS INTEGER) = sh.kream_mm AND sh.active=1.
-    가격 차이가 있는 행만 반환. ONE SIZE 등 캐스팅 불가 항목은 자동 제외(매칭 0).
-    """
-    conn = sqlite3.connect(str(PRICE_DB))
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-
-    active_batch = c.execute(
-        "SELECT batch_id FROM shihuo_prices WHERE active=1 ORDER BY imported_at DESC LIMIT 1"
-    ).fetchone()
-    active_batch_id = active_batch[0] if active_batch else None
-
-    rows = c.execute("""
-        SELECT bc.order_id, bc.model, bc.size,
-               bc.cny_price        AS bc_cny,
-               bc.cny_source       AS bc_source,
-               bc.exchange_rate    AS bc_rate,
-               sh.cny_price        AS sh_cny,
-               sh.batch_id         AS sh_batch,
-               sh.kream_mm         AS sh_kream_mm,
-               sh.size_eu          AS sh_size_eu
-          FROM bid_cost bc
-          JOIN shihuo_prices sh
-            ON sh.active=1
-           AND sh.model = bc.model
-           AND sh.kream_mm IS NOT NULL
-           AND sh.kream_mm = CAST(bc.size AS INTEGER)
-         WHERE sh.cny_price <> bc.cny_price
-         ORDER BY ABS(sh.cny_price - bc.cny_price) DESC
-    """).fetchall()
-    conn.close()
-
-    items = []
-    for r in rows:
-        bc_cny = float(r["bc_cny"] or 0)
-        sh_cny = float(r["sh_cny"] or 0)
-        diff = sh_cny - bc_cny
-        diff_pct = (diff / bc_cny * 100.0) if bc_cny else None
-        items.append({
-            "order_id": r["order_id"],
-            "model": r["model"],
-            "size": r["size"],
-            "bc_cny": bc_cny,
-            "bc_source": r["bc_source"],
-            "sh_cny": sh_cny,
-            "diff_cny": round(diff, 2),
-            "diff_pct": round(diff_pct, 2) if diff_pct is not None else None,
-            "sh_batch": r["sh_batch"],
-            "sh_size_eu": r["sh_size_eu"],
-            "sh_kream_mm": r["sh_kream_mm"],
-            "exchange_rate": r["bc_rate"],
-        })
-
-    return jsonify({
-        "ok": True,
-        "active_batch_id": active_batch_id,
-        "count": len(items),
-        "items": items,
-    })
-
-
 @app.route("/api/bid-cost/bulk-upsert", methods=["POST"])
 def api_bid_cost_bulk_upsert():
     """여러 건 원가 한번에 저장 + price_adjustments 재계산"""
@@ -5823,7 +5125,6 @@ def api_bid_cost_bulk_upsert():
                 order_id=oid, model=model, size=size,
                 cny_price=cny_f, exchange_rate=rate_f,
                 overseas_shipping=ship_i, other_costs=other_i,
-                cny_source="manual",
             )
 
             # pending 건 expected_profit 재계산
@@ -6991,42 +6292,11 @@ def api_health():
                     "valid": False,
                 }
 
-        # 허브넷 세션 (Step 17-D Phase 2-A.1): PHP 세션 시스템 — PHPSESSID 1개만 있으면 정상
-        # 정상 세션도 ~317byte. 빈 cookies 또는 JSON 파싱 실패 시 valid=false.
-        hubnet_path = BASE_DIR / "auth_state_hubnet.json"
-        auth_hubnet = {
-            "exists": False,
-            "last_modified": None,
-            "age_hours": None,
-            "valid": False,
-        }
-        if hubnet_path.exists():
-            mtime = datetime.fromtimestamp(hubnet_path.stat().st_mtime)
-            auth_hubnet["exists"] = True
-            auth_hubnet["last_modified"] = mtime.isoformat()
-            auth_hubnet["age_hours"] = round((now - mtime).total_seconds() / 3600, 1)
-            try:
-                data = json.loads(hubnet_path.read_text())
-                cookies = data.get("cookies", [])
-                has_phpsessid = any(c.get("name") == "PHPSESSID" for c in cookies)
-                if has_phpsessid:
-                    auth_hubnet["valid"] = True
-            except Exception:
-                auth_hubnet["valid"] = False
-        result["auth_hubnet"] = auth_hubnet
-
         # 스케줄러 상태
         result["schedulers"] = {
             "monitor": "running" if monitor_state.get("running") else "stopped",
             "sales": "running" if sales_scheduler_state.get("running") else "stopped",
             "backup": "running" if backup_state.get("running") else "stopped",
-        }
-
-        # 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B)
-        result["session_refresh"] = {
-            "enabled": _session_refresh_status["enabled"],
-            "last_run": _session_refresh_status["last_run"],
-            "next_run": _session_refresh_status["next_run"],
         }
 
         # 마지막 판매 수집
@@ -7696,34 +6966,24 @@ def api_auto_adjust_history():
     conn = sqlite3.connect(str(PRICE_DB))
     conn.row_factory = sqlite3.Row
 
-    # Step 17-C: competitor_price (price_adjustments 최근 1건) + bc_cny_source (bid_cost) JOIN
-    query = (
-        "SELECT aal.*, "
-        "(SELECT pa.competitor_price FROM price_adjustments pa "
-        "  WHERE pa.order_id = aal.order_id "
-        "  ORDER BY pa.created_at DESC LIMIT 1) AS competitor_price, "
-        "bc.cny_source AS bc_cny_source "
-        "FROM auto_adjust_log aal "
-        "LEFT JOIN bid_cost bc ON bc.order_id = aal.order_id "
-        "WHERE 1=1"
-    )
+    query = "SELECT * FROM auto_adjust_log WHERE 1=1"
     params = []
 
     if action_filter == "modified":
-        query += " AND aal.action='auto_modified'"
+        query += " AND action='auto_modified'"
     elif action_filter == "skipped":
-        query += " AND aal.action LIKE 'skipped_%'"
+        query += " AND action LIKE 'skipped_%'"
     elif action_filter == "failed":
-        query += " AND aal.action='modify_failed'"
+        query += " AND action='modify_failed'"
 
     if from_date:
-        query += " AND date(aal.executed_at) >= ?"
+        query += " AND date(executed_at) >= ?"
         params.append(from_date)
     if to_date:
-        query += " AND date(aal.executed_at) <= ?"
+        query += " AND date(executed_at) <= ?"
         params.append(to_date)
 
-    query += " ORDER BY aal.executed_at DESC LIMIT ?"
+    query += " ORDER BY executed_at DESC LIMIT ?"
     params.append(limit)
 
     c = conn.cursor()
@@ -7854,7 +7114,6 @@ async def _execute_rebid(product_id, model, size, price, cny_price):
 
         bid_data = {
             "product_id": str(product_id),
-            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": 1,
@@ -7869,24 +7128,25 @@ async def _execute_rebid(product_id, model, size, price, cny_price):
 
         if success:
             await save_state_with_localstorage(page, context, STATE_FILE, PARTNER_URL)
-            settings = {}
-            if SETTINGS_FILE.exists():
+            # bid_cost 저장
+            if cny_price and float(cny_price) > 0:
+                settings = {}
+                if SETTINGS_FILE.exists():
+                    try:
+                        settings = json.loads(SETTINGS_FILE.read_text())
+                    except Exception:
+                        pass
+                rate = settings.get("cnyRate", 215)
                 try:
-                    settings = json.loads(SETTINGS_FILE.read_text())
+                    _save_bid_cost(
+                        order_id=f"{product_id}_{size}_rebid",
+                        model=model, size=size,
+                        cny_price=float(cny_price),
+                        exchange_rate=float(rate),
+                        overseas_shipping=8000,
+                    )
                 except Exception:
                     pass
-            rate = settings.get("cnyRate", 215)
-            try:
-                _save_bid_cost(
-                    order_id=f"{product_id}_{size}_rebid",  # v3 확정: timestamp 제거 → UPSERT 보존
-                    model=model, size=size,
-                    cny_price=float(cny_price) if cny_price else None,
-                    exchange_rate=float(rate),
-                    overseas_shipping=8000,
-                    cny_source=("manual" if cny_price and float(cny_price) > 0 else None),
-                )
-            except Exception as e:
-                print(f"[auto_rebid] bid_cost 실패: {e}")
 
         await browser.close()
         return {"success": success}
@@ -8059,18 +7319,6 @@ def auto_rebid_after_sale(sale_records):
                     results["skipped"] += 1
                     results["details"].append({"order_id": order_id, "action": "skipped_margin_low",
                                                "expected_profit": expected_profit})
-                    continue
-
-                # Step 13: dry-run 모드 (실제 입찰 박지 않음, 의사결정만 로그)
-                if settings.get("auto_rebid_dry_run", False):
-                    _log_auto_rebid(order_id, model, size, sold_price, new_bid_price,
-                                    expected_profit, "auto_rebid_dry_run",
-                                    f"DRY-RUN: would rebid {new_bid_price}")
-                    results["skipped"] += 1
-                    results["details"].append({"order_id": order_id, "action": "auto_rebid_dry_run",
-                                               "new_bid_price": new_bid_price,
-                                               "expected_profit": expected_profit})
-                    print(f"[auto_rebid] DRY-RUN {model} {size}: sold {sold_price:,} → would rebid {new_bid_price:,}")
                     continue
 
                 # 실제 입찰 실행
@@ -9152,433 +8400,6 @@ def serve_label_pdf(filename):
 
 
 # ═══════════════════════════════════════════
-# ═══════════════════════════════════════════
-# Step 12: 사이즈 변환 시스템 API
-# ═══════════════════════════════════════════
-
-@app.route("/api/size-charts/import", methods=["POST"])
-def api_size_charts_import():
-    """엑셀 업로드 → size_charts 임포트."""
-    if "file" not in request.files:
-        return jsonify({"ok": False, "error": "file 필드 없음"}), 400
-    f = request.files["file"]
-    tmp_path = BASE_DIR / f"_tmp_size_chart_{int(time.time())}.xlsx"
-    try:
-        f.save(str(tmp_path))
-        from size_converter import import_size_chart_from_xlsx
-        result = import_size_chart_from_xlsx(str(tmp_path))
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-
-
-@app.route("/api/size-charts/list")
-def api_size_charts_list():
-    """저장된 사이즈표 목록 (그룹화)."""
-    with sqlite3.connect(str(PRICE_DB)) as conn:
-        rows = conn.execute("""
-            SELECT brand, gender, category, COUNT(*) AS size_count,
-                   MIN(kream_mm) AS min_mm, MAX(kream_mm) AS max_mm
-            FROM size_charts
-            GROUP BY brand, gender, category
-            ORDER BY brand, gender, category
-        """).fetchall()
-    return jsonify({
-        "ok": True,
-        "charts": [
-            {"brand": r[0], "gender": r[1], "category": r[2],
-             "size_count": r[3], "min_mm": r[4], "max_mm": r[5]}
-            for r in rows
-        ]
-    })
-
-
-@app.route("/api/size-charts/test", methods=["POST"])
-def api_size_charts_test():
-    """변환 테스트 (디버깅용). body={brand, gender, category, model, size, model_sizes:[...]}"""
-    data = request.get_json() or {}
-    from size_converter import convert_to_kream_mm
-    mm, used_norm = convert_to_kream_mm(
-        brand=data.get("brand", "ADIDAS"),
-        gender=data.get("gender", "M"),
-        category=data.get("category", "shoes"),
-        model=data.get("model", "TEST"),
-        size_str=data.get("size", ""),
-        model_sizes_set=set(data.get("model_sizes", [])),
-        purchase_country=data.get("purchase_country", "ALL"),
-        log=False,
-    )
-    return jsonify({"ok": True, "kream_mm": mm, "size_normalized": used_norm})
-
-
-# ═══════════════════════════════════════════
-# Step 15: 識货 시장가 임포트 API
-# ═══════════════════════════════════════════
-
-def normalize_brand(brand_raw, supplier_raw):
-    """品牌名称/供应商 → 정규화 브랜드.
-
-    1. 品牌名称에 'adidas' 포함 (대소문자 무관) → 'ADIDAS'
-    2. 品牌名称가 명확한 ADIDAS 표기 ('三叶草' 단독, 'ADIDAS' 단독) → 'ADIDAS'
-    3. 品牌名称가 '无品牌' 또는 비어있음 → 供应商名称에서 추정
-       - supplier에 'adidas' 포함 → 'ADIDAS'
-       - supplier에 '三叶草' + '官方旗舰店' → 'ADIDAS'
-    4. 그 외 → 'unknown'
-    """
-    b = (brand_raw or "").strip()
-    s = (supplier_raw or "").strip()
-    b_lower = b.lower()
-
-    if "adidas" in b_lower:
-        return "ADIDAS"
-    if b in ("三叶草", "ADIDAS", "Adidas", "adidas"):
-        return "ADIDAS"
-
-    if not b or b == "无品牌":
-        s_lower = s.lower()
-        if "adidas" in s_lower:
-            return "ADIDAS"
-        if "三叶草" in s and "官方旗舰店" in s:
-            return "ADIDAS"
-        return "unknown"
-
-    return "unknown"
-
-
-SHIHUO_REQUIRED_HEADERS = [
-    "产品编号", "产品尺寸欧码", "产品价格", "创建时间",
-    "品牌名称", "产品分类", "供应商名称", "平台名称",
-]
-
-
-def _shihuo_category_to_internal(cat_raw):
-    """产品分类 → size_charts.category (shoes/bags/...)."""
-    c = (cat_raw or "").strip()
-    if "鞋" in c:
-        return "shoes"
-    if "包" in c:
-        return "bags"
-    if "凉" in c or "拖" in c:
-        return "sandals"
-    return "shoes"
-
-
-def _shihuo_is_no_size_category(cat_raw):
-    """가방/액세서리 등 사이즈 차원이 없는 카테고리 판별."""
-    c = (cat_raw or "").strip()
-    return "包" in c
-
-
-@app.route("/api/shihuo/import", methods=["POST"])
-def api_shihuo_import():
-    """識货 엑셀 업로드 → shihuo_prices 임포트.
-
-    응답: {ok, batch_id, total_rows, mapped, no_size, mapping_failed,
-           unknown_brand, models_count, errors[:10]}
-    """
-    if "file" not in request.files:
-        return jsonify({"ok": False, "error": "file 필드 없음"}), 400
-
-    f = request.files["file"]
-    tmp_path = BASE_DIR / f"_tmp_shihuo_{int(time.time())}.xlsx"
-    try:
-        f.save(str(tmp_path))
-        from openpyxl import load_workbook
-        wb = load_workbook(str(tmp_path), read_only=True, data_only=True)
-        ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
-        if len(rows) < 2:
-            return jsonify({"ok": False, "error": "데이터 없음"}), 400
-
-        header = [str(c).strip() if c else "" for c in rows[0]]
-        missing = [h for h in SHIHUO_REQUIRED_HEADERS if h not in header]
-        if missing:
-            return jsonify({
-                "ok": False,
-                "error": f"필수 헤더 누락: {missing}",
-                "header_found": header,
-            }), 400
-
-        col = {h: header.index(h) for h in SHIHUO_REQUIRED_HEADERS}
-        col_color = header.index("产品颜色") if "产品颜色" in header else None
-
-        # 1) (model, size_eu) 그룹별 MIN(cny_price) 추출
-        grouped = {}
-        for row in rows[1:]:
-            if row is None or all(v is None for v in row):
-                continue
-            model_v = row[col["产品编号"]]
-            if model_v is None or str(model_v).strip() == "":
-                continue
-            try:
-                price_v = row[col["产品价格"]]
-                if price_v is None or str(price_v).strip() == "":
-                    continue
-                price = float(str(price_v).strip())
-            except (ValueError, TypeError):
-                continue
-
-            model = str(model_v).strip()
-            size_v = row[col["产品尺寸欧码"]]
-            size_eu = "" if size_v is None else str(size_v).strip()
-            key = (model, size_eu)
-
-            entry = {
-                "model": model,
-                "size_eu": size_eu,
-                "cny_price": price,
-                "brand_raw": str(row[col["品牌名称"]]).strip() if row[col["品牌名称"]] is not None else "",
-                "category_raw": str(row[col["产品分类"]]).strip() if row[col["产品分类"]] is not None else "",
-                "supplier": str(row[col["供应商名称"]]).strip() if row[col["供应商名称"]] is not None else "",
-                "platform": str(row[col["平台名称"]]).strip() if row[col["平台名称"]] is not None else "",
-                "source_created_at": row[col["创建时间"]],
-                "color": (str(row[col_color]).strip() if col_color is not None and row[col_color] is not None else ""),
-            }
-
-            if key not in grouped or entry["cny_price"] < grouped[key]["cny_price"]:
-                grouped[key] = entry
-
-        # 2) 모델별 사이즈 집합 (분수 매핑 시 모델 내 정수 EU 존재 여부 판단)
-        model_sizes_map = {}
-        for (model, size_eu) in grouped.keys():
-            model_sizes_map.setdefault(model, set()).add(size_eu)
-
-        # 3) batch_id 생성
-        batch_id = f"shihuo_{datetime.now():%Y%m%d_%H%M%S}"
-
-        # 4) 정규화/매핑/INSERT — 단일 트랜잭션
-        from size_converter import convert_to_kream_mm
-        inserted = 0
-        mapped = 0
-        no_size = 0
-        mapping_failed = 0
-        unknown_brand = 0
-        errors = []
-
-        conn = sqlite3.connect(str(PRICE_DB))
-        try:
-            conn.execute("BEGIN")
-            cur = conn.cursor()
-
-            for key, entry in grouped.items():
-                try:
-                    brand_norm = normalize_brand(entry["brand_raw"], entry["supplier"])
-                    category = _shihuo_category_to_internal(entry["category_raw"])
-                    is_no_size = _shihuo_is_no_size_category(entry["category_raw"]) or entry["size_eu"] == ""
-
-                    size_normalized = None
-                    kream_mm = None
-                    mapping_status = None
-                    mapping_note = None
-
-                    if is_no_size:
-                        mapping_status = "no_size"
-                        mapping_note = "가방/사이즈없음"
-                        no_size += 1
-                    elif brand_norm == "unknown":
-                        mapping_status = "unknown_brand"
-                        mapping_note = f"brand_raw={entry['brand_raw']!r}, supplier={entry['supplier']!r}"
-                        unknown_brand += 1
-                    else:
-                        from size_converter import normalize_size as _ns
-                        ns_result, ns_rule = _ns(entry["size_eu"], model_sizes_map.get(entry["model"], set()))
-                        if ns_result is None:
-                            # 분수 정규화 자체 실패 (excluded_int_exists / parse_failed 등)
-                            mapping_status = "mapping_failed"
-                            mapping_note = f"size={entry['size_eu']!r}, rule={ns_rule}"
-                            mapping_failed += 1
-                        else:
-                            kream_mm, used_norm = convert_to_kream_mm(
-                                brand=brand_norm,
-                                gender="M",
-                                category=category,
-                                model=entry["model"],
-                                size_str=entry["size_eu"],
-                                model_sizes_set=model_sizes_map.get(entry["model"], set()),
-                                purchase_country="ALL",
-                                log=False,
-                            )
-                            # Step 15d: 폴백 발생 시 used_norm이 정수로 바뀜
-                            size_normalized = used_norm if used_norm is not None else ns_result
-                            if kream_mm is None:
-                                # size_charts에 해당 EU가 없음
-                                mapping_status = "no_size_chart"
-                                mapping_note = f"size={entry['size_eu']!r}→{ns_result}, brand={brand_norm}"
-                                mapping_failed += 1
-                            else:
-                                mapping_status = "mapped"
-                                mapped += 1
-
-                    src_dt = entry["source_created_at"]
-                    src_str = None
-                    if src_dt is not None:
-                        try:
-                            src_str = src_dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(src_dt, "strftime") else str(src_dt)
-                        except Exception:
-                            src_str = str(src_dt)
-
-                    cur.execute("""
-                        INSERT OR REPLACE INTO shihuo_prices
-                        (batch_id, active, brand_raw, brand_normalized, category,
-                         model, color, size_eu, size_normalized, kream_mm,
-                         cny_price, supplier, platform, source_created_at,
-                         mapping_status, mapping_note)
-                        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        batch_id, entry["brand_raw"], brand_norm, category,
-                        entry["model"], entry["color"], entry["size_eu"],
-                        size_normalized, kream_mm,
-                        entry["cny_price"], entry["supplier"], entry["platform"],
-                        src_str, mapping_status, mapping_note,
-                    ))
-                    inserted += 1
-                except Exception as e:
-                    errors.append(f"{key}: {e}")
-
-            # 5) 모든 INSERT 성공 후에만 옛날 batch active=0
-            cur.execute("UPDATE shihuo_prices SET active=0 WHERE batch_id != ?", (batch_id,))
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            return jsonify({"ok": False, "error": f"트랜잭션 실패: {e}", "errors": errors[:10]}), 500
-        finally:
-            conn.close()
-
-        return jsonify({
-            "ok": True,
-            "batch_id": batch_id,
-            "total_rows": inserted,
-            "mapped": mapped,
-            "no_size": no_size,
-            "mapping_failed": mapping_failed,
-            "unknown_brand": unknown_brand,
-            "models_count": len(model_sizes_map),
-            "errors": errors[:10],
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        if tmp_path.exists():
-            try:
-                tmp_path.unlink()
-            except Exception:
-                pass
-
-
-@app.route("/api/shihuo/latest")
-def api_shihuo_latest():
-    """현재 활성 batch 요약."""
-    with sqlite3.connect(str(PRICE_DB)) as conn:
-        row = conn.execute("""
-            SELECT batch_id, MIN(imported_at), COUNT(*)
-            FROM shihuo_prices WHERE active=1
-            GROUP BY batch_id LIMIT 1
-        """).fetchone()
-        if not row:
-            return jsonify({"ok": True, "batch_id": None, "total_count": 0})
-        batch_id, imported_at, total = row
-        by_status = dict(conn.execute("""
-            SELECT mapping_status, COUNT(*) FROM shihuo_prices
-            WHERE active=1 GROUP BY mapping_status
-        """).fetchall())
-        by_model = dict(conn.execute("""
-            SELECT model, COUNT(*) FROM shihuo_prices
-            WHERE active=1 GROUP BY model
-        """).fetchall())
-    return jsonify({
-        "ok": True,
-        "batch_id": batch_id,
-        "imported_at": imported_at,
-        "total_count": total,
-        "by_status": by_status,
-        "by_model": by_model,
-    })
-
-
-@app.route("/api/shihuo/by-model/<path:model>")
-def api_shihuo_by_model(model):
-    """특정 모델의 활성 시장가 (사이즈별)."""
-    with sqlite3.connect(str(PRICE_DB)) as conn:
-        rows = conn.execute("""
-            SELECT size_eu, size_normalized, kream_mm, cny_price,
-                   supplier, platform, mapping_status, mapping_note
-            FROM shihuo_prices
-            WHERE active=1 AND model=?
-            ORDER BY CASE WHEN kream_mm IS NULL THEN 1 ELSE 0 END, kream_mm
-        """, (model,)).fetchall()
-    return jsonify({
-        "ok": True,
-        "model": model,
-        "items": [
-            {
-                "size_eu": r[0], "size_normalized": r[1], "kream_mm": r[2],
-                "cny_price": r[3], "supplier": r[4], "platform": r[5],
-                "mapping_status": r[6], "mapping_note": r[7],
-            } for r in rows
-        ]
-    })
-
-
-@app.route("/api/shihuo/unmapped")
-def api_shihuo_unmapped():
-    """매핑 실패/미지정 건 (사람 검토용)."""
-    with sqlite3.connect(str(PRICE_DB)) as conn:
-        rows = conn.execute("""
-            SELECT model, size_eu, brand_raw, brand_normalized,
-                   mapping_status, mapping_note, cny_price, supplier
-            FROM shihuo_prices
-            WHERE active=1 AND mapping_status IN ('no_size_chart','mapping_failed','unknown_brand')
-            ORDER BY mapping_status, model, size_eu
-        """).fetchall()
-    return jsonify({
-        "ok": True,
-        "count": len(rows),
-        "items": [
-            {
-                "model": r[0], "size_eu": r[1], "brand_raw": r[2],
-                "brand_normalized": r[3], "mapping_status": r[4],
-                "mapping_note": r[5], "cny_price": r[6], "supplier": r[7],
-            } for r in rows
-        ]
-    })
-
-
-@app.route("/api/shihuo/activate/<batch_id>", methods=["POST"])
-def api_shihuo_activate(batch_id):
-    """지정 batch_id를 active=1로, 그 외 active=0으로 전환."""
-    with sqlite3.connect(str(PRICE_DB)) as conn:
-        existing = conn.execute(
-            "SELECT COUNT(*) FROM shihuo_prices WHERE batch_id=?", (batch_id,)
-        ).fetchone()[0]
-        if existing == 0:
-            return jsonify({"ok": False, "error": f"batch_id {batch_id} 존재하지 않음"}), 404
-        conn.execute("UPDATE shihuo_prices SET active=0 WHERE batch_id != ?", (batch_id,))
-        conn.execute("UPDATE shihuo_prices SET active=1 WHERE batch_id = ?", (batch_id,))
-        conn.commit()
-    return jsonify({"ok": True, "batch_id": batch_id, "activated": existing})
-
-
-@app.route("/api/shihuo/deactivate", methods=["POST"])
-def api_shihuo_deactivate():
-    """현재 active 배치를 모두 끔 — 진짜 비활성화."""
-    with sqlite3.connect(str(PRICE_DB)) as conn:
-        cur = conn.execute("UPDATE shihuo_prices SET active=0 WHERE active=1")
-        conn.commit()
-        cnt = cur.rowcount
-    return jsonify({"ok": True, "deactivated": cnt})
-
-
-# 백워드 호환 — 한 분기 유지 후 v17에서 제거 예정
-@app.route("/api/shihuo/rollback/<batch_id>", methods=["POST"])
-def api_shihuo_rollback(batch_id):
-    """[DEPRECATED] /api/shihuo/activate/<batch_id> 사용 권장."""
-    return api_shihuo_activate(batch_id)
-
-
-# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
@@ -9608,6 +8429,4 @@ if __name__ == "__main__":
     _backup_timer.daemon = True
     _backup_timer.start()
     print("  자동 백업: 60초 후 첫 실행 → 이후 24시간 주기")
-    # 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B)
-    start_session_refresh_scheduler()
     app.run(host="0.0.0.0", port=5001, debug=False)

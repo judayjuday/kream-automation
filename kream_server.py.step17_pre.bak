@@ -10,7 +10,6 @@ KREAM 판매자센터 자동화 - Flask 백엔드 서버
 
 import asyncio
 import json
-import logging
 import math
 import random
 import re
@@ -53,7 +52,6 @@ from kream_hubnet_bot import (
 )
 
 app = Flask(__name__)
-logger = logging.getLogger(__name__)
 
 # ── 경보 시스템 ──
 health_alerter = HealthAlert()
@@ -190,120 +188,6 @@ def _backup_tick():
         _backup_timer.start()
 
 
-# ── 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B) ──
-_session_refresh_lock = threading.Lock()
-_session_refresh_thread = None
-_session_refresh_stop = threading.Event()
-_session_refresh_status = {
-    "enabled": True,
-    "last_run": None,
-    "last_result": None,
-    "next_run": None,
-    "interval_hours": 12,
-    "trigger_threshold_hours": 18,
-}
-
-
-def _refresh_session_if_stale(target):
-    """target='partner'|'kream'|'hubnet'. 18h 초과 + 토큰 valid 시 사전 재로그인."""
-    state_paths = {
-        "partner": BASE_DIR / "auth_state.json",
-        "kream": BASE_DIR / "auth_state_kream.json",
-        "hubnet": BASE_DIR / "auth_state_hubnet.json",
-    }
-    path = state_paths.get(target)
-    if not path or not path.exists():
-        return {"target": target, "action": "skip", "success": False,
-                "message": "state file not found"}
-
-    age_hours = (time.time() - path.stat().st_mtime) / 3600
-    threshold = _session_refresh_status["trigger_threshold_hours"]
-    if age_hours < threshold:
-        return {"target": target, "action": "skip", "success": True,
-                "message": f"still fresh (age={age_hours:.1f}h)"}
-
-    try:
-        if target == "hubnet":
-            sess = ensure_hubnet_logged_in()
-            cookie_count = len(sess.cookies) if sess is not None else 0
-            return {"target": target, "action": "refreshed", "success": True,
-                    "message": f"cookies={cookie_count}"}
-        elif target == "partner":
-            async def _do():
-                from kream_bot import login_auto_partner
-                async with async_playwright() as p:
-                    return await login_auto_partner(p)
-            asyncio.run(_do())
-            return {"target": target, "action": "refreshed", "success": True,
-                    "message": "partner re-logged in"}
-        elif target == "kream":
-            return {"target": target, "action": "skip", "success": True,
-                    "message": "kream auto-relogin not implemented"}
-    except Exception as e:
-        msg = str(e)[:200]
-        try:
-            safe_send_alert(
-                subject=f"[KREAM] 세션 사전 갱신 실패: {target}",
-                body=f"target={target}\nmessage={msg}",
-                alert_type="auth_failure",
-            )
-        except Exception as _ae:
-            print(f"[session_refresh] safe_send_alert 실패: {_ae}")
-        return {"target": target, "action": "failed", "success": False,
-                "message": msg}
-
-
-def _session_refresh_worker():
-    """백그라운드 스레드. 12h 주기로 partner/hubnet 사전 갱신 점검."""
-    while not _session_refresh_stop.is_set():
-        try:
-            with _session_refresh_lock:
-                if _session_refresh_status["enabled"]:
-                    results = []
-                    for target in ("partner", "hubnet"):
-                        results.append(_refresh_session_if_stale(target))
-                    _session_refresh_status["last_run"] = datetime.now().isoformat()
-                    _session_refresh_status["last_result"] = results
-
-                    failures = [r for r in results if r.get("action") == "failed"]
-                    if failures:
-                        try:
-                            health_alerter.alert(
-                                "session_refresh_failed",
-                                f"세션 사전 갱신 실패: {failures}",
-                            )
-                        except Exception as ae:
-                            print(f"[session_refresh] alert 실패: {ae}")
-
-            interval_sec = _session_refresh_status["interval_hours"] * 3600
-            _session_refresh_status["next_run"] = (
-                datetime.now() + timedelta(seconds=interval_sec)
-            ).isoformat()
-
-            for _ in range(int(interval_sec)):
-                if _session_refresh_stop.is_set():
-                    break
-                time.sleep(1)
-        except Exception as e:
-            print(f"[session_refresh] worker exception: {e}")
-            time.sleep(60)
-
-
-def start_session_refresh_scheduler():
-    """서버 시작 시 호출. 이미 실행 중이면 no-op."""
-    global _session_refresh_thread
-    if _session_refresh_thread is not None and _session_refresh_thread.is_alive():
-        return
-    _session_refresh_stop.clear()
-    _session_refresh_thread = threading.Thread(
-        target=_session_refresh_worker,
-        daemon=True,
-        name="session_refresh_scheduler",
-    )
-    _session_refresh_thread.start()
-    print("[session_refresh] 사전 갱신 스케줄러 시작 (12h 주기, 18h 임계)")
-
-
 # ── SQLite WAL 모드 활성화 ──
 def _enable_wal_mode():
     """price_history.db를 WAL 모드로 변경 (동시 읽기/쓰기 성능 향상)"""
@@ -408,138 +292,6 @@ def _init_bid_cleanup_table():
 _init_bid_cleanup_table()
 
 
-# ═══════════════════════════════════════════
-# Step 17-A: 카테고리 판정 + 사이즈 유효성 검증
-# ═══════════════════════════════════════════
-
-_ONE_SIZE_TOKENS = ("ONE SIZE", "ONESIZE", "ONE_SIZE", "FREE", "OS")
-
-
-# Step 17-E: model_category DB의 영문 카테고리 → 큐 시스템 한글 카테고리 매핑
-DB_CATEGORY_TO_KR = {
-    "shoes": "신발",
-    "bags": "가방",
-    "clothing": "의류",
-    "unknown": "",  # 미결정 명시
-}
-
-
-def map_db_category_to_kr(db_category):
-    """DB의 영문 카테고리를 큐 시스템의 한글로 변환. unknown/None은 빈 문자열."""
-    if not db_category:
-        return ""
-    return DB_CATEGORY_TO_KR.get(str(db_category).lower(), "")
-
-
-def get_model_category(model):
-    """모델의 카테고리/사이즈 필수 여부 반환.
-
-    우선순위: model_category 캐시 → shihuo_prices(active=1) 직접 조회 → 보수적 디폴트.
-    반환: {"category": str, "needs_size": bool, "source": str}
-    """
-    if not model:
-        return {"category": "unknown", "needs_size": True, "source": "default"}
-
-    conn = sqlite3.connect(str(PRICE_DB))
-    try:
-        row = conn.execute(
-            "SELECT category, needs_size, source FROM model_category WHERE model=?",
-            (model,)
-        ).fetchone()
-        if row:
-            return {"category": row[0], "needs_size": bool(row[1]), "source": row[2]}
-
-        row = conn.execute(
-            "SELECT category FROM shihuo_prices WHERE active=1 AND model=? LIMIT 1",
-            (model,)
-        ).fetchone()
-        if row:
-            cat = row[0] or "unknown"
-            needs = 0 if cat == "bags" else 1
-            try:
-                conn.execute(
-                    "INSERT OR IGNORE INTO model_category (model, category, source, needs_size, notes) VALUES (?,?,?,?,?)",
-                    (model, cat, "shihuo", needs, "shihuo_prices 활성 batch 추론")
-                )
-                conn.commit()
-            except Exception:
-                pass
-            return {"category": cat, "needs_size": bool(needs), "source": "shihuo"}
-    finally:
-        conn.close()
-
-    # 보수적 디폴트: 사이즈 필수
-    return {"category": "unknown", "needs_size": True, "source": "default"}
-
-
-def validate_size_for_bid(model, size, raise_on_error=False):
-    """입찰 전 사이즈 유효성 검증.
-
-    needs_size=1 카테고리에서 size가 빈값/ONE SIZE/FREE → 차단.
-    needs_size=0(가방) 카테고리는 통과.
-
-    반환: (is_valid, error_msg, category_info)
-    """
-    cat_info = get_model_category(model)
-    size_clean = (size or "").strip().upper()
-
-    if cat_info["needs_size"]:
-        if not size_clean or size_clean in _ONE_SIZE_TOKENS:
-            msg = (f"카테고리 '{cat_info['category']}'은(는) 사이즈 필수입니다 "
-                   f"(model={model}, size='{size}')")
-            if raise_on_error:
-                raise ValueError(msg)
-            return (False, msg, cat_info)
-
-    return (True, None, cat_info)
-
-
-def validate_category_for_bid(model, category=None):
-    """Step 17-E: 입찰 전 카테고리 유효성 검증.
-
-    차단 조건:
-    - category가 None / 빈문자열 / "미분류" → 차단
-    - DB 조회 결과와 다르면 logger.warning만 (DB가 진실, 큐 execute에서 0순위로 적용됨)
-
-    반환: (is_valid: bool, error_msg: str)
-    """
-    if not category or str(category).strip() in ("", "미분류"):
-        return (False, f"카테고리 미결정 입찰 차단 (model={model}, category='{category}')")
-
-    if model:
-        try:
-            db_info = get_model_category(model)
-            db_kr = map_db_category_to_kr(db_info.get("category", ""))
-            if db_kr and db_kr != category:
-                logger.warning(
-                    "category mismatch model=%s db=%s current=%s",
-                    model, db_kr, category
-                )
-        except Exception as e:
-            logger.warning("category DB lookup failed model=%s err=%s", model, e)
-
-    return (True, "")
-
-
-def validate_gosi_for_bid(gosi):
-    """Step 17-E 보완: 입찰 전 gosi(고시정보) 결정 검증.
-
-    차단 조건:
-    - gosi가 None / 빈 dict
-    - gosi.type이 None / 빈 문자열 / 공백만
-
-    반환: (is_valid: bool, error_msg: str)
-    """
-    if not gosi:
-        return (False, "고시정보 미결정 (auto_fill_gosi가 None 또는 빈 dict 반환)")
-    if not isinstance(gosi, dict):
-        return (False, f"고시정보 형식 오류 (type={type(gosi).__name__})")
-    gosi_type = gosi.get("type", "")
-    if not gosi_type or not str(gosi_type).strip():
-        return (False, "고시정보 type 미결정")
-    return (True, "")
-
-
 def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
                    overseas_shipping=8000, other_costs=0,
                    cny_source=None):
@@ -551,11 +303,6 @@ def _save_bid_cost(order_id, model, size, cny_price, exchange_rate,
     """
     if not order_id:
         return None
-    # Step 17-A: size 빈값/None 차단 (ONE SIZE 디폴트 제거 후 명시 강제)
-    if size is None or not str(size).strip():
-        raise ValueError(
-            f"size required for bid_cost (order_id={order_id}, model={model})"
-        )
 
     resolved_cny = float(cny_price) if cny_price and float(cny_price) > 0 else None
     resolved_source = cny_source
@@ -822,17 +569,9 @@ def _init_notifications_table():
         message TEXT,
         action_url TEXT,
         is_read INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL,
-        dismissed INTEGER DEFAULT 0
+        created_at TEXT NOT NULL
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(is_read)")
-    # 기존 DB에 dismissed 컬럼 없으면 추가 (idempotent)
-    try:
-        cols = [r[1] for r in c.execute("PRAGMA table_info(notifications)").fetchall()]
-        if "dismissed" not in cols:
-            c.execute("ALTER TABLE notifications ADD COLUMN dismissed INTEGER DEFAULT 0")
-    except Exception as _e:
-        print(f"[notifications] dismissed migrate fail: {_e}")
     conn.commit()
     conn.close()
 
@@ -850,38 +589,6 @@ def add_notification(ntype, title, message="", action_url=""):
     )
     conn.commit()
     conn.close()
-
-
-def safe_send_alert(subject, body, alert_type='info'):
-    """알림 발송 안전 wrapper. 실패해도 서버 동작에 영향 X.
-    1) DB notifications 테이블에 누적, 2) 이메일 시도, 두 단계 모두 try/except.
-    기존 notifications 스키마(title/message)를 그대로 사용 (subject→title, body→message).
-    """
-    import sys
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO notifications (type, title, message, created_at) VALUES (?,?,?,?)",
-            (alert_type, str(subject)[:500], str(body)[:4000],
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"[ALERT-DB-FAIL] {e}", file=sys.stderr)
-
-    try:
-        # 기존 health_alerter(HealthAlert) 우선 사용, 없으면 send_alert 시도
-        try:
-            health_alerter.alert(alert_type, f"{subject}\n{body}")
-        except Exception:
-            from health_alert import send_alert  # type: ignore
-            send_alert(subject=subject, body=body)
-    except ImportError:
-        print(f"[ALERT-EMAIL] (health_alert 없음) {subject}: {str(body)[:200]}", file=sys.stderr)
-    except Exception as e:
-        print(f"[ALERT-EMAIL-FAIL] {e}", file=sys.stderr)
 
 
 # 판매 수집 스케줄러 상태
@@ -1627,23 +1334,11 @@ def api_bid():
     data = request.json or {}
     product_id = str(data.get("productId", "")).strip()
     price = int(data.get("price", 0))
-    size = str(data.get("size", "")).strip()
+    size = str(data.get("size", "ONE SIZE")).strip()
     qty = int(data.get("quantity", 1))
-    model = str(data.get("model", "")).strip()
 
     if not product_id or not price:
         return jsonify({"error": "productId, price 필요"}), 400
-
-    # Step 17-A: 카테고리별 사이즈 필수 검증 (신발은 ONE SIZE 차단)
-    is_valid, err_msg, _cat = validate_size_for_bid(model, size)
-    if not is_valid:
-        return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
-
-    # Step 17-E: 카테고리 미결정 차단
-    bid_category = str(data.get("category", "")).strip()
-    cat_ok, cat_err = validate_category_for_bid(model, bid_category)
-    if not cat_ok:
-        return jsonify({"ok": False, "error": cat_err, "code": "CATEGORY_UNDECIDED"}), 400
 
     tid = new_task()
     add_log(tid, "info", f"입찰 시작: #{product_id} {price:,}원 × {qty}개")
@@ -1653,7 +1348,7 @@ def api_bid():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
-                run_bid(product_id, price, size, qty, tid, model=model)
+                run_bid(product_id, price, size, qty, tid)
             )
             loop.close()
             finish_task(tid, result=result)
@@ -1666,7 +1361,7 @@ def api_bid():
     return jsonify({"taskId": tid})
 
 
-async def run_bid(product_id, price, size, qty, tid, model=""):
+async def run_bid(product_id, price, size, qty, tid):
     async with async_playwright() as p:
         browser = await create_browser(p, headless=get_headless())
         context = await create_context(browser, STATE_FILE)
@@ -1680,7 +1375,6 @@ async def run_bid(product_id, price, size, qty, tid, model=""):
 
         bid_data = {
             "product_id": product_id,
-            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": qty,
@@ -1774,7 +1468,7 @@ def api_register():
     data = request.json or {}
     product_id = str(data.get("productId", "")).strip()
     price = int(data.get("price", 0))
-    size = str(data.get("size", "")).strip()
+    size = str(data.get("size", "ONE SIZE")).strip()
     qty = int(data.get("quantity", 1))
     gosi_already = data.get("gosiAlready", False)
     gosi = data.get("gosi", {})
@@ -1787,22 +1481,6 @@ def api_register():
     exchange_rate = data.get("exchange_rate", 0)
     overseas_shipping = data.get("overseas_shipping", 8000)
     model = str(data.get("model", "")).strip()
-
-    # Step 17-A: 카테고리별 사이즈 필수 검증 (신발은 ONE SIZE 차단)
-    is_valid, err_msg, _cat = validate_size_for_bid(model, size)
-    if not is_valid:
-        return jsonify({"ok": False, "error": err_msg, "code": "SIZE_REQUIRED"}), 400
-
-    # Step 17-E: 카테고리 미결정 차단 (data.category > gosi.category > "")
-    bid_category = str(data.get("category", "") or gosi.get("category", "")).strip()
-    cat_ok, cat_err = validate_category_for_bid(model, bid_category)
-    if not cat_ok:
-        return jsonify({"ok": False, "error": cat_err, "code": "CATEGORY_UNDECIDED"}), 400
-
-    # Step 17-E 보완: gosi 미결정 차단 (gosi=None / 빈 dict / type 빈값)
-    gosi_ok, gosi_err = validate_gosi_for_bid(gosi)
-    if not gosi_ok:
-        return jsonify({"ok": False, "error": gosi_err, "code": "GOSI_UNDECIDED"}), 400
 
     # CNY 필수 검증
     require_cny = True
@@ -1855,8 +1533,7 @@ def api_register():
 
 
 GOSI_DEFAULTS = {
-    # Step 17-E: "가방" 폴백 제거 — 카테고리 미결정 시 빈 문자열 (호출자가 처리)
-    "type": "",
+    "type": "가방",
     "material": "상품별 상이",
     "color": "상품별 상이",
     "size_info": "상품별 상이",
@@ -1961,7 +1638,6 @@ async def run_full_register(product_id, price, size, qty, gosi_already, gosi, ti
         add_log(tid, "info", f"판매 입찰 등록 중... {price:,}원 × {qty}개 ({bid_days}일)")
         bid_data = {
             "product_id": product_id,
-            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": qty,
@@ -2025,7 +1701,7 @@ async def _run_bid_only(product_id, price, size, qty, bid_days, tid, model=""):
             await browser.close()
             return {"success": False}
         bid_data = {
-            "product_id": product_id, "model": model, "사이즈": size,
+            "product_id": product_id, "사이즈": size,
             "입찰가격": price, "수량": qty, "bid_days": bid_days,
         }
         success = await place_bid(page, bid_data, delay=2.0)
@@ -2170,20 +1846,13 @@ def api_bulk_generate():
     # 3행: 필수/선택
     ws.append(["필수", "필수", "필수", "필수", "필수", "필수", "선택", "선택"])
 
-    # 4행~: 데이터 (Step 17-A: 신발인데 사이즈 누락된 항목은 skip)
-    skipped = []
+    # 4행~: 데이터
     for item in items:
-        _model = item.get("model", "")
-        _size = item.get("size", "")
-        is_valid, err_msg, _cat = validate_size_for_bid(_model, _size)
-        if not is_valid:
-            skipped.append({"model": _model, "size": _size, "reason": err_msg})
-            continue
         ws.append([
             item.get("productId", ""),
-            _model,
+            item.get("model", ""),
             item.get("nameEn", ""),
-            _size or "ONE SIZE",
+            item.get("size", "ONE SIZE"),
             item.get("price", ""),
             item.get("quantity", 1),
             item.get("deadline", ""),
@@ -2191,12 +1860,7 @@ def api_bulk_generate():
         ])
 
     wb.save(str(output_path))
-    return jsonify({
-        "ok": True,
-        "path": str(output_path),
-        "count": len(items) - len(skipped),
-        "skipped": skipped,
-    })
+    return jsonify({"ok": True, "path": str(output_path), "count": len(items)})
 
 
 @app.route("/api/bulk/download")
@@ -2942,54 +2606,6 @@ def api_notifications_read():
     return jsonify({"ok": True})
 
 
-@app.route("/api/notifications/auth-failures", methods=["GET"])
-def api_auth_failures():
-    """auth_failure 알림 최근 24시간 조회 (대시보드 배너용)."""
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, title, message, created_at, dismissed
-            FROM notifications
-            WHERE type = 'auth_failure'
-              AND datetime(created_at) > datetime('now', '-24 hours', 'localtime')
-              AND (dismissed IS NULL OR dismissed = 0)
-            ORDER BY created_at DESC
-            LIMIT 10
-        """)
-        rows = c.fetchall()
-        conn.close()
-        return jsonify({
-            "ok": True,
-            "count": len(rows),
-            "items": [
-                {"id": r[0], "subject": r[1], "body": r[2],
-                 "created_at": r[3], "dismissed": r[4]}
-                for r in rows
-            ],
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/notifications/dismiss", methods=["POST"])
-def api_notifications_dismiss():
-    """알림 dismiss (배너 닫기)."""
-    data = request.get_json(silent=True) or {}
-    nid = data.get("id")
-    if not nid:
-        return jsonify({"ok": False, "error": "id required"}), 400
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("UPDATE notifications SET dismissed = 1 WHERE id = ?", (nid,))
-        conn.commit()
-        conn.close()
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
 @app.route("/api/session/status")
 def api_session_status():
     """KREAM + 판매자센터 세션 상태 확인"""
@@ -3067,38 +2683,6 @@ def api_session_relogin():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"taskId": tid})
-
-
-# ── 사전 갱신 스케줄러 API (Step 17-D Phase 2-B) ──
-
-@app.route("/api/session/refresh-status", methods=["GET"])
-def api_session_refresh_status():
-    """사전 갱신 스케줄러 상태 조회."""
-    alive = bool(_session_refresh_thread and _session_refresh_thread.is_alive())
-    return jsonify({"ok": True, "thread_alive": alive, **_session_refresh_status})
-
-
-@app.route("/api/session/refresh-toggle", methods=["POST"])
-def api_session_refresh_toggle():
-    """사전 갱신 스케줄러 ON/OFF (런타임)."""
-    data = request.get_json(silent=True) or {}
-    enabled = bool(data.get("enabled", True))
-    with _session_refresh_lock:
-        _session_refresh_status["enabled"] = enabled
-    return jsonify({"ok": True, "enabled": enabled})
-
-
-@app.route("/api/session/refresh-run-once", methods=["POST"])
-def api_session_refresh_run_once():
-    """수동 1회 실행 (디버깅용). target='all'|'partner'|'hubnet'."""
-    data = request.get_json(silent=True) or {}
-    target = data.get("target", "all")
-    targets = ["partner", "hubnet"] if target == "all" else [target]
-    results = []
-    with _session_refresh_lock:
-        for t in targets:
-            results.append(_refresh_session_if_stale(t))
-    return jsonify({"ok": True, "results": results})
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -3205,12 +2789,9 @@ def detect_category(english_name):
     bag_kw = ['bag', 'backpack', 'tote', 'pouch', 'wallet', 'clutch',
               'purse', 'satchel', 'rucksack', 'crossbody', 'shoulder bag',
               'duffle', 'messenger', 'fanny pack', 'waist bag']
-    # Step 17-E 보강: 신발 일반 키워드 추가 (training/athletic/performance)
-    # ⚠️ court/gym/sport는 부분 매칭 부작용 위험으로 제외
     shoe_kw = ['shoe', 'sneaker', 'boot', 'sandal', 'slipper',
                'runner', 'trainer', 'loafer', 'mule', 'clog',
-               'slide', 'flip flop', 'oxford', 'derby',
-               'training', 'athletic', 'performance']
+               'slide', 'flip flop', 'oxford', 'derby']
     clothing_kw = ['jacket', 'hoodie', 'shirt', 'pants', 'shorts',
                    'dress', 'skirt', 'coat', 'sweater', 'cardigan',
                    'vest', 'tee', 't-shirt', 'jogger', 'track']
@@ -3246,11 +2827,8 @@ def detect_category_kr(korean_name):
     bag_kw = ['숄더백', '토트백', '크로스백', '백팩', '파우치', '지갑', '클러치',
               '더플백', '메신저백', '웨이스트백', '버킷백', '호보백', '에코백',
               '가방', '백 ', '월렛']
-    # Step 17-E 보강: 신발 일반 키워드 추가 (트레이닝/러닝/운동/스포츠)
-    # ⚠️ 코트화는 부분 매칭 부작용 위험으로 제외
     shoe_kw = ['러닝화', '스니커즈', '슬라이드', '샌들', '부츠', '로퍼',
-               '슬리퍼', '트레이너', '운동화', '스니커', '구두',
-               '트레이닝', '러닝', '운동', '스포츠']
+               '슬리퍼', '트레이너', '운동화', '스니커', '구두']
     clothing_kw = ['후드', '자켓', '티셔츠', '팬츠', '쇼츠', '스웨터',
                    '코트', '셔츠', '조거', '베스트', '드레스']
 
@@ -3339,9 +2917,6 @@ def auto_fill_gosi(kream_data):
         ("running shoe", "러닝화"), ("sneaker", "스니커즈"),
         ("slide", "슬라이드"), ("sandal", "샌들"), ("boot", "부츠"),
         ("loafer", "로퍼"), ("trainer", "트레이너"), ("slipper", "슬리퍼"),
-        # Step 17-E 보강: 신발 일반 용어 (모델명 매칭은 X, 일반 카테고리 용어만)
-        ("training", "운동화"), ("athletic", "운동화"),
-        ("performance", "운동화"), ("runner", "러닝화"),
         # 의류
         ("hoodie", "후드"), ("jacket", "자켓"), ("t-shirt", "티셔츠"),
         ("pants", "팬츠"), ("shorts", "쇼츠"), ("sweater", "스웨터"),
@@ -3352,8 +2927,6 @@ def auto_fill_gosi(kream_data):
         "힙색", "웨이스트백", "더플백", "메신저백", "보스턴백", "에코백",
         "쇼퍼백", "호보백", "버킷백",
         "러닝화", "스니커즈", "슬라이드", "샌들", "부츠", "로퍼",
-        # Step 17-E 보강: 신발 일반 한글 용어
-        "트레이닝", "러닝", "운동화", "스포츠",
         "후드", "자켓", "티셔츠", "팬츠", "쇼츠",
     ]
 
@@ -3367,15 +2940,8 @@ def auto_fill_gosi(kream_data):
             if kt in kor_name:
                 detected_type = kt
                 break
-    # Step 17-E: detected_type 못 찾으면 None 반환 (가방 폴백 제거)
-    # 호출자(큐 execute)가 None을 받으면 카테고리 미결정으로 처리
-    if not detected_type:
-        logger.warning(
-            "auto_fill_gosi: type detection failed name_en=%r name_kr=%r — returning None",
-            eng_name_raw, kor_name
-        )
-        return None
-    info["type"] = detected_type
+    # 가방 카테고리인데 종류 못 찾으면 "가방"
+    info["type"] = detected_type or GOSI_DEFAULTS["type"]
 
     # ── 색상: 상품명에서 매칭 ──
     COLOR_MAP_EN = {
@@ -3965,68 +3531,41 @@ def api_queue_execute():
                     recent_trade = kream.get("recent_trade_price") or kream.get("display_price")  # 과거 체결가
 
                     # 사이즈 자동 설정
-                    # Step 17-A: 사이즈 정보가 없을 때 신발 모델은 ONE SIZE 자동 설정 차단
                     if not item.get("sizes") and not item.get("size"):
                         kream_sizes = kream.get("sizes", [])
                         if kream_sizes:
                             item["size"] = "전사이즈"
                         else:
-                            _cat_info = get_model_category(model)
-                            if _cat_info["needs_size"]:
-                                item["status"] = "사이즈 필요"
-                                item["result"] = {
-                                    "error": (f"카테고리 '{_cat_info['category']}'은 사이즈 필수인데 "
-                                              f"KREAM 사이즈 정보가 없습니다 (model={model})")
-                                }
-                                add_log(tid, "error",
-                                        f"{model}: 신발 카테고리 사이즈 누락 — 자동 등록 스킵")
-                                continue
                             item["size"] = "ONE SIZE"
 
-                    # 카테고리 자동 판별 — Step 17-E: 0순위 model_category DB 추가
+                    # 카테고리 자동 판별
                     item["status"] = "계산 중"
-                    decision_source = "preset"  # 사용자가 미리 지정한 경우
                     if not item["category"]:
-                        decision_source = "unresolved"
-                        # 0순위: model_category DB (식货 mapped 등 신뢰 가능 출처)
-                        db_info = get_model_category(model)
-                        db_kr = map_db_category_to_kr(db_info.get("category", ""))
-                        if db_kr:
-                            item["category"] = db_kr
-                            item["categoryAuto"] = True
-                            decision_source = "db"
                         # 1순위: KREAM 카테고리 정보
-                        if not item["category"]:
-                            kream_cat = kream.get("category", "")
-                            if kream_cat:
-                                cat_mapped = _map_kream_category(kream_cat)
-                                if cat_mapped:
-                                    item["category"] = cat_mapped
-                                    item["categoryAuto"] = True
-                                    decision_source = "kream"
+                        kream_cat = kream.get("category", "")
+                        if kream_cat:
+                            cat_mapped = _map_kream_category(kream_cat)
+                            if cat_mapped:
+                                item["category"] = cat_mapped
+                                item["categoryAuto"] = True
                         # 2순위: 영문 상품명 파싱
                         if not item["category"]:
                             cat_info = detect_category(name_en)
                             if cat_info["category"]:
                                 item["category"] = cat_info["category"]
                                 item["categoryAuto"] = True
-                                decision_source = "detect_en"
                         # 3순위: 한글 상품명에서도 시도
                         if not item["category"] and name_kr:
                             cat_info = detect_category_kr(name_kr)
                             if cat_info:
                                 item["category"] = cat_info
                                 item["categoryAuto"] = True
-                                decision_source = "detect_kr"
-                        # 못 찾으면 미분류 (decision_source는 unresolved 유지)
+                        # 못 찾으면 미분류
                         if not item["category"]:
                             item["category"] = "미분류"
                             item["categoryAuto"] = True
 
-                    item["category_decision_source"] = decision_source
-
                     # 고시정보 자동 채움 (카테고리 전달)
-                    # Step 17-E: auto_fill_gosi가 None 반환 = type 결정 실패 → gosi=None
                     gosi = auto_fill_gosi({
                         "english_name": name_en,
                         "product_name": name_kr,
@@ -4034,9 +3573,6 @@ def api_queue_execute():
                         "category": item["category"],
                     })
                     item["gosi"] = gosi
-                    if gosi is None:
-                        add_log(tid, "warn",
-                                f"{model}: gosi.type 결정 실패 — 카테고리 미분류 또는 키워드 매칭 실패")
 
                     # 마진 계산 — 사이즈별 가격이 있으면 각각 계산
                     input_sizes = item.get("sizes", [])
@@ -4469,36 +4005,8 @@ def api_queue_auto_register():
             for i, bi in enumerate(bid_items, 1):
                 pid = bi.get("productId") or 0
                 price = bi["price"]
-                size = bi.get("size", "")
+                size = bi.get("size", "ONE SIZE")
                 model = bi.get("model", "")
-
-                # Step 17-A: 사이즈 필수 검증 (신발 ONE SIZE 차단)
-                is_valid, err_msg, _cat = validate_size_for_bid(model, size)
-                if not is_valid:
-                    add_log(tid, "error", f"[{i}] {model}: {err_msg}")
-                    results.append({"productId": str(pid) if pid else "", "model": model,
-                        "size": size, "price": price, "success": False, "error": err_msg})
-                    continue
-
-                # Step 17-E: 카테고리 미결정 차단 (큐 execute에서 0순위 DB로 채워졌어야 함)
-                bi_category = str(bi.get("category", "")).strip()
-                cat_ok, cat_err = validate_category_for_bid(model, bi_category)
-                if not cat_ok:
-                    add_log(tid, "error", f"[{i}] {model}: {cat_err}")
-                    results.append({"productId": str(pid) if pid else "", "model": model,
-                        "size": size, "price": price, "success": False,
-                        "error": cat_err, "skip_reason": "category_undecided"})
-                    continue
-
-                # Step 17-E 보완: gosi 미결정 차단 (큐 execute에서 auto_fill_gosi 실패한 항목)
-                bi_gosi = bi.get("gosi")
-                gosi_ok, gosi_err = validate_gosi_for_bid(bi_gosi)
-                if not gosi_ok:
-                    add_log(tid, "error", f"[{i}] {model}: {gosi_err}")
-                    results.append({"productId": str(pid) if pid else "", "model": model,
-                        "size": size, "price": price, "success": False,
-                        "error": gosi_err, "skip_reason": "gosi_undecided"})
-                    continue
 
                 if not pid or str(pid) == "0":
                     if model:
@@ -5442,8 +4950,7 @@ def api_adjust_pending():
     c = conn.cursor()
     c.execute(
         """SELECT pa.*,
-                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs,
-                  bc.cny_source AS bc_cny_source
+                  bc.cny_price, bc.exchange_rate, bc.overseas_shipping, bc.other_costs
            FROM price_adjustments pa
            LEFT JOIN bid_cost bc ON pa.order_id = bc.order_id
            WHERE pa.status IN ('pending', 'profit_low', 'deficit')
@@ -6991,42 +6498,11 @@ def api_health():
                     "valid": False,
                 }
 
-        # 허브넷 세션 (Step 17-D Phase 2-A.1): PHP 세션 시스템 — PHPSESSID 1개만 있으면 정상
-        # 정상 세션도 ~317byte. 빈 cookies 또는 JSON 파싱 실패 시 valid=false.
-        hubnet_path = BASE_DIR / "auth_state_hubnet.json"
-        auth_hubnet = {
-            "exists": False,
-            "last_modified": None,
-            "age_hours": None,
-            "valid": False,
-        }
-        if hubnet_path.exists():
-            mtime = datetime.fromtimestamp(hubnet_path.stat().st_mtime)
-            auth_hubnet["exists"] = True
-            auth_hubnet["last_modified"] = mtime.isoformat()
-            auth_hubnet["age_hours"] = round((now - mtime).total_seconds() / 3600, 1)
-            try:
-                data = json.loads(hubnet_path.read_text())
-                cookies = data.get("cookies", [])
-                has_phpsessid = any(c.get("name") == "PHPSESSID" for c in cookies)
-                if has_phpsessid:
-                    auth_hubnet["valid"] = True
-            except Exception:
-                auth_hubnet["valid"] = False
-        result["auth_hubnet"] = auth_hubnet
-
         # 스케줄러 상태
         result["schedulers"] = {
             "monitor": "running" if monitor_state.get("running") else "stopped",
             "sales": "running" if sales_scheduler_state.get("running") else "stopped",
             "backup": "running" if backup_state.get("running") else "stopped",
-        }
-
-        # 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B)
-        result["session_refresh"] = {
-            "enabled": _session_refresh_status["enabled"],
-            "last_run": _session_refresh_status["last_run"],
-            "next_run": _session_refresh_status["next_run"],
         }
 
         # 마지막 판매 수집
@@ -7696,34 +7172,24 @@ def api_auto_adjust_history():
     conn = sqlite3.connect(str(PRICE_DB))
     conn.row_factory = sqlite3.Row
 
-    # Step 17-C: competitor_price (price_adjustments 최근 1건) + bc_cny_source (bid_cost) JOIN
-    query = (
-        "SELECT aal.*, "
-        "(SELECT pa.competitor_price FROM price_adjustments pa "
-        "  WHERE pa.order_id = aal.order_id "
-        "  ORDER BY pa.created_at DESC LIMIT 1) AS competitor_price, "
-        "bc.cny_source AS bc_cny_source "
-        "FROM auto_adjust_log aal "
-        "LEFT JOIN bid_cost bc ON bc.order_id = aal.order_id "
-        "WHERE 1=1"
-    )
+    query = "SELECT * FROM auto_adjust_log WHERE 1=1"
     params = []
 
     if action_filter == "modified":
-        query += " AND aal.action='auto_modified'"
+        query += " AND action='auto_modified'"
     elif action_filter == "skipped":
-        query += " AND aal.action LIKE 'skipped_%'"
+        query += " AND action LIKE 'skipped_%'"
     elif action_filter == "failed":
-        query += " AND aal.action='modify_failed'"
+        query += " AND action='modify_failed'"
 
     if from_date:
-        query += " AND date(aal.executed_at) >= ?"
+        query += " AND date(executed_at) >= ?"
         params.append(from_date)
     if to_date:
-        query += " AND date(aal.executed_at) <= ?"
+        query += " AND date(executed_at) <= ?"
         params.append(to_date)
 
-    query += " ORDER BY aal.executed_at DESC LIMIT ?"
+    query += " ORDER BY executed_at DESC LIMIT ?"
     params.append(limit)
 
     c = conn.cursor()
@@ -7854,7 +7320,6 @@ async def _execute_rebid(product_id, model, size, price, cny_price):
 
         bid_data = {
             "product_id": str(product_id),
-            "model": model,
             "사이즈": size,
             "입찰가격": price,
             "수량": 1,
@@ -9608,6 +9073,4 @@ if __name__ == "__main__":
     _backup_timer.daemon = True
     _backup_timer.start()
     print("  자동 백업: 60초 후 첫 실행 → 이후 24시간 주기")
-    # 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B)
-    start_session_refresh_scheduler()
     app.run(host="0.0.0.0", port=5001, debug=False)

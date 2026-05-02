@@ -42,3 +42,8 @@
 2026-04-22T14:18:50Z INF Retrying connection in up to 4s connIndex=0 event=0 ip=198.41.192.47
 2026-04-22T14:18:54Z INF Tunnel connection curve preferences: [X25519MLKEM768 CurveP256] connIndex=0 event=0 ip=198.41.200.233
 2026-04-22T14:18:54Z INF Registered tunnel connection connIndex=0 connection=e9d5006e-ff09-4a0a-babf-363d30130b04 event=0 ip=198.41.200.233 location=icn05 protocol=quic
+2026-04-23T05:29:12Z ERR update check failed error="no release found"
+2026-04-24T05:29:12Z ERR update check failed error="no release found"
+2026-04-25T05:29:12Z ERR update check failed error="no release found"
+2026-04-26T05:29:13Z ERR update check failed error="no release found"
+2026-04-27T05:29:11Z ERR update check failed error="no release found"

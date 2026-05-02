@@ -1,0 +1,460 @@
+      <div id="tab-adjust" class="tab-view">
+        <!-- 자동 실행 패널 -->
+        <div class="card" style="border-left:3px solid var(--accent)">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🤖</span> 자동 실행</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button class="btn btn-outline btn-sm" onclick="autoAdjustRunOnce()" id="aa-run-once-btn" style="font-size:12px">수동 1회 실행</button>
+              <button class="btn btn-sm" id="aa-toggle-btn" onclick="toggleAutoAdjust()" style="font-size:13px; padding:6px 16px; font-weight:700">OFF</button>
+            </div>
+          </div>
+          <div class="metrics" id="aa-metrics">
+            <div class="metric">
+              <div class="metric-label">수정</div>
+              <div class="metric-value" id="aa-modified">0건 / <span id="aa-daily-max">10</span>건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">건너뜀</div>
+              <div class="metric-value" id="aa-skipped" style="font-size:14px">0건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">실패</div>
+              <div class="metric-value" id="aa-failed">0건</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">마지막 실행</div>
+              <div class="metric-value" id="aa-last-run" style="font-size:14px">-</div>
+            </div>
+          </div>
+          <div id="aa-disabled-reason" style="display:none; margin-top:8px; padding:8px; background:var(--danger); color:#fff; border-radius:6px; font-size:12px"></div>
+          <div id="aa-skip-detail" style="font-size:11px; color:var(--text3); margin-top:6px"></div>
+        </div>
+
+        <!-- ── Step 16-A: 식货 ↔ 등록 원가 차이 보기 (미니멈 인라인) ── -->
+        <div class="card" style="margin-top:16px; border-left:3px solid var(--info, #3b82f6)">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🔍</span> 식货 ↔ 등록 원가 차이</span>
+            <div style="display:flex; gap:8px; align-items:center">
+              <span id="shihuo-diff-meta" style="font-size:12px; color:var(--text3)">활성 batch: 로딩 중…</span>
+              <button class="btn btn-outline btn-sm" onclick="loadShihuoDiff()" style="font-size:12px">차이 보기</button>
+            </div>
+          </div>
+          <div id="shihuo-diff-empty" style="display:none; font-size:12px; color:var(--text3); margin-top:8px">차이 없음</div>
+        </div>
+
+        <!-- 차이 보기 모달 -->
+        <div id="shihuoDiffModal" style="display:none; position:fixed; top:5%; left:5%; right:5%; bottom:5%; background:var(--bg1, #fff); border:1px solid var(--border, #ccc); border-radius:8px; padding:16px; overflow:auto; z-index:1000; box-shadow:0 8px 32px rgba(0,0,0,.25)">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+            <h3 style="margin:0">식货 활성 배치 vs bid_cost 가격 차이</h3>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('shihuoDiffModal').style.display='none'">닫기</button>
+          </div>
+          <div id="shihuoDiffMetaModal" style="font-size:13px; color:var(--text2); margin-bottom:8px"></div>
+          <table id="shihuoDiffTable" style="width:100%; border-collapse:collapse; font-size:13px">
+            <thead>
+              <tr style="background:var(--bg2, #f3f4f6)">
+                <th style="padding:6px; border:1px solid var(--border)">order_id</th>
+                <th style="padding:6px; border:1px solid var(--border)">model</th>
+                <th style="padding:6px; border:1px solid var(--border)">size</th>
+                <th style="padding:6px; border:1px solid var(--border)">등록 CNY</th>
+                <th style="padding:6px; border:1px solid var(--border)">source</th>
+                <th style="padding:6px; border:1px solid var(--border)">식货 CNY</th>
+                <th style="padding:6px; border:1px solid var(--border)">차이 CNY</th>
+                <th style="padding:6px; border:1px solid var(--border)">차이 %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <script>
+        async function loadShihuoDiff(){
+          const r = await fetch('/api/bid-cost/shihuo-diff').then(x=>x.json()).catch(()=>null);
+          if(!r || !r.ok){ alert('shihuo-diff API 조회 실패'); return; }
+          const meta = document.getElementById('shihuo-diff-meta');
+          meta.textContent = `활성 batch: ${r.active_batch_id || '없음'} | 차이 ${r.count}건`;
+          const metaModal = document.getElementById('shihuoDiffMetaModal');
+          metaModal.textContent = `활성 batch: ${r.active_batch_id || '없음'} | 차이 ${r.count}건`;
+          const tb = document.querySelector('#shihuoDiffTable tbody');
+          tb.innerHTML = '';
+          const empty = document.getElementById('shihuo-diff-empty');
+          if(r.count === 0){
+            empty.style.display = 'block';
+            empty.textContent = '차이 없음';
+            document.getElementById('shihuoDiffModal').style.display = 'block';
+            return;
+          }
+          empty.style.display = 'none';
+          r.items.forEach(it=>{
+            const tr = document.createElement('tr');
+            const warn = (it.bc_source === 'manual') ? ' ⚠️' : '';
+            tr.innerHTML = `
+              <td style="padding:6px; border:1px solid var(--border)">${it.order_id}</td>
+              <td style="padding:6px; border:1px solid var(--border)">${it.model}</td>
+              <td style="padding:6px; border:1px solid var(--border)">${it.size}</td>
+              <td style="padding:6px; border:1px solid var(--border); text-align:right">${it.bc_cny.toFixed(2)}</td>
+              <td style="padding:6px; border:1px solid var(--border)">${(it.bc_source||'')}${warn}</td>
+              <td style="padding:6px; border:1px solid var(--border); text-align:right">${it.sh_cny.toFixed(2)}</td>
+              <td style="padding:6px; border:1px solid var(--border); text-align:right">${it.diff_cny.toFixed(2)}</td>
+              <td style="padding:6px; border:1px solid var(--border); text-align:right">${it.diff_pct!=null ? it.diff_pct.toFixed(2)+'%' : '-'}</td>`;
+            tb.appendChild(tr);
+          });
+          document.getElementById('shihuoDiffModal').style.display = 'block';
+        }
+
+        async function refreshShihuoDiffMeta(){
+          const r = await fetch('/api/bid-cost/shihuo-diff').then(x=>x.json()).catch(()=>null);
+          const meta = document.getElementById('shihuo-diff-meta');
+          if(!r || !r.ok){ meta.textContent = '활성 batch: 조회 실패'; return; }
+          meta.textContent = `활성 batch: ${r.active_batch_id || '없음'} | 차이 ${r.count}건`;
+        }
+        refreshShihuoDiffMeta();
+        </script>
+
+        <!-- 자동 실행 이력 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 자동 실행 이력</span>
+            <div style="display:flex; gap:6px; align-items:center">
+              <select id="aa-hist-filter" onchange="loadAutoAdjustHistory()" style="font-size:12px; padding:2px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--text1)">
+                <option value="all">전체</option>
+                <option value="modified">수정됨</option>
+                <option value="skipped">건너뜀</option>
+                <option value="failed">실패</option>
+              </select>
+              <select id="aa-hist-date" onchange="loadAutoAdjustHistory()" style="font-size:12px; padding:2px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--text1)">
+                <option value="today">오늘</option>
+                <option value="yesterday">어제</option>
+                <option value="7d">7일</option>
+                <option value="30d">30일</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="loadAutoAdjustHistory()" style="font-size:11px; padding:2px 8px">새로고침</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>시각</th>
+                  <th>모델</th>
+                  <th>사이즈</th>
+                  <th>가격 변경</th>
+                  <th>예상수익</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody id="aa-history-body">
+                <tr><td colspan="6" class="text-muted">-</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 만료 임박 경고 -->
+        <div class="card" id="expiring-bids-card" style="display:none; border-left:3px solid var(--danger)">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">⚠️</span> 만료 임박 <span id="expiring-count" class="badge badge-bad" style="font-size:13px">0건</span></span>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-outline" onclick="loadExpiringBids()" style="font-size:12px; padding:4px 12px">새로고침</button>
+              <button class="btn btn-primary" id="renew-all-btn" onclick="renewAllExpiring()" style="font-size:13px; padding:8px 16px">전체 갱신</button>
+            </div>
+          </div>
+          <div style="font-size:12px; color:var(--text3); margin-bottom:8px">
+            만료 3일 이내 입찰 목록 · 자동 갱신: 설정에서 ON/OFF (기본 OFF)
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="exp-check-all" onchange="expToggleAll(this.checked)"></th>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>입찰가</th>
+                  <th>만료일</th>
+                  <th>남은 일수</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="expiring-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 모니터링 상태 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📡</span> 입찰 순위 모니터링</div>
+          <div class="metrics" id="mon-metrics">
+            <div class="metric">
+              <div class="metric-label">상태</div>
+              <div class="metric-value" id="mon-status-text">확인 중...</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">마지막 실행</div>
+              <div class="metric-value" id="mon-last-run" style="font-size:15px">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">다음 실행</div>
+              <div class="metric-value" id="mon-next-run" style="font-size:15px">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">총 체크 / 조정</div>
+              <div class="metric-value" id="mon-stats">-</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:14px; align-items:center; flex-wrap:wrap">
+            <button class="btn btn-primary" id="mon-start-btn" onclick="monitorStart()">모니터링 시작</button>
+            <button class="btn btn-danger" id="mon-stop-btn" onclick="monitorStop()">모니터링 중지</button>
+            <button class="btn btn-outline" onclick="monitorRunOnce()">수동 1회 실행</button>
+            <button class="btn btn-outline" onclick="emailTest()" style="font-size:12px">이메일 테스트</button>
+            <span id="mon-action-status" style="color:var(--text2); font-size:13px"></span>
+          </div>
+          <div style="margin-top:10px; font-size:12px; color:var(--text3)">
+            스케줄: 매일 08, 10, 12, 14, 16, 18, 20, 22시 자동 실행 · 서버 시작 시 자동 활성화
+          </div>
+        </div>
+
+        <!-- 조정 대기 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">⏳</span> 조정 대기 (<span id="pending-count">0</span>건)</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-outline" id="bulk-cost-btn" onclick="openBulkCostModal()" style="font-size:12px; padding:4px 12px; display:none">원가 없는 입찰 일괄 입력</button>
+              <button class="btn btn-outline" onclick="loadPendingAdjustments()" style="font-size:12px; padding:4px 12px">새로고침</button>
+              <button class="btn btn-primary" onclick="approveAllPending()" style="font-size:13px; padding:8px 20px">전체 승인</button>
+              <button class="btn btn-danger btn-sm" onclick="rejectAllPending()">전체 거절</button>
+            </div>
+          </div>
+          <div style="font-size:11px; color:var(--text3); margin-bottom:8px">
+            24시간 경과한 대기 건은 모니터링 실행 시 자동 만료 처리됩니다.
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="pend-check-all" onchange="pendToggleAll(this.checked)"></th>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>현재가</th>
+                  <th>경쟁자 최저가</th>
+                  <th>추천가</th>
+                  <th>예상 수익</th>
+                  <th>상태</th>
+                  <th>생성 시간</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="pending-table-body">
+                <tr><td colspan="10" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 원가 수동 입력 모달 -->
+        <div id="cost-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999; align-items:center; justify-content:center">
+          <div style="background:var(--card); border-radius:12px; padding:24px; max-width:420px; width:90%; position:relative">
+            <button onclick="closeCostModal()" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:20px; color:var(--text3); cursor:pointer">&times;</button>
+            <h3 id="cost-modal-title" style="margin:0 0 16px">원가 등록</h3>
+            <div style="display:flex; flex-direction:column; gap:12px">
+              <div>
+                <div style="font-size:11px; color:var(--text3); margin-bottom:4px">주문번호</div>
+                <input type="text" class="form-input" id="cost-order-id" readonly style="width:100%; background:var(--bg2)">
+              </div>
+              <input type="hidden" id="cost-model">
+              <input type="hidden" id="cost-size">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+                <div>
+                  <div style="font-size:11px; color:var(--text3); margin-bottom:4px">CNY 가격 *</div>
+                  <input type="number" class="form-input" id="cost-cny" placeholder="220" style="width:100%">
+                </div>
+                <div>
+                  <div style="font-size:11px; color:var(--text3); margin-bottom:4px">환율 (자동)</div>
+                  <input type="number" class="form-input" id="cost-rate" step="0.01" style="width:100%">
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+                <div>
+                  <div style="font-size:11px; color:var(--text3); margin-bottom:4px">해외배송비</div>
+                  <input type="number" class="form-input" id="cost-shipping" value="8000" style="width:100%">
+                </div>
+                <div>
+                  <div style="font-size:11px; color:var(--text3); margin-bottom:4px">기타 비용</div>
+                  <input type="number" class="form-input" id="cost-other" value="0" style="width:100%">
+                </div>
+              </div>
+              <div id="cost-preview" style="font-size:12px; color:var(--text2); padding:8px; background:var(--bg2); border-radius:6px"></div>
+              <button class="btn btn-primary" onclick="saveCostModal()" style="width:100%">저장</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 일괄 원가 입력 모달 -->
+        <div id="bulk-cost-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999; align-items:center; justify-content:center; overflow-y:auto">
+          <div style="background:var(--card); border-radius:12px; padding:24px; max-width:600px; width:95%; position:relative; margin:40px auto; max-height:80vh; overflow-y:auto">
+            <button onclick="closeBulkCostModal()" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:20px; color:var(--text3); cursor:pointer">&times;</button>
+            <h3 style="margin:0 0 16px">원가 일괄 입력</h3>
+            <div style="font-size:12px; color:var(--text3); margin-bottom:12px">같은 모델은 동일 CNY를 적용합니다. 환율은 현재 설정값이 자동 적용됩니다.</div>
+            <div id="bulk-cost-groups"></div>
+            <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end">
+              <button class="btn btn-outline" onclick="closeBulkCostModal()">취소</button>
+              <button class="btn btn-primary" onclick="saveBulkCost()">전체 저장</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 조정 이력 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 조정 이력</span>
+            <button class="btn btn-outline" onclick="loadAdjustHistory()" style="font-size:12px; padding:4px 12px">새로고침</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>기존가</th>
+                  <th>변경가</th>
+                  <th>상태</th>
+                  <th>실행 시간</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <tr><td colspan="6" class="text-muted">-</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 조건부 입찰 -->
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">🎯</span> 조건부 입찰 (<span id="cond-bid-count">0</span>건)</span>
+            <button class="btn btn-outline" onclick="loadConditionalBids()" style="font-size:12px; padding:4px 12px">새로고침</button>
+          </div>
+          <p class="text-muted" style="margin-bottom:10px; font-size:12px">
+            시장 가격이 설정한 조건을 충족하면 자동으로 입찰합니다. 모니터링 스케줄(2시간마다)에서 체크합니다.
+          </p>
+          <!-- 조건 추가 폼 -->
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; padding:12px; background:var(--bg2); border-radius:8px">
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">상품 ID</label>
+              <input type="text" id="cond-product-id" class="form-input" style="width:100px" placeholder="상품ID">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">모델번호</label>
+              <input type="text" id="cond-model" class="form-input" style="width:120px" placeholder="모델번호">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">사이즈</label>
+              <input type="text" id="cond-size" class="form-input" style="width:80px" placeholder="ONE SIZE" value="ONE SIZE">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">조건</label>
+              <select id="cond-type" class="form-input" style="width:180px">
+                <option value="price_below">즉시구매가 ≤ X원이면</option>
+                <option value="competitor_above">경쟁자최저가 ≥ X원이면</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">조건 가격</label>
+              <input type="number" id="cond-value" class="form-input" style="width:110px" placeholder="150000">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text3); display:block; margin-bottom:2px">입찰가</label>
+              <input type="number" id="cond-bid-price" class="form-input" style="width:110px" placeholder="130000">
+            </div>
+            <button class="btn btn-primary" onclick="addConditionalBid()" style="padding:8px 16px">조건 추가</button>
+          </div>
+          <!-- 조건 목록 -->
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>상품</th>
+                  <th>사이즈</th>
+                  <th>조건</th>
+                  <th>조건 가격</th>
+                  <th>입찰가</th>
+                  <th>상태</th>
+                  <th>생성일</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="cond-bid-table-body">
+                <tr><td colspan="8" class="text-muted">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 이메일 설정 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📧</span> 이메일 알림 설정</div>
+          <div class="form-row">
+            <span class="form-label">Gmail 앱 비밀번호</span>
+            <input type="password" id="email-app-password" class="form-input form-input-md" placeholder="xxxx xxxx xxxx xxxx">
+            <button class="btn btn-outline" onclick="saveEmailPassword()">저장</button>
+          </div>
+          <div style="font-size:11px; color:var(--text3); margin-top:4px">
+            발신/수신: judaykream@gmail.com · Google 계정 → 보안 → 앱 비밀번호에서 생성
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 수동 스캔 (기존) -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🎯</span> 수동 스캔 + 분석</div>
+          <p class="text-muted" style="margin-bottom:12px">판매자센터에서 내 입찰 목록을 수집하고, 시장 현황을 분석하여 최적 가격을 제안합니다.</p>
+          <div style="display:flex; gap:12px; align-items:center">
+            <button class="btn btn-primary" id="adj-scan-btn" onclick="adjScan()" style="font-size:14px; padding:10px 24px">
+              내 입찰 스캔 + 시장 분석
+            </button>
+            <span id="adj-scan-status" style="color:var(--text2); font-size:13px"></span>
+          </div>
+        </div>
+
+        <!-- 제안 테이블 (기존) -->
+        <div class="card" style="margin-top:16px" id="adj-result-card" hidden>
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+            <span><span class="icon">📋</span> 조정 제안 (<span id="adj-count">0</span>건)</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn" onclick="adjSelectAll()" style="font-size:12px; padding:4px 12px">전체 선택</button>
+              <button class="btn" onclick="adjDeselectAll()" style="font-size:12px; padding:4px 12px">전체 해제</button>
+              <button class="btn btn-primary" onclick="adjExecute()" style="font-size:13px; padding:8px 20px">선택한 상품 일괄 조정</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="adj-check-all" onchange="adjToggleAll(this.checked)"></th>
+                  <th>상품명</th>
+                  <th>사이즈</th>
+                  <th>현재 입찰가</th>
+                  <th>현재 순번</th>
+                  <th>시장 최저가</th>
+                  <th>추천가</th>
+                  <th>추천 순번</th>
+                  <th>제안</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody id="adj-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 실행 로그 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📋</span> 실행 로그</div>
+          <div id="adj-log" style="background:#1a1a1a; color:#eee; padding:12px; border-radius:8px; max-height:200px; overflow-y:auto; font-family:monospace; font-size:12px;">
+            대기 중...
+          </div>
+        </div>
+      </div>
