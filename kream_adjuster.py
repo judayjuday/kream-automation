@@ -91,6 +91,7 @@ async def collect_my_bids(headless=True) -> list:
 
         # 다중 URL 시도 (KREAM이 URL 경로를 바꿨을 가능성 대응)
         BID_URLS_FALLBACK = [
+            f"{PARTNER_URL}/business/asks",                                          # PRIMARY: 실제 데이터 URL (kream_adjuster docstring 명시)
             f"{PARTNER_URL}/business/ask-sales",                                     # NEW: Step 24 진단으로 확인 (재고별 입찰 관리)
             f"{PARTNER_URL}/business/asks?page=1&perPage=100&startDate=&endDate=",  # 기존
             f"{PARTNER_URL}/business/asks",                                          # 변형 1

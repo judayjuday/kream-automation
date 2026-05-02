@@ -1,0 +1,54 @@
+[
+  {
+    "url": "https://partner.kream.co.kr/business/asks",
+    "final_url": "https://partner.kream.co.kr/c2c",
+    "logged_in": true,
+    "title": "KREAM 판매자 센터 - KREAM 판매자 센터",
+    "selectors": {
+      "table tbody tr": 0,
+      "div[class*=\"row\"]": 113,
+      "div[class*=\"ask\"]": 0,
+      "[role=\"row\"]": 0,
+      "div[class*=\"item\"]": 69,
+      "li": 0
+    },
+    "best": [
+      [
+        "div[class*=\"row\"]",
+        113
+      ],
+      [
+        "div[class*=\"item\"]",
+        69
+      ]
+    ],
+    "screenshot": "diagnostics/asks_asks_20260502_200601.png",
+    "body_preview": "판매자 센터이용 문의도움말judaykream@gmail.com\n홈\n상품 정보 관리\n상품 정보 대량 검색\n상품 정보 관리\n상품 등록 요청\n일반 판매\n재고별 입찰 관리\n일반 판매 입찰\n통합 입찰 관리\n대량 입찰/수정\n입찰 내역 관리\n발송 관리\n검수 현황\n취소 현황\n거래 취소 내역\n구매자 반품 내역\n정산 현황\n정산 예정 내역\n기간별 정산 내역\n주문별 정산 내역\n판매자 정보\n비즈니스 정보 관리\n내 계정 관리\n결제 내역 다운로드\n서비스 연동 관리\n판매자 등급\n공지 사항\n프로모션 정보\n5월 판매자 등급Level 1\n판매 수수료\n최대 5.5%\n"
+  },
+  {
+    "url": "https://partner.kream.co.kr/business/asks?page=1&perPage=50",
+    "final_url": "https://partner.kream.co.kr/c2c",
+    "logged_in": true,
+    "title": "KREAM 판매자 센터 - KREAM 판매자 센터",
+    "selectors": {
+      "table tbody tr": 0,
+      "div[class*=\"row\"]": 113,
+      "div[class*=\"ask\"]": 0,
+      "[role=\"row\"]": 0,
+      "div[class*=\"item\"]": 69,
+      "li": 0
+    },
+    "best": [
+      [
+        "div[class*=\"row\"]",
+        113
+      ],
+      [
+        "div[class*=\"item\"]",
+        69
+      ]
+    ],
+    "screenshot": "diagnostics/asks_asks_20260502_200644.png",
+    "body_preview": "판매자 센터이용 문의도움말judaykream@gmail.com\n홈\n상품 정보 관리\n상품 정보 대량 검색\n상품 정보 관리\n상품 등록 요청\n일반 판매\n재고별 입찰 관리\n일반 판매 입찰\n통합 입찰 관리\n대량 입찰/수정\n입찰 내역 관리\n발송 관리\n검수 현황\n취소 현황\n거래 취소 내역\n구매자 반품 내역\n정산 현황\n정산 예정 내역\n기간별 정산 내역\n주문별 정산 내역\n판매자 정보\n비즈니스 정보 관리\n내 계정 관리\n결제 내역 다운로드\n서비스 연동 관리\n판매자 등급\n공지 사항\n프로모션 정보\n5월 판매자 등급Level 1\n판매 수수료\n최대 5.5%\n"
+  }
+]
