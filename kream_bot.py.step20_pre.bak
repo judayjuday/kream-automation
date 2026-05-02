@@ -3065,49 +3065,6 @@ def _parse_shipment_row(cells):
 
 
 # ═══════════════════════════════════════════
-# Step 20: 경쟁가 패턴 추출 (best-effort, 실패해도 무시)
-# ═══════════════════════════════════════════
-
-def _extract_competitor_price(row_text_or_cells):
-    """판매자센터 my-bids 셀/행 텍스트에서 경쟁가 추출. 없으면 None.
-    패턴: '최저가 N원' / '시세 N원' / '현재 N원'
-    """
-    try:
-        if isinstance(row_text_or_cells, list):
-            text = ' '.join(str(c) for c in row_text_or_cells)
-        else:
-            text = str(row_text_or_cells)
-        patterns = [
-            r'최저가?\s*([\d,]+)\s*원',
-            r'시세\s*([\d,]+)\s*원',
-            r'현재\s*([\d,]+)\s*원',
-        ]
-        for p in patterns:
-            m = re.search(p, text)
-            if m:
-                try:
-                    return int(m.group(1).replace(',', ''))
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    return None
-
-
-def _enrich_bid_with_market_price(b, row_text_or_cells):
-    """기존 bid dict에 market_lowest_price 키를 추가 (best-effort).
-    실패해도 예외 발생 안 함. 기존 키 변경 안 함.
-    """
-    try:
-        mlp = _extract_competitor_price(row_text_or_cells)
-        if mlp and isinstance(b, dict) and not b.get('market_lowest_price'):
-            b['market_lowest_price'] = mlp
-    except Exception:
-        pass
-    return b
-
-
-# ═══════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════
 

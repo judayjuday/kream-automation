@@ -22,10 +22,10 @@
     },
     {
       "name": "_ga_40SLZL29RR",
-      "value": "GS2.1.s1777688130$o14$g1$t1777691938$j60$l0$h0",
+      "value": "GS2.1.s1777688130$o14$g1$t1777692019$j60$l0$h0",
       "domain": ".kream.co.kr",
       "path": "/",
-      "expires": 1812251938.736824,
+      "expires": 1812252019.515867,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
