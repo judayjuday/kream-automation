@@ -9,35 +9,35 @@
       "display_price": 79000,
       "instant_buy_price": 80000,
       "instant_sell_price": 111000,
-      "recent_trade_price": 87000,
+      "recent_trade_price": 86000,
       "price_change": null,
-      "total_trades": 3246,
+      "total_trades": 3247,
       "trade_history": [
         {
+          "price": 86000,
+          "size": "59분 전"
+        },
+        {
           "price": 87000,
-          "size": "11시간 전"
+          "size": "13시간 전"
         },
         {
           "price": 88000,
-          "size": "15시간 전"
-        },
-        {
-          "price": 87000,
-          "size": "22시간 전"
+          "size": "16시간 전"
         },
         {
           "price": 87000,
           "size": "23시간 전"
         },
         {
-          "price": 79000,
-          "size": "W245",
+          "price": 87000,
+          "size": "W225",
           "date": "26/05/01"
         }
       ],
       "sell_bids": [
         {
-          "price": 130000,
+          "price": 149000,
           "size": "W215",
           "quantity": 1
         },
@@ -164,16 +164,16 @@
           "quantity": 1
         }
       ],
-      "collected_at": "2026-05-02T11:11:08.681687",
+      "collected_at": "2026-05-02T12:43:40.182677",
       "source": "kream.co.kr",
       "size_delivery_prices": [
         {
           "size": "W215",
-          "buyPrice": 130000,
+          "buyPrice": 149000,
           "sellPrice": 110000,
           "buyFast": null,
           "buyNormal": 149000,
-          "buyOverseas": 130000,
+          "buyOverseas": null,
           "sellFast": null,
           "sellNormal": null,
           "sellOverseas": null
@@ -347,7 +347,7 @@
       "size_prices": [
         {
           "size": "W215",
-          "buyNowPrice": 130000,
+          "buyNowPrice": 149000,
           "sellNowPrice": 110000,
           "sellBidCount": 1,
           "buyBidCount": 1

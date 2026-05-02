@@ -205,11 +205,6 @@ tr.selected td { background: var(--accent-light); }
     <div style="font-size:12px; color:#991b1b;">인증 실패 (24h)</div>
     <div style="font-size:24px; font-weight:bold; color:#7f1d1d;" id="dsc-auth-fail">-</div>
   </div>
-  <div class="dsc-card" data-key="prices_collected_today" id="dsc-card-prices" style="flex:1; min-width:140px; background:#ecfeff; border:1px solid #a5f3fc; border-radius:8px; padding:12px;">
-    <div style="font-size:12px; color:#155e75;">오늘 가격수집</div>
-    <div style="font-size:24px; font-weight:bold; color:#164e63;" id="dsc-prices">-</div>
-    <div style="font-size:10px; color:#0e7490; margin-top:4px;" id="dsc-prices-last">최근: -</div>
-  </div>
 </div>
 <script>
 async function loadDailySummary() {
@@ -224,24 +219,6 @@ async function loadDailySummary() {
     set('dsc-sales-today', s.sales_today);
     set('dsc-pending', s.pending_now);
     set('dsc-auth-fail', s.auth_failures_24h);
-    // Step 18-B: 가격수집 카드
-    const pricesEl = document.getElementById('dsc-prices');
-    const lastEl = document.getElementById('dsc-prices-last');
-    if (pricesEl) pricesEl.textContent = (s.prices_collected_today ?? '-');
-    if (lastEl) {
-      if (s.last_collection_at) {
-        const dt = new Date(s.last_collection_at);
-        const hoursAgo = Math.floor((Date.now() - dt.getTime()) / 3600000);
-        lastEl.textContent = `최근: ${hoursAgo}h 전`;
-        const card = document.getElementById('dsc-card-prices');
-        if (card && hoursAgo > 24) {
-          card.style.background = '#fef3c7';
-          card.style.borderColor = '#fde68a';
-        }
-      } else {
-        lastEl.textContent = '최근: 없음';
-      }
-    }
   } catch(e) { console.warn('daily summary load fail:', e); }
 }
 document.addEventListener('DOMContentLoaded', () => {
