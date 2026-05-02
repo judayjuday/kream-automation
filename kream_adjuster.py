@@ -89,11 +89,74 @@ async def collect_my_bids(headless=True) -> list:
         page = await context.new_page()
         await stealth(page)
 
-        # 전체 기간, 100개씩
-        url = (f"{PARTNER_URL}/business/asks"
-               f"?page=1&perPage=100&startDate=&endDate=")
-        await page.goto(url, wait_until="domcontentloaded")
-        await page.wait_for_timeout(5000)
+        # 다중 URL 시도 (KREAM이 URL 경로를 바꿨을 가능성 대응)
+        BID_URLS_FALLBACK = [
+            f"{PARTNER_URL}/business/asks?page=1&perPage=100&startDate=&endDate=",  # 기존
+            f"{PARTNER_URL}/business/asks",                                          # 변형 1
+            f"{PARTNER_URL}/c2c/sell/bid",                                           # 변형 2 (구 가설)
+            f"{PARTNER_URL}/c2c/sell",                                               # 변형 3
+            f"{PARTNER_URL}/c2c/bid",                                                # 변형 4
+            f"{PARTNER_URL}/c2c",                                                    # 메인 (메뉴 클릭으로 이동)
+        ]
+
+        bid_page_loaded = False
+        for url in BID_URLS_FALLBACK:
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                await page.wait_for_timeout(2000)
+
+                if "/sign-in" in page.url:
+                    print(f"[SYNC] {url} → 로그인 필요 (다음 시도)")
+                    continue
+
+                table_count = await page.evaluate("""
+                    () => {
+                        const tables = document.querySelectorAll('table tbody tr, .bid-list-item, [class*="bid-row"]');
+                        return tables.length;
+                    }
+                """)
+
+                if table_count > 0:
+                    print(f"[SYNC] 입찰 페이지 로드 성공: {url} ({table_count}건)")
+                    bid_page_loaded = True
+                    break
+                else:
+                    print(f"[SYNC] {url} → 0건 (다음 시도)")
+            except Exception as e:
+                print(f"[SYNC] {url} 실패: {e}")
+                continue
+
+        # 메인 페이지 도달했지만 입찰 메뉴가 다른 곳에 있는 경우
+        if not bid_page_loaded:
+            try:
+                await page.goto(f"{PARTNER_URL}/c2c", timeout=20000)
+                await page.wait_for_timeout(2000)
+
+                clicked = await page.evaluate("""
+                    () => {
+                        const candidates = [
+                            'a[href*="bid"]', 'a[href*="sell"]',
+                            '[role="link"]', 'button'
+                        ];
+                        for (const sel of candidates) {
+                            const els = document.querySelectorAll(sel);
+                            for (const el of els) {
+                                const text = (el.textContent || '').trim();
+                                if (text.includes('입찰') || text.includes('내 입찰') || text.includes('판매')) {
+                                    el.click();
+                                    return text;
+                                }
+                            }
+                        }
+                        return null;
+                    }
+                """)
+                if clicked:
+                    print(f"[SYNC] 메뉴 클릭: {clicked}")
+                    await page.wait_for_timeout(3000)
+                    bid_page_loaded = True
+            except Exception as e:
+                print(f"[SYNC] 메뉴 클릭 실패: {e}")
 
         if "/sign-in" in page.url:
             print("판매자센터 로그인 필요")
@@ -108,6 +171,29 @@ async def collect_my_bids(headless=True) -> list:
                 await page.wait_for_timeout(2000)
         except Exception:
             pass
+
+        # 다중 셀렉터 시도 (구버전/신버전 호환 검증)
+        ROW_SELECTORS = [
+            'table tbody tr',
+            '.bid-list-item',
+            '[class*="bid-row"]',
+            '[class*="bid_row"]',
+            '[data-testid*="bid"]',
+            'div[class*="row"][class*="bid"]',
+            '.bid-table-body > div',
+        ]
+        rows = []
+        for selector in ROW_SELECTORS:
+            try:
+                rows = await page.query_selector_all(selector)
+                if rows and len(rows) > 0:
+                    print(f"[SYNC] 행 추출 셀렉터: {selector} → {len(rows)}건")
+                    break
+            except Exception:
+                continue
+
+        if not rows:
+            print("[SYNC] 모든 셀렉터 0건 — 페이지 구조 변경 가능성")
 
         bids = await parse_asks_page(page)
 
