@@ -249,57 +249,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(loadDailySummary, 60000);
 });
 </script>
-<!-- ========== Step 18-C: 내 입찰 현황 모니터 ========== -->
-<div id="my-bids-monitor" style="background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin:12px 16px;">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-    <h3 style="margin:0; font-size:16px; color:#111;">📂 내 입찰 현황</h3>
-    <button onclick="loadMyBidsMonitor()" style="font-size:12px; padding:4px 10px; background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; cursor:pointer;">새로고침</button>
-  </div>
-  <div id="mbm-stats" style="display:flex; gap:16px; flex-wrap:wrap; font-size:14px;">
-    <span>총 <strong id="mbm-total">-</strong>건</span>
-    <span style="color:#059669;">1위 <strong id="mbm-first">-</strong></span>
-    <span style="color:#dc2626;">밀린 입찰 <strong id="mbm-lost">-</strong></span>
-    <span style="color:#6b7280;">동기화: <span id="mbm-sync">-</span></span>
-  </div>
-  <div id="mbm-lost-detail" style="margin-top:12px; font-size:13px; color:#7f1d1d; display:none;"></div>
-</div>
-<script>
-async function loadMyBidsMonitor() {
-  try {
-    const r = await fetch('/api/my-bids/rank-changes');
-    const d = await r.json();
-    if (!d.ok) return;
-    document.getElementById('mbm-total').textContent = d.total_bids ?? '-';
-    document.getElementById('mbm-first').textContent = d.rank_1_count ?? '-';
-    document.getElementById('mbm-lost').textContent = d.rank_lost_count ?? '-';
-    if (d.last_sync) {
-      const dt = new Date(d.last_sync);
-      const mins = Math.floor((Date.now() - dt.getTime()) / 60000);
-      document.getElementById('mbm-sync').textContent = mins + '분 전';
-    } else {
-      document.getElementById('mbm-sync').textContent = '없음';
-    }
-
-    const detail = document.getElementById('mbm-lost-detail');
-    if (d.rank_lost_count > 0 && d.rank_lost_by_model) {
-      const lines = [];
-      for (const [model, bids] of Object.entries(d.rank_lost_by_model)) {
-        lines.push(`<strong>${model}</strong>: ${bids.length}건 (` +
-          bids.slice(0,3).map(b => `${b.size||'-'} ${b.price}원 r=${b.rank}`).join(', ') +
-          (bids.length > 3 ? ' 외' : '') + ')');
-      }
-      detail.innerHTML = '⚠️ 순위 밀린 입찰:<br>' + lines.join('<br>');
-      detail.style.display = 'block';
-    } else {
-      detail.style.display = 'none';
-    }
-  } catch(e) { console.warn('mybids monitor:', e); }
-}
-document.addEventListener('DOMContentLoaded', () => {
-  loadMyBidsMonitor();
-  setInterval(loadMyBidsMonitor, 60000);
-});
-</script>
 <div class="app">
   <!-- 사이드바 -->
   <div class="sidebar">
