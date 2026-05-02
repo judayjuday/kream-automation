@@ -91,7 +91,6 @@ async def collect_my_bids(headless=True) -> list:
 
         # 다중 URL 시도 (KREAM이 URL 경로를 바꿨을 가능성 대응)
         BID_URLS_FALLBACK = [
-            f"{PARTNER_URL}/business/ask-sales",                                     # NEW: Step 24 진단으로 확인 (재고별 입찰 관리)
             f"{PARTNER_URL}/business/asks?page=1&perPage=100&startDate=&endDate=",  # 기존
             f"{PARTNER_URL}/business/asks",                                          # 변형 1
             f"{PARTNER_URL}/c2c/sell/bid",                                           # 변형 2 (구 가설)
@@ -175,12 +174,6 @@ async def collect_my_bids(headless=True) -> list:
 
         # 다중 셀렉터 시도 (구버전/신버전 호환 검증)
         ROW_SELECTORS = [
-            # NEW: ask-sales 페이지 추정 셀렉터들 (Step 25)
-            '[class*="ask-sales"] tbody tr',
-            '[class*="AskSales"] tbody tr',
-            'div[class*="askRow"]',
-            'div[class*="ask-item"]',
-            # 기존
             'table tbody tr',
             '.bid-list-item',
             '[class*="bid-row"]',
