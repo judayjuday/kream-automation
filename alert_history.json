@@ -8,12 +8,12 @@
     "last_sent": "2026-04-19T19:21:30.170647"
   },
   "health_critical": {
-    "count": 69,
-    "last_sent": "2026-05-02T13:38:50.762641"
+    "count": 74,
+    "last_sent": "2026-05-02T18:40:26.086424"
   },
   "sales_no_data_12h": {
-    "count": 49,
-    "last_sent": "2026-05-02T12:35:20.304263"
+    "count": 52,
+    "last_sent": "2026-05-02T18:40:28.763862"
   },
   "auto_adjust_low_margin": {
     "count": 1,

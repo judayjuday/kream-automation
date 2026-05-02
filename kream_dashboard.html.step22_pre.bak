@@ -219,14 +219,9 @@ tr.selected td { background: var(--accent-light); }
     <div style="font-size:10px; color:#0e7490; margin-top:4px;" id="dsc-prices-last">최근: -</div>
   </div>
   <div class="dsc-card" id="dsc-card-capital" data-key="capital" onclick="showCapitalChart()" style="flex:1; min-width:160px; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:12px; cursor:pointer;">
-    <div style="font-size:12px; color:#5b21b6;">노출 입찰액</div>
+    <div style="font-size:12px; color:#5b21b6;">묶인 자본</div>
     <div style="font-size:20px; font-weight:bold; color:#4c1d95;" id="dsc-capital-tied">-</div>
-    <div style="font-size:10px; color:#7c3aed; margin-top:4px;" id="dsc-capital-detail">정리 가능: -</div>
-  </div>
-  <div class="dsc-card" id="dsc-card-conversion" style="flex:1; min-width:160px; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:12px;">
-    <div style="font-size:12px; color:#9a3412;">체결률 (30일)</div>
-    <div style="font-size:20px; font-weight:bold; color:#7c2d12;" id="dsc-conv-pct">-</div>
-    <div style="font-size:10px; color:#c2410c; margin-top:4px;" id="dsc-conv-detail">-</div>
+    <div style="font-size:10px; color:#7c3aed; margin-top:4px;" id="dsc-capital-detail">회수 가능: -</div>
   </div>
 </div>
 <script>
@@ -269,18 +264,7 @@ async function loadDailySummary() {
       const tiedEl = document.getElementById('dsc-capital-tied');
       const detailEl = document.getElementById('dsc-capital-detail');
       if (tiedEl) tiedEl.textContent = ((d.tied_total || 0)/10000).toFixed(0) + '만';
-      if (detailEl) detailEl.textContent = `정리 가능: ${((d.recoverable || 0)/10000).toFixed(0)}만 (${d.recoverable_count || 0}건)`;
-    }
-  } catch(e) {}
-  // Step 22: 체결률 카드
-  try {
-    const r = await fetch('/api/conversion-rate?days=30');
-    const d = await r.json();
-    if (d.ok) {
-      const pctEl = document.getElementById('dsc-conv-pct');
-      const detailEl = document.getElementById('dsc-conv-detail');
-      if (pctEl) pctEl.textContent = d.conversion_pct + '%';
-      if (detailEl) detailEl.textContent = `활성 ${d.active_bids_now} / 체결 ${d.total_sales_period}`;
+      if (detailEl) detailEl.textContent = `회수 가능: ${((d.recoverable || 0)/10000).toFixed(0)}만 (${d.recoverable_count || 0}건)`;
     }
   } catch(e) {}
 }
@@ -7767,11 +7751,11 @@ document.addEventListener('keydown', e => {
 });
 </script>
 
-<!-- Step 21: 입찰 노출액 추이 차트 모달 -->
+<!-- Step 21: 자본 추이 차트 모달 -->
 <div id="capital-chart-modal" style="display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;" onclick="if(event.target===this) closeCapitalChart()">
   <div style="background:#fff; max-width:680px; width:92%; border-radius:12px; padding:20px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h2 style="margin:0; font-size:17px;">📊 입찰 노출액 추이</h2>
+      <h2 style="margin:0; font-size:17px;">💰 자본 추이</h2>
       <button onclick="closeCapitalChart()" style="background:none; border:none; font-size:22px; cursor:pointer;">×</button>
     </div>
     <div id="cap-chart-stats" style="display:flex; gap:12px; margin-bottom:12px; font-size:13px;"></div>
