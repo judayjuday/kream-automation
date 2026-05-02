@@ -1,0 +1,193 @@
+      <div id="tab-cleanup" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
+          <button onclick="showHelp('cleanup')"
+                  style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:20px; padding:4px 12px; font-size:13px; cursor:pointer; color:#374151;"
+                  title="도움말">❓ 도움말</button>
+        </div>
+
+        <h2 style="margin:0 0 16px 0;">🧹 입찰 정리 도구</h2>
+
+        <div id="cleanup-stats" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;"></div>
+
+        <div style="margin-bottom:12px;">
+          <button onclick="loadCleanupData()" style="padding:6px 14px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer;">🔄 새로고침</button>
+          <button onclick="selectByRecommendation('withdraw')" style="padding:6px 14px; background:#fef2f2; color:#991b1b; border:1px solid #fecaca; border-radius:6px; cursor:pointer;">회수 권장 전체 선택</button>
+          <button onclick="selectByRecommendation('adjust')" style="padding:6px 14px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:6px; cursor:pointer;">조정 가능 전체 선택</button>
+          <button onclick="clearSelection()" style="padding:6px 14px; background:#f3f4f6; color:#374151; border:1px solid #d1d5db; border-radius:6px; cursor:pointer;">선택 해제</button>
+        </div>
+
+        <div id="cleanup-actions" style="background:#f9fafb; padding:12px; border-radius:6px; margin-bottom:12px; display:none;">
+          <strong>선택 <span id="selected-count">0</span>건</strong>
+          <button onclick="bulkWithdraw()" style="margin-left:12px; padding:6px 14px; background:#dc2626; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑 일괄 회수</button>
+          <button onclick="bulkAdjust(1000)" style="margin-left:8px; padding:6px 14px; background:#7c3aed; color:#fff; border:none; border-radius:6px; cursor:pointer;">📉 -1000원 조정</button>
+          <span style="margin-left:12px; font-size:12px; color:#6b7280;">※ 판매 완료/마지막 재고/마진 미달은 자동 차단</span>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table id="cleanup-table" style="width:100%; font-size:12px; border-collapse:collapse;">
+            <thead>
+              <tr style="background:#f3f4f6;">
+                <th style="padding:8px; border:1px solid #d1d5db;"><input type="checkbox" id="select-all" onchange="toggleAll(this.checked)"></th>
+                <th style="padding:8px; border:1px solid #d1d5db;">모델</th>
+                <th style="padding:8px; border:1px solid #d1d5db;">사이즈</th>
+                <th style="padding:8px; border:1px solid #d1d5db; text-align:right;">현재가</th>
+                <th style="padding:8px; border:1px solid #d1d5db;">rank</th>
+                <th style="padding:8px; border:1px solid #d1d5db; text-align:right;">원가</th>
+                <th style="padding:8px; border:1px solid #d1d5db; text-align:right;">마진</th>
+                <th style="padding:8px; border:1px solid #d1d5db;">추천</th>
+                <th style="padding:8px; border:1px solid #d1d5db;">사유</th>
+              </tr>
+            </thead>
+            <tbody id="cleanup-tbody">
+              <tr><td colspan="9" style="padding:24px; text-align:center; color:#9ca3af;">새로고침 누르면 진단 시작</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <script>
+        let cleanupItems = [];
+        const REC_LABEL = {
+          'withdraw': {text: '회수', color: '#991b1b', bg: '#fef2f2'},
+          'withdraw_blocked': {text: '회수(잠김)', color: '#92400e', bg: '#fef3c7'},
+          'adjust': {text: '조정', color: '#1e40af', bg: '#eff6ff'},
+          'hold': {text: '보류', color: '#374151', bg: '#f3f4f6'},
+          'need_cost': {text: '원가입력', color: '#86198f', bg: '#fdf4ff'},
+        };
+        const STATUS_LABEL = {
+          'ok': {text: 'OK', color: '#059669'},
+          'low': {text: '낮음', color: '#d97706'},
+          'deficit': {text: '적자', color: '#dc2626'},
+          'no_cost': {text: '원가없음', color: '#9ca3af'},
+        };
+
+        async function loadCleanupData() {
+          document.getElementById('cleanup-tbody').innerHTML = '<tr><td colspan="9" style="padding:24px; text-align:center;">⏳ 진단 중...</td></tr>';
+          try {
+            const r = await fetch('/api/cleanup/diagnose');
+            const d = await r.json();
+            if (!d.ok) {
+              document.getElementById('cleanup-tbody').innerHTML = `<tr><td colspan="9" style="padding:24px; color:#dc2626;">에러: ${d.error}</td></tr>`;
+              return;
+            }
+            cleanupItems = d.items || [];
+
+            const stats = d.stats || {};
+            document.getElementById('cleanup-stats').innerHTML = `
+              <div style="background:#fff; border:1px solid #e5e7eb; padding:8px 14px; border-radius:6px;">총 <strong>${d.total}</strong>건</div>
+              <div style="background:#fef2f2; border:1px solid #fecaca; padding:8px 14px; border-radius:6px; color:#991b1b;">회수 권장 <strong>${stats.withdraw||0}</strong></div>
+              <div style="background:#fef3c7; border:1px solid #fde68a; padding:8px 14px; border-radius:6px; color:#92400e;">잠김 <strong>${stats.withdraw_blocked||0}</strong></div>
+              <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:8px 14px; border-radius:6px; color:#1e40af;">조정 가능 <strong>${stats.adjust||0}</strong></div>
+              <div style="background:#fdf4ff; border:1px solid #f0abfc; padding:8px 14px; border-radius:6px; color:#86198f;">원가 입력 필요 <strong>${stats.need_cost||0}</strong></div>
+              <div style="background:#f3f4f6; border:1px solid #d1d5db; padding:8px 14px; border-radius:6px;">보류 <strong>${stats.hold||0}</strong></div>
+            `;
+
+            renderCleanupTable();
+          } catch(e) {
+            document.getElementById('cleanup-tbody').innerHTML = `<tr><td colspan="9" style="padding:24px; color:#dc2626;">로드 실패: ${e.message}</td></tr>`;
+          }
+        }
+
+        function renderCleanupTable() {
+          if (cleanupItems.length === 0) {
+            document.getElementById('cleanup-tbody').innerHTML = '<tr><td colspan="9" style="padding:24px; text-align:center; color:#059669;">✅ rank 밀린 입찰 없음</td></tr>';
+            return;
+          }
+
+          const rows = cleanupItems.map(it => {
+            const rec = REC_LABEL[it.recommendation] || REC_LABEL.hold;
+            const stat = STATUS_LABEL[it.margin_status] || STATUS_LABEL.no_cost;
+            const margin = (it.margin !== null && it.margin !== undefined) ? `${it.margin.toLocaleString()}원` : '-';
+            const cost = it.cost ? `${it.cost.toLocaleString()}원` : '-';
+            return `<tr>
+              <td style="padding:6px; border:1px solid #d1d5db; text-align:center;">
+                <input type="checkbox" class="cleanup-cb" data-oid="${it.orderId}" data-rec="${it.recommendation}" onchange="updateSelection()">
+              </td>
+              <td style="padding:6px; border:1px solid #d1d5db;">${it.model}</td>
+              <td style="padding:6px; border:1px solid #d1d5db;">${it.size}${it.is_last_in_size ? ' 🔒' : ''}</td>
+              <td style="padding:6px; border:1px solid #d1d5db; text-align:right;">${(it.price||0).toLocaleString()}원</td>
+              <td style="padding:6px; border:1px solid #d1d5db; text-align:center;">${it.rank}</td>
+              <td style="padding:6px; border:1px solid #d1d5db; text-align:right;">${cost}</td>
+              <td style="padding:6px; border:1px solid #d1d5db; text-align:right; color:${stat.color}; font-weight:bold;">${margin}</td>
+              <td style="padding:6px; border:1px solid #d1d5db; background:${rec.bg}; color:${rec.color}; font-weight:bold; text-align:center;">${rec.text}</td>
+              <td style="padding:6px; border:1px solid #d1d5db; font-size:11px; color:#6b7280;">${it.reason || '-'}</td>
+            </tr>`;
+          }).join('');
+          document.getElementById('cleanup-tbody').innerHTML = rows;
+        }
+
+        function toggleAll(checked) {
+          document.querySelectorAll('.cleanup-cb').forEach(cb => cb.checked = checked);
+          updateSelection();
+        }
+
+        function selectByRecommendation(rec) {
+          document.querySelectorAll('.cleanup-cb').forEach(cb => {
+            cb.checked = (cb.dataset.rec === rec);
+          });
+          updateSelection();
+        }
+
+        function clearSelection() {
+          document.getElementById('select-all').checked = false;
+          toggleAll(false);
+        }
+
+        function updateSelection() {
+          const selected = document.querySelectorAll('.cleanup-cb:checked');
+          document.getElementById('selected-count').textContent = selected.length;
+          document.getElementById('cleanup-actions').style.display = selected.length > 0 ? 'block' : 'none';
+        }
+
+        function getSelectedIds() {
+          return [...document.querySelectorAll('.cleanup-cb:checked')].map(cb => cb.dataset.oid);
+        }
+
+        async function bulkWithdraw() {
+          const ids = getSelectedIds();
+          if (ids.length === 0) return;
+          if (!confirm(`${ids.length}건 회수하시겠습니까?\n(판매 완료/마지막 재고는 자동 차단됨)`)) return;
+
+          try {
+            const r = await fetch('/api/cleanup/bulk-withdraw', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({orderIds: ids, force: false})
+            });
+            const d = await r.json();
+            let msg = `요청: ${d.requested}건\n승인: ${d.approved}건\n차단: ${(d.blocked||[]).length}건`;
+            if (d.blocked && d.blocked.length) {
+              msg += '\n\n차단 사유:\n' + d.blocked.map(b => `• ${b.orderId}: ${b.reason}`).join('\n');
+            }
+            msg += '\n\n5분 후 자동 새로고침으로 결과 확인하세요.';
+            alert(msg);
+            setTimeout(loadCleanupData, 5 * 60 * 1000);
+          } catch(e) {
+            alert('실패: ' + e.message);
+          }
+        }
+
+        async function bulkAdjust(decrement) {
+          const ids = getSelectedIds();
+          if (ids.length === 0) return;
+          if (!confirm(`${ids.length}건 가격 -${decrement}원 조정?\n(마진 미달은 자동 차단됨)`)) return;
+
+          try {
+            const r = await fetch('/api/cleanup/bulk-adjust', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({orderIds: ids, decrement})
+            });
+            const d = await r.json();
+            let msg = `요청: ${d.requested}건\n승인: ${(d.approved||[]).length}건\n차단: ${(d.blocked||[]).length}건`;
+            if (d.blocked && d.blocked.length) {
+              msg += '\n\n차단 사유:\n' + d.blocked.map(b => `• ${b.orderId}: ${b.reason}`).join('\n');
+            }
+            alert(msg);
+            setTimeout(loadCleanupData, 5 * 60 * 1000);
+          } catch(e) {
+            alert('실패: ' + e.message);
+          }
+        }
+        </script>
+      </div>

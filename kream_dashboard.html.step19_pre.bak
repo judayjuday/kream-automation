@@ -347,12 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     </div>
     <div class="nav-group">
-      <div class="nav-label">정리</div>
-      <div class="nav-item" onclick="showTab('cleanup')">
-        <span class="nav-icon">🧹</span> 입찰 정리
-      </div>
-    </div>
-    <div class="nav-group">
       <div class="nav-label">설정</div>
       <div class="nav-item" onclick="showTab('settings')">
         <span class="nav-icon">⚙️</span> 환율/수수료
@@ -722,7 +716,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-history" class="tab-view" data-tab-title="실행 이력"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-pattern" class="tab-view" data-tab-title="판매 패턴"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-logistics" class="tab-view" data-tab-title="물류 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
-      <div id="tab-cleanup" class="tab-view" data-tab-title="입찰 정리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-settings" class="tab-view" data-tab-title="환율/수수료"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
@@ -781,8 +774,6 @@ function showTab(id) {
     sales: '판매 관리',
     history: '실행 이력',
     pattern: '📊 판매 패턴',
-    logistics: '🚚 물류 관리',
-    cleanup: '🧹 입찰 정리 도구',
     settings: '환율 / 수수료 설정'
   };
   document.getElementById('page-title').textContent = titles[id] || '';
@@ -849,7 +840,6 @@ function _onTabShown(id) {
   if (id === 'sales') { try { sdLoadDashboard(); loadAutoRebidStatus(); loadRebidHistory(); } catch(e) {} }
   if (id === 'history') { try { loadBatchHistory(); loadSalesRecent(); loadSalesStats(); loadSalesSchedulerStatus(); loadRebidRecommendations(); loadEditLog(); } catch(e) {} }
   if (id === 'logistics') { try { loadLogisticsAll(); } catch(e) {} }
-  if (id === 'cleanup') { try { loadCleanupData(); } catch(e) {} }
   if (id === 'pattern') { try { loadPatternAnalysis(); } catch(e) {} }
   if (id === 'register') {
     try { _loadHomeSalesWidget(); } catch(e) {}
