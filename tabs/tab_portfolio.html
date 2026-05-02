@@ -1,0 +1,89 @@
+      <div id="tab-portfolio" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
+          <button onclick="showHelp('portfolio')"
+                  style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:20px; padding:4px 12px; font-size:13px; cursor:pointer; color:#374151;"
+                  title="이 화면 사용법 보기">
+            ❓ 도움말
+          </button>
+        </div>
+
+        <h2 style="margin:0 0 16px 0;">📊 모델 포트폴리오</h2>
+
+        <div id="port-stats" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;"></div>
+
+        <button onclick="loadPortfolio()" style="padding:6px 14px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-bottom:12px;">🔄 새로고침</button>
+
+        <div id="port-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px;"></div>
+
+        <script>
+        const REC_INFO = {
+          'expand': {label: '확대', color: '#059669', bg: '#ecfdf5', icon: '📈'},
+          'restock': {label: '재입찰', color: '#d97706', bg: '#fffbeb', icon: '🔄'},
+          'review_pricing': {label: '가격재검토', color: '#dc2626', bg: '#fef2f2', icon: '⚠️'},
+          'monitor': {label: '유지', color: '#374151', bg: '#f9fafb', icon: '👁'},
+          'no_data': {label: '데이터부족', color: '#9ca3af', bg: '#f3f4f6', icon: '❓'},
+          'archive': {label: '접기', color: '#6b7280', bg: '#f3f4f6', icon: '📦'},
+        };
+
+        async function loadPortfolio() {
+          document.getElementById('port-grid').innerHTML = '<div style="grid-column:1/-1; padding:24px; text-align:center;">⏳ 분석 중...</div>';
+          try {
+            const r = await fetch('/api/portfolio/overview');
+            const d = await r.json();
+            if (!d.ok) {
+              document.getElementById('port-grid').innerHTML = `<div style="grid-column:1/-1; color:#dc2626;">에러: ${d.error}</div>`;
+              return;
+            }
+
+            const s = d.stats || {};
+            document.getElementById('port-stats').innerHTML =
+              `<div style="background:#fff; border:1px solid #e5e7eb; padding:8px 12px; border-radius:6px;">총 <strong>${d.total_models}</strong>개 모델</div>` +
+              Object.entries(REC_INFO).map(([key, info]) =>
+                `<div style="background:${info.bg}; padding:8px 12px; border-radius:6px; color:${info.color};">${info.icon} ${info.label} <strong>${s[key]||0}</strong></div>`
+              ).join('');
+
+            if (!d.models || d.models.length === 0) {
+              document.getElementById('port-grid').innerHTML = '<div style="grid-column:1/-1; padding:24px; text-align:center; color:#9ca3af;">분석할 모델 없음</div>';
+              return;
+            }
+
+            document.getElementById('port-grid').innerHTML = d.models.map(m => {
+              const rec = REC_INFO[m.recommendation] || REC_INFO.monitor;
+              const lastSale = m.last_sale ? m.last_sale.slice(0,10) : '-';
+              return `<div style="background:#fff; border:1px solid #e5e7eb; border-left:4px solid ${rec.color}; border-radius:6px; padding:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                  <strong style="font-size:13px;">${m.model}</strong>
+                  <span style="background:${rec.bg}; color:${rec.color}; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:bold;">${rec.icon} ${rec.label}</span>
+                </div>
+                <div style="font-size:11px; color:#6b7280; line-height:1.6;">
+                  입찰 ${m.active_bids}건 (1위 ${m.rank_1_bids}) · 판매 ${m.sales_count}건<br>
+                  매출 ${((m.revenue||0)/10000).toFixed(0)}만원 · 최근 ${lastSale}
+                </div>
+                <button onclick="loadModelDeep('${m.model}')" style="margin-top:8px; padding:4px 10px; background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; font-size:11px; cursor:pointer;">상세</button>
+              </div>`;
+            }).join('');
+          } catch(e) {
+            document.getElementById('port-grid').innerHTML = `<div style="grid-column:1/-1; color:#dc2626;">로드 실패: ${e.message}</div>`;
+          }
+        }
+
+        async function loadModelDeep(model) {
+          try {
+            const r = await fetch('/api/model/' + encodeURIComponent(model) + '/deep-analysis');
+            const d = await r.json();
+            if (!d.ok) { alert('실패'); return; }
+            const s = d.summary || {};
+            let msg = `📊 ${model}\n\n`;
+            msg += `활성 입찰: ${s.active_bids} (1위 ${s.rank_1_bids})\n`;
+            msg += `판매 누적: ${s.total_sales}건 / ${(s.total_revenue||0).toLocaleString()}원\n`;
+            msg += `평균 판매가: ${(s.avg_sale_price||0).toLocaleString()}원\n`;
+            msg += `원가 데이터: ${s.has_cost_data ? 'O' : 'X'}\n\n`;
+            msg += `추천: ${d.recommendation}\n${d.recommendation_reason || ''}`;
+            alert(msg);
+          } catch(e) { alert('실패: ' + e.message); }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadPortfolio);
+        </script>
+      </div>
