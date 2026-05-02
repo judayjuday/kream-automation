@@ -11,6 +11,7 @@ KREAM 판매자센터 자동화 스크립트 v2
 
   python3 kream_bot.py --mode login              # 판매자센터 수동 로그인
   python3 kream_bot.py --mode login-kream         # KREAM 일반 수동 로그인
+  python3 kream_bot.py --mode login-hubnet        # 허브넷(kpartner.ehub24.net) 수동 재로그인
   python3 kream_bot.py --mode auto-login          # 둘 다 자동 로그인 (Gmail IMAP + 네이버)
   python3 kream_bot.py --mode auto-login-partner  # 판매자센터만 자동 (이메일+인증코드)
   python3 kream_bot.py --mode auto-login-kream    # KREAM만 자동 (네이버 로그인)
@@ -252,16 +253,30 @@ async def create_context(browser, storage=None):
 
 
 async def save_state_with_localstorage(page, context, path, origin_url):
-    """storage_state에 localStorage 데이터를 병합하여 저장"""
+    """storage_state + localStorage 통합 저장 (atomic + backup).
+
+    절대 규칙(CLAUDE.md #4): auth_state.json 백업 없이 덮어쓰기 금지.
+    - 빈 세션 저장 거부 (cookies/localStorage 둘 다 비면 abort)
+    - 기존 파일 → .pre_relogin.bak 백업
+    - 임시 파일 쓰기 → JSON 검증 → os.replace (atomic)
+    - 7일 이상 된 .pre_relogin.bak 자동 삭제
+    Returns: bool (저장 성공 여부)
+    """
+    import os
+    import shutil
+    import tempfile
+
+    # 1) localStorage 추출
     try:
         local_storage_data = await page.evaluate('() => JSON.stringify(localStorage)')
         ls_items = json.loads(local_storage_data) if local_storage_data else {}
         ls_entries = [{"name": k, "value": v} for k, v in ls_items.items()]
-    except Exception:
+    except Exception as e:
+        print(f"[WARN] localStorage 추출 실패: {e}")
         ls_entries = []
 
+    # 2) storage_state + localStorage 병합
     state = await context.storage_state()
-
     if ls_entries:
         origin_found = False
         for origin in state.get("origins", []):
@@ -275,8 +290,71 @@ async def save_state_with_localstorage(page, context, path, origin_url):
                 "localStorage": ls_entries,
             })
 
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+    # 3) 빈 세션 저장 거부 (cookies, origins/localStorage 둘 다 비면 의미 없음)
+    has_meaningful_data = (
+        len(state.get("cookies", [])) > 0 or
+        any(len(o.get("localStorage", [])) > 0 for o in state.get("origins", []))
+    )
+    if not has_meaningful_data:
+        print(f"[ERROR] 세션 데이터 없음, 저장 거부: {path}")
+        return False
+
+    # 4) 기존 파일 백업 (성공 시에만 사용됨)
+    backup_path = f"{path}.pre_relogin.bak"
+    if os.path.exists(path):
+        try:
+            shutil.copy2(path, backup_path)
+        except Exception as e:
+            print(f"[WARN] 백업 생성 실패(계속 진행): {e}")
+
+    # 5) 임시 파일 쓰기
+    tmp_path = f"{path}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[ERROR] 임시 파일 쓰기 실패: {e}")
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+        return False
+
+    # 6) 임시 파일 검증 (JSON 파싱 + 의미있는 데이터)
+    try:
+        with open(tmp_path, "r", encoding="utf-8") as f:
+            verify = json.load(f)
+        if not verify.get("cookies") and not any(
+            o.get("localStorage") for o in verify.get("origins", [])
+        ):
+            os.remove(tmp_path)
+            print(f"[ERROR] 임시 파일 검증 실패(빈 세션): {tmp_path}")
+            return False
+    except Exception as e:
+        print(f"[ERROR] 임시 파일 검증 실패: {e}")
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+        return False
+
+    # 7) atomic replace
+    os.replace(tmp_path, path)
+
+    # 8) 7일 이상 된 .pre_relogin.bak 자동 삭제
+    if os.path.exists(backup_path):
+        try:
+            age_days = (time.time() - os.path.getmtime(backup_path)) / 86400
+            if age_days > 7:
+                os.remove(backup_path)
+                print(f"[INFO] 7일 이상 된 백업 삭제: {backup_path}")
+        except Exception as e:
+            print(f"[WARN] 백업 정리 실패(무시): {e}")
+
+    print(f"[INFO] 세션 저장 성공: {path}")
+    return True
 
 
 async def login_manual(playwright):
@@ -2926,12 +3004,12 @@ def _parse_shipment_row(cells):
 async def main():
     parser = argparse.ArgumentParser(description="KREAM 판매자센터 자동화 v2")
     parser.add_argument("--mode", choices=[
-                            "login", "login-kream",
+                            "login", "login-kream", "login-hubnet",
                             "auto-login", "auto-login-partner", "auto-login-kream",
                             "product", "bid", "all",
                         ],
                         default="product",
-                        help="login=판매자센터 수동, login-kream=KREAM 수동, "
+                        help="login=판매자센터 수동, login-kream=KREAM 수동, login-hubnet=허브넷 수동, "
                              "auto-login=둘 다 자동, auto-login-partner=판매자센터만, "
                              "auto-login-kream=KREAM만(네이버), product=고시정보, bid=입찰, all=전부")
     parser.add_argument("--excel", default=EXCEL_PATH, help="데이터 엑셀 파일 경로")
@@ -2951,6 +3029,21 @@ async def main():
 
         if args.mode == "login-kream":
             await login_kream(p)
+            return
+
+        if args.mode == "login-hubnet":
+            # 허브넷은 requests 기반(HTTP-only)이므로 Playwright context 미사용.
+            # kream_hubnet_bot.ensure_hubnet_logged_in() 이 settings.json에서
+            # 자격증명 로드 → hubnet_login() → save_hubnet_session() 까지 처리.
+            print("🔐 허브넷 수동 재로그인 모드")
+            try:
+                from kream_hubnet_bot import ensure_hubnet_logged_in
+                sess = ensure_hubnet_logged_in()
+                cookie_names = [c.name for c in sess.cookies]
+                print(f"  ✅ 허브넷 세션 갱신 완료 (쿠키 {len(cookie_names)}개: {cookie_names})")
+            except Exception as e:
+                print(f"  ❌ 허브넷 로그인 실패: {e}")
+                return
             return
 
         if args.mode == "auto-login":

@@ -6757,6 +6757,30 @@ def api_health():
                     "valid": False,
                 }
 
+        # 허브넷 세션 (Step 17-D Phase 2-A): kream_hubnet_bot 의 save_hubnet_session()
+        # 이 만든 파일 — 구조가 partner/kream(Playwright) 과 다르므로 별도 처리.
+        # 빈 세션(쿠키 없음)은 약 317byte, 정상 세션은 5KB 이상.
+        hubnet_path = BASE_DIR / "auth_state_hubnet.json"
+        auth_hubnet = {
+            "exists": False,
+            "last_modified": None,
+            "age_hours": None,
+            "valid": False,
+        }
+        if hubnet_path.exists():
+            mtime = datetime.fromtimestamp(hubnet_path.stat().st_mtime)
+            auth_hubnet["exists"] = True
+            auth_hubnet["last_modified"] = mtime.isoformat()
+            auth_hubnet["age_hours"] = round((now - mtime).total_seconds() / 3600, 1)
+            try:
+                size = hubnet_path.stat().st_size
+                if size > 1000:  # 빈 세션은 ~317byte → 1000 컷오프로 의미있는 데이터 판정
+                    data = json.loads(hubnet_path.read_text())
+                    auth_hubnet["valid"] = bool(data.get("cookies"))
+            except Exception:
+                auth_hubnet["valid"] = False
+        result["auth_hubnet"] = auth_hubnet
+
         # 스케줄러 상태
         result["schedulers"] = {
             "monitor": "running" if monitor_state.get("running") else "stopped",
