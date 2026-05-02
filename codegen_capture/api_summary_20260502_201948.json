@@ -1,0 +1,161 @@
+{
+  "all_kream_apis": [
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/user/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/dashboard/league",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/dashboard/stock-vouchers/upcoming",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/business/payouts/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/notices?per_page=5",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/dashboard/",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/dashboard/weekly-trending",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/inventory/stock-vouchers/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner-api.kream.co.kr/api/v1/notices?popup=true&per_page=3",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/shipment-2d5ca51cf42b34c1.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/authenticate-d81ee63c62923d35.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks-c43eac6905a3cdf8.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/inventory-cc35223587c7640f.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/payout/group-8127330a00cd3f74.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/cancel-e6bd75d17855b3d8.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/cancel-e6bd75d17855b3d8.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks-c43eac6905a3cdf8.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/authenticate-d81ee63c62923d35.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/shipment-2d5ca51cf42b34c1.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/inventory-cc35223587c7640f.js",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/payout/group-8127330a00cd3f74.js",
+      "status": 200
+    }
+  ],
+  "bid_related": [
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/shipment-2d5ca51cf42b34c1.js",
+      "response_preview": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/authenticate-d81ee63c62923d35.js",
+      "response_preview": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks-c43eac6905a3cdf8.js",
+      "response_preview": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/payout/group-8127330a00cd3f74.js",
+      "response_preview": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/cancel-e6bd75d17855b3d8.js",
+      "response_preview": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/cancel-e6bd75d17855b3d8.js",
+      "response_preview": "try{!function(){var e=\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof self?self:{},t=(new e.Error).stack;t&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[t]=\"2e321ddd-ad84-4f92-8202-6ee4010f532b\",e._sentryDebugIdIdentifier=\"sentry-dbid-2e321ddd-ad84-4f92-8202-6ee4010f532b\")}()}catch(e){}(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[7184],{2242:(e,t,n)=>{\"use strict\";n.r(t),n.d(t,{default:()="
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks-c43eac6905a3cdf8.js",
+      "response_preview": "try{!function(){var e=\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof self?self:{},t=(new e.Error).stack;t&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[t]=\"8cc54cbc-2877-46b5-b22e-0b7cbadc2535\",e._sentryDebugIdIdentifier=\"sentry-dbid-8cc54cbc-2877-46b5-b22e-0b7cbadc2535\")}()}catch(e){}(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[7387],{14838:(e,t,n)=>{\"use strict\";n.r(t),n.d(t,{default:()"
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/authenticate-d81ee63c62923d35.js",
+      "response_preview": "try{!function(){var e=\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof self?self:{},t=(new e.Error).stack;t&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[t]=\"507cb2db-af0d-4b7c-b71e-266038ec131a\",e._sentryDebugIdIdentifier=\"sentry-dbid-507cb2db-af0d-4b7c-b71e-266038ec131a\")}()}catch(e){}(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[6333],{25179:(e,t,n)=>{\"use strict\";n.d(t,{e:()=>r});var a=n"
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/shipment-2d5ca51cf42b34c1.js",
+      "response_preview": "try{!function(){var e=\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof self?self:{},t=(new e.Error).stack;t&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[t]=\"dbca3f96-d209-4cf3-a3bc-a6ac0bf34dd3\",e._sentryDebugIdIdentifier=\"sentry-dbid-dbca3f96-d209-4cf3-a3bc-a6ac0bf34dd3\")}()}catch(e){}(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[9876],{25179:(e,t,n)=>{\"use strict\";n.d(t,{e:()=>a});var s=n"
+    },
+    {
+      "method": "GET",
+      "url": "https://partner.kream.co.kr/_next/static/chunks/pages/business/asks/payout/group-8127330a00cd3f74.js",
+      "response_preview": "try{!function(){var e=\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof self?self:{},t=(new e.Error).stack;t&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[t]=\"9867c4ae-14a1-41fa-90d6-0e91b7c37baf\",e._sentryDebugIdIdentifier=\"sentry-dbid-9867c4ae-14a1-41fa-90d6-0e91b7c37baf\")}()}catch(e){}(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[3556],{1743:(e,t,n)=>{\"use strict\";n.r(t),n.d(t,{default:()="
+    }
+  ]
+}

@@ -17,3 +17,6 @@ alert_history.json
 my_bids_local.json
 tunnel.log
 *.log
+
+# Step 29 codegen capture (HAR 파일이 큼)
+codegen_capture/*.har

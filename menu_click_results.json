@@ -1,0 +1,78 @@
+[
+  {
+    "menu": "재고별 입찰 관리",
+    "status": "clicked",
+    "final_url": "https://partner.kream.co.kr/c2c",
+    "price_count": 4,
+    "selectors": {
+      "table tbody tr": 0,
+      "div[class*=\"ListItem\"]": 0,
+      "div[class*=\"ask-row\"]": 0,
+      "div[class*=\"bid-row\"]": 0,
+      "div[class*=\"ask-item\"]": 0,
+      "tbody > tr": 0,
+      "[data-testid*=\"ask\"]": 0,
+      "[data-testid*=\"bid\"]": 0,
+      "tr[class*=\"row\"]": 0
+    },
+    "screenshot": "diagnostics/menu_재고별_입찰_관리_20260502_201122.png",
+    "body_preview": "판매자 센터이용 문의도움말judaykream@gmail.com\n홈\n상품 정보 관리\n상품 정보 대량 검색\n상품 정보 관리\n상품 등록 요청\n일반 판매\n재고별 입찰 관리\n일반 판매 입찰\n통합 입찰 관리\n대량 입찰/수정\n입찰 내역 관리\n발송 관리\n검수 현황\n취소 현황\n거래 취소 내역\n구매자 반품 내역\n정산 현황\n정산 예정 내역\n기간별 정산 내역\n주문별 정산 내역\n판매자 정보\n비즈니스 정보 관리\n내 계정 관리\n결제 내역 다운로드\n서비스 연동 관리\n판매자 등급\n공지 사항\n프로모션 정보\n5월 판매자 등급Level 1\n판매 수수료\n최대 5.5%\n페널티 면제 횟수\n5회\n잔여 창고보관 횟수\n0회\n리그 현황\n다음 달 예정 레벨\nLevel 1\n/\n40위 밖\n현재 정산 확정 금액: 0원\nLevel 1\nLevel 2\n정산 확정 금액 2,000,000원 or 정산건수 10건\n추가 시 Level 2 달성\n6월 예정 창고보관권+ 0회\n도전 순위 달성 (Lv.1 / 40위)\n+ 1회\nTOP3 달성 (3등)\n+ 1회"
+  },
+  {
+    "menu": "일반 판매 입찰",
+    "status": "clicked",
+    "final_url": "https://partner.kream.co.kr/c2c",
+    "price_count": 4,
+    "selectors": {
+      "table tbody tr": 0,
+      "div[class*=\"ListItem\"]": 0,
+      "div[class*=\"ask-row\"]": 0,
+      "div[class*=\"bid-row\"]": 0,
+      "div[class*=\"ask-item\"]": 0,
+      "tbody > tr": 0,
+      "[data-testid*=\"ask\"]": 0,
+      "[data-testid*=\"bid\"]": 0,
+      "tr[class*=\"row\"]": 0
+    },
+    "screenshot": "diagnostics/menu_일반_판매_입찰_20260502_201129.png",
+    "body_preview": "판매자 센터이용 문의도움말judaykream@gmail.com\n홈\n상품 정보 관리\n상품 정보 대량 검색\n상품 정보 관리\n상품 등록 요청\n일반 판매\n재고별 입찰 관리\n일반 판매 입찰\n통합 입찰 관리\n대량 입찰/수정\n입찰 내역 관리\n발송 관리\n검수 현황\n취소 현황\n거래 취소 내역\n구매자 반품 내역\n정산 현황\n정산 예정 내역\n기간별 정산 내역\n주문별 정산 내역\n판매자 정보\n비즈니스 정보 관리\n내 계정 관리\n결제 내역 다운로드\n서비스 연동 관리\n판매자 등급\n공지 사항\n프로모션 정보\n5월 판매자 등급Level 1\n판매 수수료\n최대 5.5%\n페널티 면제 횟수\n5회\n잔여 창고보관 횟수\n0회\n리그 현황\n다음 달 예정 레벨\nLevel 1\n/\n40위 밖\n현재 정산 확정 금액: 0원\nLevel 1\nLevel 2\n정산 확정 금액 2,000,000원 or 정산건수 10건\n추가 시 Level 2 달성\n6월 예정 창고보관권+ 0회\n도전 순위 달성 (Lv.1 / 40위)\n+ 1회\nTOP3 달성 (3등)\n+ 1회"
+  },
+  {
+    "menu": "통합 입찰 관리",
+    "status": "clicked",
+    "final_url": "https://partner.kream.co.kr/c2c",
+    "price_count": 4,
+    "selectors": {
+      "table tbody tr": 0,
+      "div[class*=\"ListItem\"]": 0,
+      "div[class*=\"ask-row\"]": 0,
+      "div[class*=\"bid-row\"]": 0,
+      "div[class*=\"ask-item\"]": 0,
+      "tbody > tr": 0,
+      "[data-testid*=\"ask\"]": 0,
+      "[data-testid*=\"bid\"]": 0,
+      "tr[class*=\"row\"]": 0
+    },
+    "screenshot": "diagnostics/menu_통합_입찰_관리_20260502_201136.png",
+    "body_preview": "판매자 센터이용 문의도움말judaykream@gmail.com\n홈\n상품 정보 관리\n상품 정보 대량 검색\n상품 정보 관리\n상품 등록 요청\n일반 판매\n재고별 입찰 관리\n일반 판매 입찰\n통합 입찰 관리\n대량 입찰/수정\n입찰 내역 관리\n발송 관리\n검수 현황\n취소 현황\n거래 취소 내역\n구매자 반품 내역\n정산 현황\n정산 예정 내역\n기간별 정산 내역\n주문별 정산 내역\n판매자 정보\n비즈니스 정보 관리\n내 계정 관리\n결제 내역 다운로드\n서비스 연동 관리\n판매자 등급\n공지 사항\n프로모션 정보\n5월 판매자 등급Level 1\n판매 수수료\n최대 5.5%\n페널티 면제 횟수\n5회\n잔여 창고보관 횟수\n0회\n리그 현황\n다음 달 예정 레벨\nLevel 1\n/\n40위 밖\n현재 정산 확정 금액: 0원\nLevel 1\nLevel 2\n정산 확정 금액 2,000,000원 or 정산건수 10건\n추가 시 Level 2 달성\n6월 예정 창고보관권+ 0회\n도전 순위 달성 (Lv.1 / 40위)\n+ 1회\nTOP3 달성 (3등)\n+ 1회"
+  },
+  {
+    "menu": "입찰 내역 관리",
+    "status": "clicked",
+    "final_url": "https://partner.kream.co.kr/c2c",
+    "price_count": 4,
+    "selectors": {
+      "table tbody tr": 0,
+      "div[class*=\"ListItem\"]": 0,
+      "div[class*=\"ask-row\"]": 0,
+      "div[class*=\"bid-row\"]": 0,
+      "div[class*=\"ask-item\"]": 0,
+      "tbody > tr": 0,
+      "[data-testid*=\"ask\"]": 0,
+      "[data-testid*=\"bid\"]": 0,
+      "tr[class*=\"row\"]": 0
+    },
+    "screenshot": "diagnostics/menu_입찰_내역_관리_20260502_201143.png",
+    "body_preview": "판매자 센터이용 문의도움말judaykream@gmail.com\n홈\n상품 정보 관리\n상품 정보 대량 검색\n상품 정보 관리\n상품 등록 요청\n일반 판매\n재고별 입찰 관리\n일반 판매 입찰\n통합 입찰 관리\n대량 입찰/수정\n입찰 내역 관리\n발송 관리\n검수 현황\n취소 현황\n거래 취소 내역\n구매자 반품 내역\n정산 현황\n정산 예정 내역\n기간별 정산 내역\n주문별 정산 내역\n판매자 정보\n비즈니스 정보 관리\n내 계정 관리\n결제 내역 다운로드\n서비스 연동 관리\n판매자 등급\n공지 사항\n프로모션 정보\n5월 판매자 등급Level 1\n판매 수수료\n최대 5.5%\n페널티 면제 횟수\n5회\n잔여 창고보관 횟수\n0회\n리그 현황\n다음 달 예정 레벨\nLevel 1\n/\n40위 밖\n현재 정산 확정 금액: 0원\nLevel 1\nLevel 2\n정산 확정 금액 2,000,000원 or 정산건수 10건\n추가 시 Level 2 달성\n6월 예정 창고보관권+ 0회\n도전 순위 달성 (Lv.1 / 40위)\n+ 1회\nTOP3 달성 (3등)\n+ 1회"
+  }
+]

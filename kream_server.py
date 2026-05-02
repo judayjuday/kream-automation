@@ -2316,8 +2316,8 @@ def api_my_bids():
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            from kream_adjuster import collect_my_bids
-            bids = loop.run_until_complete(collect_my_bids(headless=get_headless()))
+            from kream_adjuster import collect_my_bids_via_menu
+            bids = loop.run_until_complete(collect_my_bids_via_menu(headless=get_headless()))
             loop.close()
             # DB에 내 입찰 이력 저장
             try:
@@ -12339,3 +12339,110 @@ if __name__ == "__main__":
         except Exception as _se:
             print(f"[SCHEDULER] 시작 실패: {_se}")
     app.run(host="0.0.0.0", port=5001, debug=False)
+
+
+@app.route('/api/new-bid/calc-batch', methods=['POST'])
+def api_new_bid_calc_batch():
+    """신규 입찰 일괄 마진 계산. 모델/사이즈/판매가/CNY 리스트 받아서 마진 계산.
+    
+    입력: {"items": [{"model": "JQ4110", "size": "215", "sale_price": 130000, "cny": 350}, ...]}
+    출력: 각 항목별 원가/정산액/마진/추천(GO/SKIP)
+    """
+    try:
+        data = request.get_json() or {}
+        items = data.get('items', [])
+        
+        if not items:
+            return jsonify({'ok': False, 'error': 'items required'}), 400
+        
+        try:
+            settings = json.loads(Path(__file__).parent.joinpath('settings.json').read_text(encoding='utf-8'))
+        except:
+            settings = {}
+        fee_rate = settings.get('commission_rate', 6) / 100
+        fixed_fee = 2500
+        min_margin = settings.get('min_margin', 4000)
+        overseas_ship = settings.get('overseas_shipping', 8000)
+        undercut = settings.get('undercut_amount', 1000)
+        
+        # 환율
+        try:
+            fx_resp = requests.get('http://localhost:5001/api/exchange-rate', timeout=5)
+            fx = fx_resp.json().get('rate', 216)
+        except:
+            fx = settings.get('exchange_rate_cny', 216)
+        
+        results = []
+        import math
+        
+        for item in items:
+            model = item.get('model', '')
+            size = item.get('size', '')
+            sale_price = float(item.get('sale_price', 0))
+            cny = float(item.get('cny', 0))
+            
+            if not model or not cny or sale_price <= 0:
+                results.append({
+                    **item,
+                    'status': 'INVALID',
+                    'reason': '모델/CNY/판매가 누락'
+                })
+                continue
+            
+            # 입찰가 = 판매가 - 언더컷, 1000원 단위 올림
+            bid_price = math.ceil((sale_price - undercut) / 1000) * 1000
+            
+            # 원가
+            cost = cny * fx * 1.03 + overseas_ship
+            
+            # 정산
+            settlement = bid_price * (1 - fee_rate * 1.1) - fixed_fee
+            margin = settlement - cost
+            
+            status = 'GO' if margin >= min_margin else ('LOW' if margin >= 0 else 'DEFICIT')
+            
+            results.append({
+                **item,
+                'fx': round(fx, 2),
+                'bid_price': bid_price,
+                'cost': round(cost),
+                'settlement': round(settlement),
+                'margin': round(margin),
+                'margin_pct': round((margin/bid_price*100) if bid_price else 0, 1),
+                'status': status,
+                'reason': '마진 OK' if status == 'GO' else f'{margin_status_msg(status, margin, min_margin)}'
+            })
+        
+        # 통계
+        go_count = sum(1 for r in results if r.get('status') == 'GO')
+        low_count = sum(1 for r in results if r.get('status') == 'LOW')
+        deficit_count = sum(1 for r in results if r.get('status') == 'DEFICIT')
+        
+        return jsonify({
+            'ok': True,
+            'total': len(results),
+            'go': go_count,
+            'low': low_count,
+            'deficit': deficit_count,
+            'invalid': sum(1 for r in results if r.get('status') == 'INVALID'),
+            'items': results,
+            'settings_used': {
+                'fx': round(fx, 2),
+                'fee_rate': fee_rate,
+                'min_margin': min_margin,
+                'overseas_ship': overseas_ship,
+                'undercut': undercut,
+            }
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+def margin_status_msg(status, margin, min_margin):
+    if status == 'LOW':
+        return f'마진 {round(margin):,}원 < {min_margin:,} (조정 또는 단가 협상 필요)'
+    if status == 'DEFICIT':
+        return f'적자 {round(margin):,}원 (입찰 불가)'
+    return ''
+

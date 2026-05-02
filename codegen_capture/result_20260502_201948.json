@@ -1,0 +1,42 @@
+{
+  "timestamp": "20260502_201948",
+  "navigations": [
+    {
+      "url": "https://partner.kream.co.kr/c2c",
+      "time": "2026-05-02T20:19:51.256437"
+    },
+    {
+      "url": "https://partner.kream.co.kr/c2c",
+      "time": "2026-05-02T20:19:51.526670"
+    },
+    {
+      "url": "https://partner.kream.co.kr/c2c",
+      "time": "2026-05-02T20:19:51.553952"
+    }
+  ],
+  "click_log": [],
+  "final": {
+    "url": "https://partner.kream.co.kr/c2c",
+    "title": "KREAM 판매자 센터 - KREAM 판매자 센터",
+    "html_path": "codegen_capture/final_page_20260502_201948.html",
+    "screenshot_path": "codegen_capture/final_page_20260502_201948.png",
+    "selectors": {
+      "selectors": {
+        "table tbody tr": 0,
+        "tbody > tr": 0,
+        "div[class*=\"row\"]": 115,
+        "div[class*=\"Row\"]": 108,
+        "div[class*=\"item\"]": 74,
+        "div[class*=\"Item\"]": 35,
+        "div[class*=\"ask\"]": 0,
+        "div[class*=\"Ask\"]": 0,
+        "div[class*=\"bid\"]": 0,
+        "div[class*=\"Bid\"]": 0,
+        "[role=\"row\"]": 0
+      },
+      "price_count": 4,
+      "body_len": 3085
+    }
+  },
+  "har_file": "codegen_capture/network_20260502_201948.har"
+}
