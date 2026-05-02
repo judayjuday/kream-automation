@@ -190,6 +190,111 @@ def _backup_tick():
         _backup_timer.start()
 
 
+# ── 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B) ──
+_session_refresh_lock = threading.Lock()
+_session_refresh_thread = None
+_session_refresh_stop = threading.Event()
+_session_refresh_status = {
+    "enabled": True,
+    "last_run": None,
+    "last_result": None,
+    "next_run": None,
+    "interval_hours": 12,
+    "trigger_threshold_hours": 18,
+}
+
+
+def _refresh_session_if_stale(target):
+    """target='partner'|'kream'|'hubnet'. 18h 초과 + 토큰 valid 시 사전 재로그인."""
+    state_paths = {
+        "partner": BASE_DIR / "auth_state.json",
+        "kream": BASE_DIR / "auth_state_kream.json",
+        "hubnet": BASE_DIR / "auth_state_hubnet.json",
+    }
+    path = state_paths.get(target)
+    if not path or not path.exists():
+        return {"target": target, "action": "skip", "success": False,
+                "message": "state file not found"}
+
+    age_hours = (time.time() - path.stat().st_mtime) / 3600
+    threshold = _session_refresh_status["trigger_threshold_hours"]
+    if age_hours < threshold:
+        return {"target": target, "action": "skip", "success": True,
+                "message": f"still fresh (age={age_hours:.1f}h)"}
+
+    try:
+        if target == "hubnet":
+            sess = ensure_hubnet_logged_in()
+            cookie_count = len(sess.cookies) if sess is not None else 0
+            return {"target": target, "action": "refreshed", "success": True,
+                    "message": f"cookies={cookie_count}"}
+        elif target == "partner":
+            async def _do():
+                from kream_bot import login_auto_partner
+                async with async_playwright() as p:
+                    return await login_auto_partner(p)
+            asyncio.run(_do())
+            return {"target": target, "action": "refreshed", "success": True,
+                    "message": "partner re-logged in"}
+        elif target == "kream":
+            return {"target": target, "action": "skip", "success": True,
+                    "message": "kream auto-relogin not implemented"}
+    except Exception as e:
+        return {"target": target, "action": "failed", "success": False,
+                "message": str(e)[:200]}
+
+
+def _session_refresh_worker():
+    """백그라운드 스레드. 12h 주기로 partner/hubnet 사전 갱신 점검."""
+    while not _session_refresh_stop.is_set():
+        try:
+            with _session_refresh_lock:
+                if _session_refresh_status["enabled"]:
+                    results = []
+                    for target in ("partner", "hubnet"):
+                        results.append(_refresh_session_if_stale(target))
+                    _session_refresh_status["last_run"] = datetime.now().isoformat()
+                    _session_refresh_status["last_result"] = results
+
+                    failures = [r for r in results if r.get("action") == "failed"]
+                    if failures:
+                        try:
+                            health_alerter.alert(
+                                "session_refresh_failed",
+                                f"세션 사전 갱신 실패: {failures}",
+                            )
+                        except Exception as ae:
+                            print(f"[session_refresh] alert 실패: {ae}")
+
+            interval_sec = _session_refresh_status["interval_hours"] * 3600
+            _session_refresh_status["next_run"] = (
+                datetime.now() + timedelta(seconds=interval_sec)
+            ).isoformat()
+
+            for _ in range(int(interval_sec)):
+                if _session_refresh_stop.is_set():
+                    break
+                time.sleep(1)
+        except Exception as e:
+            print(f"[session_refresh] worker exception: {e}")
+            time.sleep(60)
+
+
+def start_session_refresh_scheduler():
+    """서버 시작 시 호출. 이미 실행 중이면 no-op."""
+    global _session_refresh_thread
+    if _session_refresh_thread is not None and _session_refresh_thread.is_alive():
+        return
+    _session_refresh_stop.clear()
+    _session_refresh_thread = threading.Thread(
+        target=_session_refresh_worker,
+        daemon=True,
+        name="session_refresh_scheduler",
+    )
+    _session_refresh_thread.start()
+    print("[session_refresh] 사전 갱신 스케줄러 시작 (12h 주기, 18h 임계)")
+
+
 # ── SQLite WAL 모드 활성화 ──
 def _enable_wal_mode():
     """price_history.db를 WAL 모드로 변경 (동시 읽기/쓰기 성능 향상)"""
@@ -2865,6 +2970,38 @@ def api_session_relogin():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"taskId": tid})
+
+
+# ── 사전 갱신 스케줄러 API (Step 17-D Phase 2-B) ──
+
+@app.route("/api/session/refresh-status", methods=["GET"])
+def api_session_refresh_status():
+    """사전 갱신 스케줄러 상태 조회."""
+    alive = bool(_session_refresh_thread and _session_refresh_thread.is_alive())
+    return jsonify({"ok": True, "thread_alive": alive, **_session_refresh_status})
+
+
+@app.route("/api/session/refresh-toggle", methods=["POST"])
+def api_session_refresh_toggle():
+    """사전 갱신 스케줄러 ON/OFF (런타임)."""
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled", True))
+    with _session_refresh_lock:
+        _session_refresh_status["enabled"] = enabled
+    return jsonify({"ok": True, "enabled": enabled})
+
+
+@app.route("/api/session/refresh-run-once", methods=["POST"])
+def api_session_refresh_run_once():
+    """수동 1회 실행 (디버깅용). target='all'|'partner'|'hubnet'."""
+    data = request.get_json(silent=True) or {}
+    target = data.get("target", "all")
+    targets = ["partner", "hubnet"] if target == "all" else [target]
+    results = []
+    with _session_refresh_lock:
+        for t in targets:
+            results.append(_refresh_session_if_stale(t))
+    return jsonify({"ok": True, "results": results})
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -6757,9 +6894,8 @@ def api_health():
                     "valid": False,
                 }
 
-        # 허브넷 세션 (Step 17-D Phase 2-A): kream_hubnet_bot 의 save_hubnet_session()
-        # 이 만든 파일 — 구조가 partner/kream(Playwright) 과 다르므로 별도 처리.
-        # 빈 세션(쿠키 없음)은 약 317byte, 정상 세션은 5KB 이상.
+        # 허브넷 세션 (Step 17-D Phase 2-A.1): PHP 세션 시스템 — PHPSESSID 1개만 있으면 정상
+        # 정상 세션도 ~317byte. 빈 cookies 또는 JSON 파싱 실패 시 valid=false.
         hubnet_path = BASE_DIR / "auth_state_hubnet.json"
         auth_hubnet = {
             "exists": False,
@@ -6773,10 +6909,11 @@ def api_health():
             auth_hubnet["last_modified"] = mtime.isoformat()
             auth_hubnet["age_hours"] = round((now - mtime).total_seconds() / 3600, 1)
             try:
-                size = hubnet_path.stat().st_size
-                if size > 1000:  # 빈 세션은 ~317byte → 1000 컷오프로 의미있는 데이터 판정
-                    data = json.loads(hubnet_path.read_text())
-                    auth_hubnet["valid"] = bool(data.get("cookies"))
+                data = json.loads(hubnet_path.read_text())
+                cookies = data.get("cookies", [])
+                has_phpsessid = any(c.get("name") == "PHPSESSID" for c in cookies)
+                if has_phpsessid:
+                    auth_hubnet["valid"] = True
             except Exception:
                 auth_hubnet["valid"] = False
         result["auth_hubnet"] = auth_hubnet
@@ -6786,6 +6923,13 @@ def api_health():
             "monitor": "running" if monitor_state.get("running") else "stopped",
             "sales": "running" if sales_scheduler_state.get("running") else "stopped",
             "backup": "running" if backup_state.get("running") else "stopped",
+        }
+
+        # 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B)
+        result["session_refresh"] = {
+            "enabled": _session_refresh_status["enabled"],
+            "last_run": _session_refresh_status["last_run"],
+            "next_run": _session_refresh_status["next_run"],
         }
 
         # 마지막 판매 수집
@@ -9367,4 +9511,6 @@ if __name__ == "__main__":
     _backup_timer.daemon = True
     _backup_timer.start()
     print("  자동 백업: 60초 후 첫 실행 → 이후 24시간 주기")
+    # 세션 사전 갱신 스케줄러 (Step 17-D Phase 2-B)
+    start_session_refresh_scheduler()
     app.run(host="0.0.0.0", port=5001, debug=False)
