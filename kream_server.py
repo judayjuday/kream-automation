@@ -9579,6 +9579,26 @@ def api_shihuo_rollback(batch_id):
 
 
 # ═══════════════════════════════════════════
+# In-App 도움말 API
+# ═══════════════════════════════════════════
+
+@app.route('/api/help/<tab_id>', methods=['GET'])
+def api_help(tab_id):
+    """탭별 In-App 도움말 콘텐츠 반환."""
+    try:
+        from pathlib import Path
+        help_path = Path(__file__).parent / 'help_content.json'
+        if not help_path.exists():
+            return jsonify({'ok': False, 'error': 'help_content.json 없음'}), 404
+        data = json.loads(help_path.read_text(encoding='utf-8'))
+        if tab_id not in data:
+            return jsonify({'ok': False, 'error': f'tab_id={tab_id} 없음'}), 404
+        return jsonify({'ok': True, 'help': data[tab_id]})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
