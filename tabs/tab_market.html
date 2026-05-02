@@ -1,0 +1,117 @@
+      <div id="tab-market" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
+          <button onclick="showHelp('market')"
+                  style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:20px; padding:4px 12px; font-size:13px; cursor:pointer; color:#374151;"
+                  title="이 화면 사용법 보기">
+            ❓ 도움말
+          </button>
+        </div>
+
+        <!-- 알림 -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">🚨</span> 가격 급변 알림 (최근 48h, 임계 ±10%)</span>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-outline btn-sm" onclick="mkLoadAlerts()">새로고침</button>
+              <button class="btn btn-primary btn-sm" onclick="mkCollectNow()">즉시 수집</button>
+            </div>
+          </div>
+          <div id="mk-alerts" style="overflow:auto; margin-top:8px"></div>
+          <div id="mk-collect-status" class="text-muted" style="font-size:12px; margin-top:8px"></div>
+        </div>
+
+        <!-- 모델별 추이 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📈</span> 모델별 가격 추이</div>
+          <div class="form-row">
+            <span class="form-label">모델번호</span>
+            <input type="text" id="mk-model" class="form-input form-input-sm" placeholder="JQ4110" style="width:160px"
+              onkeydown="if(event.key==='Enter')mkLoadHistory()">
+            <span class="form-label" style="margin-left:12px">기간(일)</span>
+            <input type="number" id="mk-days" class="form-input form-input-sm" value="30" style="width:80px">
+            <button class="btn" style="margin-left:8px" onclick="mkLoadHistory()">조회</button>
+            <span id="mk-history-status" class="text-muted" style="font-size:12px; margin-left:8px"></span>
+          </div>
+          <div id="mk-history" style="overflow:auto; margin-top:12px"></div>
+        </div>
+
+        <script>
+        async function mkLoadAlerts() {
+          const out = document.getElementById('mk-alerts');
+          out.innerHTML = '<div class="text-muted">로딩 중...</div>';
+          try {
+            const r = await fetch('/api/market/alerts');
+            const d = await r.json();
+            if (!d.ok) { out.innerHTML = '<span style="color:#dc2626">실패: ' + (d.error || '?') + '</span>'; return; }
+            const alerts = d.alerts || [];
+            if (!alerts.length) { out.innerHTML = '<div class="text-muted">최근 48h 내 급변 없음</div>'; return; }
+            const rows = alerts.map(a => {
+              const color = a.direction === 'UP' ? '#dc2626' : '#059669';
+              return `<tr>
+                <td style="padding:4px 8px; border:1px solid #d1d5db">${a.model}</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db">${a.size || '-'}</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(a.from_price || 0).toLocaleString()}원</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(a.to_price || 0).toLocaleString()}원</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right; color:${color}; font-weight:bold">${a.change_pct > 0 ? '+' : ''}${a.change_pct}%</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db">${a.direction}</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; font-size:12px">${(a.from_at || '').substring(0, 16)} → ${(a.to_at || '').substring(0, 16)}</td>
+              </tr>`;
+            }).join('');
+            out.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px">
+              <thead><tr style="background:#e5e7eb">
+                <th style="padding:4px 8px; border:1px solid #d1d5db">모델</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">사이즈</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">시작</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">현재</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">변동률</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">방향</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">기간</th>
+              </tr></thead><tbody>${rows}</tbody></table>`;
+          } catch (e) { out.innerHTML = '<span style="color:#dc2626">에러: ' + e.message + '</span>'; }
+        }
+
+        async function mkLoadHistory() {
+          const model = (document.getElementById('mk-model').value || '').trim();
+          const days = parseInt(document.getElementById('mk-days').value || '30');
+          const status = document.getElementById('mk-history-status');
+          const out = document.getElementById('mk-history');
+          if (!model) { status.textContent = '모델번호 입력'; return; }
+          status.textContent = '조회 중...';
+          try {
+            const r = await fetch('/api/market/history/' + encodeURIComponent(model) + '?days=' + days);
+            const d = await r.json();
+            if (!d.ok) { status.textContent = '실패: ' + (d.error || '?'); out.innerHTML = ''; return; }
+            const hist = d.history || [];
+            status.textContent = `${hist.length}건`;
+            if (!hist.length) { out.innerHTML = '<div class="text-muted">데이터 없음 (자동 수집 2h 주기 — 시간 필요)</div>'; return; }
+            const rows = hist.slice(-200).reverse().map(h => `<tr>
+              <td style="padding:4px 8px; border:1px solid #d1d5db">${(h.collected_at || '').substring(0, 16)}</td>
+              <td style="padding:4px 8px; border:1px solid #d1d5db">${h.size || '-'}</td>
+              <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(h.buy_price || 0).toLocaleString()}원</td>
+              <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(h.recent_price || 0).toLocaleString()}원</td>
+            </tr>`).join('');
+            out.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px">
+              <thead><tr style="background:#e5e7eb">
+                <th style="padding:4px 8px; border:1px solid #d1d5db">수집 시각</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">사이즈</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">즉시구매가</th>
+                <th style="padding:4px 8px; border:1px solid #d1d5db">최근 체결가</th>
+              </tr></thead><tbody>${rows}</tbody></table>`;
+          } catch (e) { status.textContent = '에러: ' + e.message; }
+        }
+
+        async function mkCollectNow() {
+          const status = document.getElementById('mk-collect-status');
+          status.textContent = '백그라운드 수집 시작 요청 중...';
+          try {
+            const r = await fetch('/api/market/collect-now', { method: 'POST' });
+            const d = await r.json();
+            status.textContent = d.ok ? '백그라운드 수집 시작됨 (1~2분 후 완료)' : '실패: ' + (d.error || '?');
+          } catch (e) { status.textContent = '에러: ' + e.message; }
+        }
+
+        if (document.readyState !== 'loading') { setTimeout(mkLoadAlerts, 0); }
+        else { document.addEventListener('DOMContentLoaded', mkLoadAlerts); }
+        </script>
+      </div>

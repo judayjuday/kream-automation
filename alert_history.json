@@ -8,15 +8,15 @@
     "last_sent": "2026-04-19T19:21:30.170647"
   },
   "health_critical": {
-    "count": 75,
-    "last_sent": "2026-05-02T19:41:25.840993"
+    "count": 78,
+    "last_sent": "2026-05-02T22:49:46.167070"
   },
   "sales_no_data_12h": {
-    "count": 52,
-    "last_sent": "2026-05-02T18:40:28.763862"
+    "count": 54,
+    "last_sent": "2026-05-02T22:49:49.500870"
   },
   "auto_adjust_low_margin": {
-    "count": 1,
-    "last_sent": "2026-04-30T23:14:45.993498"
+    "count": 2,
+    "last_sent": "2026-05-02T22:59:11.377550"
   }
 }

@@ -22,10 +22,10 @@
     },
     {
       "name": "_ga_40SLZL29RR",
-      "value": "GS2.1.s1777707250$o17$g1$t1777715243$j25$l0$h0",
+      "value": "GS2.1.s1777728903$o19$g1$t1777730306$j15$l0$h0",
       "domain": ".kream.co.kr",
       "path": "/",
-      "expires": 1812275243.557127,
+      "expires": 1812290306.917736,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -37,7 +37,7 @@
       "localStorage": [
         {
           "name": "accessToken",
-          "value": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc2ODgxMjksIm5iZiI6MTc3NzY4ODEyOSwianRpIjoiYzRhMGJiNjEtZjllYS00MTY3LTg0MDMtNjFhOTgxNmUzY2Y3IiwiZXhwIjoxNzc3NzE2OTI5LCJ0eXBlIjoiYWNjZXNzIiwiZnJlc2giOmZhbHNlfQ.tfCvbfie8RNN3A6ccBSPUquuWeSk7V_-a9Z4_l3oybI"
+          "value": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc3MTgxNzYsIm5iZiI6MTc3NzcxODE3NiwianRpIjoiNTNlN2Q3ZjUtNTAzMC00ZTI1LWIwODUtM2YxNDAyOWU2MWRjIiwiZXhwIjoxNzc3NzQ2OTc2LCJ0eXBlIjoiYWNjZXNzIiwiZnJlc2giOmZhbHNlfQ.M1eQ6hdPBSMooFQdnGFKqRyVK-TTQou8_b1IquQneqs"
         },
         {
           "name": "neverShowHomeNotice383",
@@ -45,7 +45,7 @@
         },
         {
           "name": "authorization",
-          "value": "{\"accessToken\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc2ODgxMjksIm5iZiI6MTc3NzY4ODEyOSwianRpIjoiYzRhMGJiNjEtZjllYS00MTY3LTg0MDMtNjFhOTgxNmUzY2Y3IiwiZXhwIjoxNzc3NzE2OTI5LCJ0eXBlIjoiYWNjZXNzIiwiZnJlc2giOmZhbHNlfQ.tfCvbfie8RNN3A6ccBSPUquuWeSk7V_-a9Z4_l3oybI\",\"refreshToken\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc2MjkzNDgsIm5iZiI6MTc3NzYyOTM0OCwianRpIjoiZTNkNzcyNWEtZmUzNC00ZThlLWFhNTEtMzMyZGE4ZjdhMWM3IiwiZXhwIjoxNzc3NzE1NzQ4LCJ0eXBlIjoicmVmcmVzaCJ9.XkeShaWb-xdIUkpyFl9b_GK4TitJQO_YlVB4X-2Vxv8\",\"expiredTime\":1777716929000}"
+          "value": "{\"accessToken\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc3MTgxNzYsIm5iZiI6MTc3NzcxODE3NiwianRpIjoiNTNlN2Q3ZjUtNTAzMC00ZTI1LWIwODUtM2YxNDAyOWU2MWRjIiwiZXhwIjoxNzc3NzQ2OTc2LCJ0eXBlIjoiYWNjZXNzIiwiZnJlc2giOmZhbHNlfQ.M1eQ6hdPBSMooFQdnGFKqRyVK-TTQou8_b1IquQneqs\",\"refreshToken\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc3MTgxNzYsIm5iZiI6MTc3NzcxODE3NiwianRpIjoiZTc5OTJiNmItNTY5Zi00OGNiLWEzZTEtZWIwOTNmM2Y5MjIxIiwiZXhwIjoxNzc3ODA0NTc2LCJ0eXBlIjoicmVmcmVzaCJ9.YMFQOBHUy9HoqJMrucOUaF9gHPXSWKJ5e1CIps6k8js\",\"expiredTime\":1777746976000}"
         },
         {
           "name": "neverShowNewUserBenefitModal",

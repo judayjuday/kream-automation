@@ -1,0 +1,107 @@
+      <div id="tab-realized" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
+          <button onclick="showHelp('realized')"
+                  style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:20px; padding:4px 12px; font-size:13px; cursor:pointer; color:#374151;"
+                  title="이 화면 사용법 보기">
+            ❓ 도움말
+          </button>
+        </div>
+
+        <!-- 요약 -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between">
+            <span><span class="icon">💰</span> 판매 마진 확정 (최근 365일)</span>
+            <button class="btn btn-outline btn-sm" onclick="rmLoad()">새로고침</button>
+          </div>
+          <div id="rm-summary" style="display:flex; gap:24px; flex-wrap:wrap; font-size:14px; padding:8px 0">
+            <div>총 판매: <strong id="rm-total-cnt">-</strong>건</div>
+            <div>매출: <strong id="rm-total-rev">-</strong></div>
+            <div>확정 마진: <strong id="rm-total-mg">-</strong></div>
+          </div>
+        </div>
+
+        <!-- 월별 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📊</span> 월별 누적</div>
+          <div id="rm-monthly" style="overflow:auto"></div>
+        </div>
+
+        <!-- 모델별 ROI -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">🏷️</span> 모델별 ROI (Top 10)</div>
+          <div id="rm-models" style="overflow:auto"></div>
+        </div>
+
+        <script>
+        async function rmLoad() {
+          try {
+            const r = await fetch('/api/realized-margin/cumulative');
+            const d = await r.json();
+            if (!d.ok) {
+              document.getElementById('rm-summary').innerHTML = '<span style="color:#dc2626">실패: ' + (d.error || '?') + '</span>';
+              return;
+            }
+            document.getElementById('rm-total-cnt').textContent = (d.total_count || 0).toLocaleString();
+            document.getElementById('rm-total-rev').textContent = (d.total_revenue || 0).toLocaleString() + '원';
+            document.getElementById('rm-total-mg').textContent = (d.total_confirmed_margin || 0).toLocaleString() + '원';
+
+            const monthly = d.monthly || [];
+            if (!monthly.length) {
+              document.getElementById('rm-monthly').innerHTML = '<div class="text-muted">데이터 없음</div>';
+            } else {
+              const maxRev = Math.max(...monthly.map(m => m.revenue || 1), 1);
+              const bars = monthly.map(m => {
+                const w = Math.round((m.revenue || 0) / maxRev * 100);
+                return `<tr>
+                  <td style="padding:4px 8px; border:1px solid #d1d5db">${m.month}</td>
+                  <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(m.count || 0).toLocaleString()}건</td>
+                  <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(m.revenue || 0).toLocaleString()}원</td>
+                  <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(m.margin || 0).toLocaleString()}원</td>
+                  <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${m.unknown_count || 0}</td>
+                  <td style="padding:4px 8px; border:1px solid #d1d5db; min-width:200px">
+                    <div style="background:#3b82f6; height:14px; width:${w}%; border-radius:3px"></div>
+                  </td>
+                </tr>`;
+              }).join('');
+              document.getElementById('rm-monthly').innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px">
+                <thead><tr style="background:#e5e7eb">
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">월</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">건수</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">매출</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">확정 마진</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">원가 미상</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">매출 비교</th>
+                </tr></thead><tbody>${bars}</tbody></table>`;
+            }
+
+            const top = d.top_models || [];
+            if (!top.length) {
+              document.getElementById('rm-models').innerHTML = '<div class="text-muted">데이터 없음</div>';
+            } else {
+              const rows = top.map(m => `<tr>
+                <td style="padding:4px 8px; border:1px solid #d1d5db">${m.model || '?'}</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(m.count || 0).toLocaleString()}건</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(m.revenue || 0).toLocaleString()}원</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${(m.margin || 0).toLocaleString()}원</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${m.has_cost || 0}/${m.count || 0}</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db; text-align:right">${m.avg_margin == null ? '-' : (m.avg_margin.toLocaleString() + '원')}</td>
+              </tr>`).join('');
+              document.getElementById('rm-models').innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px">
+                <thead><tr style="background:#e5e7eb">
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">모델</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">건수</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">매출</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">확정 마진</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">원가 입력률</th>
+                  <th style="padding:4px 8px; border:1px solid #d1d5db">평균 마진</th>
+                </tr></thead><tbody>${rows}</tbody></table>`;
+            }
+          } catch (e) {
+            document.getElementById('rm-summary').innerHTML = '<span style="color:#dc2626">에러: ' + e.message + '</span>';
+          }
+        }
+        if (document.readyState !== 'loading') { setTimeout(rmLoad, 0); }
+        else { document.addEventListener('DOMContentLoaded', rmLoad); }
+        </script>
+      </div>

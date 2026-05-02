@@ -8,7 +8,6 @@ KREAM 가격 자동 조정 모듈
 
 import asyncio
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -719,7 +718,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
         await stealth(page)
         
         # 1. 메인 페이지 진입
-        print("[SYNC-V2] 메인 페이지 이동...", flush=True, file=sys.stderr)
+        print("[SYNC-V2] 메인 페이지 이동...")
         await page.goto('https://partner.kream.co.kr/c2c', wait_until='domcontentloaded', timeout=30000)
         await page.wait_for_timeout(3000)
         
@@ -730,7 +729,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
         
         # 2. '통합 입찰 관리' 메뉴 클릭 (확장)
         # 사이드바 안의 정확한 a/button만 노림 — ASIDE 자체 클릭 회피
-        print("[SYNC-V2] '통합 입찰 관리' 메뉴 확장...", flush=True, file=sys.stderr)
+        print("[SYNC-V2] '통합 입찰 관리' 메뉴 확장...")
         clicked = await page.evaluate("""
             () => {
                 // a, button, [role="link"]만 대상
@@ -747,12 +746,12 @@ async def collect_my_bids_via_menu(headless=True) -> list:
                 return null;
             }
         """)
-        print(f"[SYNC-V2] 1차 클릭: {clicked}", flush=True, file=sys.stderr)
+        print(f"[SYNC-V2] 1차 클릭: {clicked}")
         await page.wait_for_timeout(2000)
         
         # 3. '입찰 내역 관리' 메뉴 클릭 (서브메뉴)
         if clicked != '입찰 내역 관리':
-            print("[SYNC-V2] '입찰 내역 관리' 서브메뉴 클릭...", flush=True, file=sys.stderr)
+            print("[SYNC-V2] '입찰 내역 관리' 서브메뉴 클릭...")
             clicked2 = await page.evaluate("""
                 () => {
                     const cands = Array.from(document.querySelectorAll(
@@ -768,7 +767,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
                     return null;
                 }
             """)
-            print(f"[SYNC-V2] 2차 클릭: {clicked2}", flush=True, file=sys.stderr)
+            print(f"[SYNC-V2] 2차 클릭: {clicked2}")
         
         # 4. 페이지 로드 대기
         await page.wait_for_timeout(5000)
@@ -781,12 +780,12 @@ async def collect_my_bids_via_menu(headless=True) -> list:
                     return /A-SN\d|A-AC\d|입찰 순번/.test(text);
                 }
             """, timeout=15000)
-            print("[SYNC-V2] 데이터 감지됨", flush=True, file=sys.stderr)
+            print("[SYNC-V2] 데이터 감지됨")
         except:
-            print("[SYNC-V2] 데이터 대기 timeout (계속 진행)", flush=True, file=sys.stderr)
+            print("[SYNC-V2] 데이터 대기 timeout (계속 진행)")
         
         await page.wait_for_timeout(2000)
-        print(f"[SYNC-V2] 최종 URL: {page.url}", flush=True, file=sys.stderr)
+        print(f"[SYNC-V2] 최종 URL: {page.url}")
         
         # 5. 페이지네이션 — '10개씩 보기' → '50개씩 보기' 변경 시도
         try:
@@ -815,7 +814,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
         max_pages = 10
         
         while page_num <= max_pages:
-            print(f"[SYNC-V2] 페이지 {page_num} 추출 중...", flush=True, file=sys.stderr)
+            print(f"[SYNC-V2] 페이지 {page_num} 추출 중...")
             
             # 행 데이터 추출 (텍스트 기반 파싱 — HTML 구조 변경에 강함)
             rows_data = await page.evaluate("""
@@ -886,7 +885,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
                 }
             """)
             
-            print(f"[SYNC-V2] 페이지 {page_num}: {len(rows_data)}건 추출", flush=True, file=sys.stderr)
+            print(f"[SYNC-V2] 페이지 {page_num}: {len(rows_data)}건 추출")
             all_rows.extend(rows_data)
             
             # 다음 페이지 클릭
@@ -908,7 +907,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
             """)
             
             if not has_next:
-                print(f"[SYNC-V2] 마지막 페이지 도달", flush=True, file=sys.stderr)
+                print(f"[SYNC-V2] 마지막 페이지 도달")
                 break
             
             await page.wait_for_timeout(2500)
@@ -924,7 +923,7 @@ async def collect_my_bids_via_menu(headless=True) -> list:
                 unique_rows.append(r)
         
         bids = unique_rows
-        print(f"[SYNC-V2] 총 {len(bids)}건 (중복 제거 후)", flush=True, file=sys.stderr)
+        print(f"[SYNC-V2] 총 {len(bids)}건 (중복 제거 후)")
         
         await browser.close()
     

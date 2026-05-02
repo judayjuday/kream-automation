@@ -12274,361 +12274,6 @@ def api_capital_efficiency():
 
 
 # ═══════════════════════════════════════════
-# Step 31: 신규 입찰 / 판매 마진 / 시장 모니터링
-# ═══════════════════════════════════════════
-
-def _calc_margin_status_msg(status, margin, min_margin):
-    if status == 'LOW':
-        return f'마진 {round(margin):,}원 < {min_margin:,} (단가 협상 필요)'
-    if status == 'DEFICIT':
-        return f'적자 {round(margin):,}원 (입찰 불가)'
-    return ''
-
-
-@app.route('/api/new-bid/calc-batch', methods=['POST'])
-def api_new_bid_calc_batch():
-    """신규 입찰 일괄 마진 계산. 모델/사이즈/판매가/CNY 리스트 → 원가/정산/마진/GO|LOW|DEFICIT.
-
-    입력: {"items": [{"model": "JQ4110", "size": "260", "sale_price": 150000, "cny": 350}, ...]}
-    """
-    try:
-        data = request.get_json() or {}
-        items = data.get('items', [])
-        if not items:
-            return jsonify({'ok': False, 'error': 'items required'}), 400
-
-        try:
-            settings = json.loads(Path(__file__).parent.joinpath('settings.json').read_text(encoding='utf-8'))
-        except Exception:
-            settings = {}
-        fee_rate = settings.get('commission_rate', 6) / 100.0
-        fixed_fee = 2500
-        min_margin = settings.get('min_margin', 4000)
-        overseas_ship = settings.get('overseas_shipping', 8000)
-        undercut = settings.get('undercut_amount', 1000)
-
-        try:
-            import requests as _rq
-            fx_resp = _rq.get('http://localhost:5001/api/exchange-rate', timeout=5)
-            fx = fx_resp.json().get('rate', settings.get('exchange_rate_cny', 216))
-        except Exception:
-            fx = settings.get('exchange_rate_cny', 216)
-
-        results = []
-        for item in items:
-            model = (item.get('model') or '').strip()
-            size = item.get('size', '')
-            try:
-                sale_price = float(item.get('sale_price', 0) or 0)
-                cny = float(item.get('cny', 0) or 0)
-            except Exception:
-                sale_price = 0
-                cny = 0
-
-            if not model or cny <= 0 or sale_price <= 0:
-                results.append({**item, 'status': 'INVALID', 'reason': '모델/CNY/판매가 누락'})
-                continue
-
-            bid_price = math.ceil((sale_price - undercut) / 1000.0) * 1000
-            cost = cny * fx * 1.03 + overseas_ship
-            settlement = bid_price * (1 - fee_rate * 1.1) - fixed_fee
-            margin = settlement - cost
-            status = 'GO' if margin >= min_margin else ('LOW' if margin >= 0 else 'DEFICIT')
-
-            results.append({
-                **item,
-                'fx': round(fx, 2),
-                'bid_price': int(bid_price),
-                'cost': round(cost),
-                'settlement': round(settlement),
-                'margin': round(margin),
-                'margin_pct': round((margin / bid_price * 100) if bid_price else 0, 1),
-                'status': status,
-                'reason': '마진 OK' if status == 'GO' else _calc_margin_status_msg(status, margin, min_margin),
-            })
-
-        go_count = sum(1 for r in results if r.get('status') == 'GO')
-        low_count = sum(1 for r in results if r.get('status') == 'LOW')
-        deficit_count = sum(1 for r in results if r.get('status') == 'DEFICIT')
-        invalid_count = sum(1 for r in results if r.get('status') == 'INVALID')
-
-        return jsonify({
-            'ok': True,
-            'total': len(results),
-            'go': go_count,
-            'low': low_count,
-            'deficit': deficit_count,
-            'invalid': invalid_count,
-            'items': results,
-            'settings_used': {
-                'fx': round(fx, 2),
-                'fee_rate': fee_rate,
-                'min_margin': min_margin,
-                'overseas_ship': overseas_ship,
-                'undercut': undercut,
-            },
-        })
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
-
-
-@app.route('/api/new-bid/auto-fetch-prices', methods=['POST'])
-def api_new_bid_auto_fetch_prices():
-    """모델 리스트 받아서 /api/search 호출 → 사이즈별 시장가 수집."""
-    try:
-        data = request.get_json() or {}
-        models = data.get('models', [])
-        if not models:
-            return jsonify({'ok': False, 'error': 'models required'}), 400
-
-        import requests as _rq
-        results = []
-        for model in models[:20]:
-            model = (model or '').strip()
-            if not model:
-                continue
-            try:
-                r = _rq.post('http://localhost:5001/api/search', json={'model': model}, timeout=60)
-                if r.status_code == 200:
-                    d = r.json()
-                    sizes = d.get('sizes') or d.get('size_prices') or []
-                    results.append({'model': model, 'ok': True, 'sizes': sizes})
-                else:
-                    results.append({'model': model, 'ok': False, 'error': f'HTTP {r.status_code}'})
-            except Exception as e:
-                results.append({'model': model, 'ok': False, 'error': str(e)})
-
-        return jsonify({'ok': True, 'count': len(results), 'results': results})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
-
-
-@app.route('/api/realized-margin/cumulative', methods=['GET'])
-def api_realized_margin_cumulative():
-    """월별 누적 + 모델별 ROI (real-margin 365일 호출)."""
-    try:
-        import requests as _rq
-        from collections import defaultdict
-        try:
-            r = _rq.get('http://localhost:5001/api/real-margin?days=365', timeout=30)
-            rm = r.json()
-        except Exception as e:
-            return jsonify({'ok': False, 'error': f'real-margin 호출 실패: {e}'}), 500
-        if not rm.get('ok'):
-            return jsonify({'ok': False, 'error': 'real-margin ok=false'}), 500
-
-        items = rm.get('items', []) or []
-        monthly = defaultdict(lambda: {'count': 0, 'revenue': 0, 'margin': 0, 'unknown_count': 0})
-        by_model = defaultdict(lambda: {'count': 0, 'revenue': 0, 'margin': 0, 'has_cost': 0})
-
-        for it in items:
-            d = it.get('trade_date') or ''
-            if not d:
-                continue
-            month = d[:7]
-            sp = it.get('sale_price') or 0
-            mg = it.get('margin')
-            monthly[month]['count'] += 1
-            monthly[month]['revenue'] += sp
-            if mg is not None:
-                monthly[month]['margin'] += mg
-            else:
-                monthly[month]['unknown_count'] += 1
-
-            model = it.get('model') or '?'
-            by_model[model]['count'] += 1
-            by_model[model]['revenue'] += sp
-            if mg is not None:
-                by_model[model]['margin'] += mg
-                by_model[model]['has_cost'] += 1
-
-        return jsonify({
-            'ok': True,
-            'monthly': sorted([{'month': k, **v} for k, v in monthly.items()], key=lambda x: x['month']),
-            'top_models': sorted(
-                [{'model': k, **v,
-                  'avg_margin': round(v['margin'] / v['has_cost']) if v['has_cost'] else None}
-                 for k, v in by_model.items()],
-                key=lambda x: -x['count'],
-            )[:10],
-            'total_count': len(items),
-            'total_revenue': sum((it.get('sale_price') or 0) for it in items),
-            'total_confirmed_margin': sum((it.get('margin') or 0) for it in items if it.get('margin') is not None),
-        })
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
-
-
-def _migrate_market_price_history():
-    """market_price_history 테이블 보장 (CREATE IF NOT EXISTS)."""
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS market_price_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                model TEXT NOT NULL,
-                size TEXT,
-                buy_price INTEGER,
-                recent_price INTEGER,
-                collected_at TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_mph_model_collected ON market_price_history(model, collected_at)")
-        conn.commit()
-        conn.close()
-        print("[MIGRATE] market_price_history 확인/생성")
-    except Exception as e:
-        print(f"[MIGRATE] market_price_history 에러: {e}")
-
-
-def _collect_active_models_market_prices():
-    """활성 모델(my_bids_local 또는 sales_history 최근)의 사이즈별 시장가 수집 → DB 저장."""
-    try:
-        local_path = BASE_DIR / 'my_bids_local.json'
-        active_models = []
-        if local_path.exists():
-            try:
-                local = json.loads(local_path.read_text(encoding='utf-8'))
-                active_models = list({(b.get('model') or '').strip()
-                                      for b in (local.get('bids') or [])
-                                      if b.get('model')})
-            except Exception:
-                active_models = []
-
-        if not active_models:
-            try:
-                conn = sqlite3.connect(str(PRICE_DB))
-                c = conn.cursor()
-                c.execute("SELECT DISTINCT model FROM sales_history WHERE model IS NOT NULL ORDER BY trade_date DESC LIMIT 10")
-                active_models = [r[0] for r in c.fetchall() if r[0]]
-                conn.close()
-            except Exception:
-                active_models = []
-
-        if not active_models:
-            print("[MARKET-COLLECT] 수집할 모델 없음")
-            return
-
-        import requests as _rq
-        now_iso = datetime.now().isoformat()
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        success = 0
-        for model in active_models[:30]:
-            try:
-                r = _rq.post('http://localhost:5001/api/search', json={'model': model}, timeout=60)
-                if r.status_code != 200:
-                    continue
-                d = r.json()
-                sizes = d.get('sizes') or d.get('size_prices') or []
-                for sz in sizes:
-                    c.execute("""
-                        INSERT INTO market_price_history
-                        (model, size, buy_price, recent_price, collected_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (
-                        model,
-                        sz.get('size'),
-                        sz.get('buy_price') or sz.get('buyPrice'),
-                        sz.get('recent_price') or sz.get('recentPrice'),
-                        now_iso,
-                    ))
-                success += 1
-            except Exception as e:
-                print(f"[MARKET-COLLECT] {model} 실패: {e}")
-        conn.commit()
-        conn.close()
-        print(f"[MARKET-COLLECT] {success}/{len(active_models)} 모델 수집")
-    except Exception as e:
-        print(f"[MARKET-COLLECT] 에러: {e}")
-
-
-@app.route('/api/market/history/<path:model>', methods=['GET'])
-def api_market_history(model):
-    """모델별 시장가 추이 조회."""
-    try:
-        days = int(request.args.get('days', 30))
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("""
-            SELECT model, size, buy_price, recent_price, collected_at
-            FROM market_price_history
-            WHERE model = ?
-              AND datetime(collected_at) >= datetime('now', ?)
-            ORDER BY collected_at ASC
-        """, (model, f'-{days} days'))
-        rows = c.fetchall()
-        conn.close()
-
-        history = [
-            {'model': r[0], 'size': r[1], 'buy_price': r[2], 'recent_price': r[3], 'collected_at': r[4]}
-            for r in rows
-        ]
-        return jsonify({'ok': True, 'model': model, 'days': days, 'count': len(history), 'history': history})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
-
-
-@app.route('/api/market/alerts', methods=['GET'])
-def api_market_alerts():
-    """최근 24h 대비 직전 24h buy_price 변동률 ±10% 이상 알림."""
-    try:
-        threshold = float(request.args.get('threshold', 10))
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        c.execute("""
-            SELECT model, size, buy_price, collected_at FROM market_price_history
-            WHERE datetime(collected_at) >= datetime('now', '-2 days')
-              AND buy_price IS NOT NULL
-            ORDER BY model, size, collected_at ASC
-        """)
-        rows = c.fetchall()
-        conn.close()
-
-        from collections import defaultdict
-        groups = defaultdict(list)
-        for r in rows:
-            groups[(r[0], r[1] or '')].append((r[2], r[3]))
-
-        alerts = []
-        for (model, size), pts in groups.items():
-            if len(pts) < 2:
-                continue
-            first_price = pts[0][0]
-            last_price = pts[-1][0]
-            if not first_price or not last_price:
-                continue
-            pct = (last_price - first_price) / first_price * 100.0
-            if abs(pct) >= threshold:
-                alerts.append({
-                    'model': model,
-                    'size': size,
-                    'from_price': first_price,
-                    'to_price': last_price,
-                    'change_pct': round(pct, 2),
-                    'from_at': pts[0][1],
-                    'to_at': pts[-1][1],
-                    'direction': 'UP' if pct > 0 else 'DOWN',
-                })
-        alerts.sort(key=lambda x: -abs(x['change_pct']))
-        return jsonify({'ok': True, 'threshold_pct': threshold, 'count': len(alerts), 'alerts': alerts})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
-
-
-@app.route('/api/market/collect-now', methods=['POST'])
-def api_market_collect_now():
-    """수동 즉시 수집 트리거 (백그라운드 실행)."""
-    try:
-        threading.Thread(target=_collect_active_models_market_prices, daemon=True).start()
-        return jsonify({'ok': True, 'message': '백그라운드 수집 시작'})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
@@ -12687,23 +12332,6 @@ if __name__ == "__main__":
         _snapshot_capital()
     except Exception as _se:
         print(f"[CAPITAL-SNAPSHOT] 초기 실행 실패: {_se}")
-    # Step 31: 시장가 자동 수집 스케줄러 + 마이그레이션
-    try:
-        _migrate_market_price_history()
-    except Exception as _me:
-        print(f"[MIGRATE] market_price_history 호출 실패: {_me}")
-    if scheduler is not None:
-        try:
-            scheduler.add_job(
-                _collect_active_models_market_prices,
-                'interval', hours=2,
-                id='market_price_collect',
-                replace_existing=True,
-                misfire_grace_time=600,
-            )
-            print("[SCHEDULER] market_price_collect 등록 (2h)")
-        except Exception as _me:
-            print(f"[SCHEDULER] market_price_collect 실패: {_me}")
     if scheduler is not None:
         try:
             scheduler.start()
@@ -12711,4 +12339,110 @@ if __name__ == "__main__":
         except Exception as _se:
             print(f"[SCHEDULER] 시작 실패: {_se}")
     app.run(host="0.0.0.0", port=5001, debug=False)
+
+
+@app.route('/api/new-bid/calc-batch', methods=['POST'])
+def api_new_bid_calc_batch():
+    """신규 입찰 일괄 마진 계산. 모델/사이즈/판매가/CNY 리스트 받아서 마진 계산.
+    
+    입력: {"items": [{"model": "JQ4110", "size": "215", "sale_price": 130000, "cny": 350}, ...]}
+    출력: 각 항목별 원가/정산액/마진/추천(GO/SKIP)
+    """
+    try:
+        data = request.get_json() or {}
+        items = data.get('items', [])
+        
+        if not items:
+            return jsonify({'ok': False, 'error': 'items required'}), 400
+        
+        try:
+            settings = json.loads(Path(__file__).parent.joinpath('settings.json').read_text(encoding='utf-8'))
+        except:
+            settings = {}
+        fee_rate = settings.get('commission_rate', 6) / 100
+        fixed_fee = 2500
+        min_margin = settings.get('min_margin', 4000)
+        overseas_ship = settings.get('overseas_shipping', 8000)
+        undercut = settings.get('undercut_amount', 1000)
+        
+        # 환율
+        try:
+            fx_resp = requests.get('http://localhost:5001/api/exchange-rate', timeout=5)
+            fx = fx_resp.json().get('rate', 216)
+        except:
+            fx = settings.get('exchange_rate_cny', 216)
+        
+        results = []
+        import math
+        
+        for item in items:
+            model = item.get('model', '')
+            size = item.get('size', '')
+            sale_price = float(item.get('sale_price', 0))
+            cny = float(item.get('cny', 0))
+            
+            if not model or not cny or sale_price <= 0:
+                results.append({
+                    **item,
+                    'status': 'INVALID',
+                    'reason': '모델/CNY/판매가 누락'
+                })
+                continue
+            
+            # 입찰가 = 판매가 - 언더컷, 1000원 단위 올림
+            bid_price = math.ceil((sale_price - undercut) / 1000) * 1000
+            
+            # 원가
+            cost = cny * fx * 1.03 + overseas_ship
+            
+            # 정산
+            settlement = bid_price * (1 - fee_rate * 1.1) - fixed_fee
+            margin = settlement - cost
+            
+            status = 'GO' if margin >= min_margin else ('LOW' if margin >= 0 else 'DEFICIT')
+            
+            results.append({
+                **item,
+                'fx': round(fx, 2),
+                'bid_price': bid_price,
+                'cost': round(cost),
+                'settlement': round(settlement),
+                'margin': round(margin),
+                'margin_pct': round((margin/bid_price*100) if bid_price else 0, 1),
+                'status': status,
+                'reason': '마진 OK' if status == 'GO' else f'{margin_status_msg(status, margin, min_margin)}'
+            })
+        
+        # 통계
+        go_count = sum(1 for r in results if r.get('status') == 'GO')
+        low_count = sum(1 for r in results if r.get('status') == 'LOW')
+        deficit_count = sum(1 for r in results if r.get('status') == 'DEFICIT')
+        
+        return jsonify({
+            'ok': True,
+            'total': len(results),
+            'go': go_count,
+            'low': low_count,
+            'deficit': deficit_count,
+            'invalid': sum(1 for r in results if r.get('status') == 'INVALID'),
+            'items': results,
+            'settings_used': {
+                'fx': round(fx, 2),
+                'fee_rate': fee_rate,
+                'min_margin': min_margin,
+                'overseas_ship': overseas_ship,
+                'undercut': undercut,
+            }
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+def margin_status_msg(status, margin, min_margin):
+    if status == 'LOW':
+        return f'마진 {round(margin):,}원 < {min_margin:,} (조정 또는 단가 협상 필요)'
+    if status == 'DEFICIT':
+        return f'적자 {round(margin):,}원 (입찰 불가)'
+    return ''
 

@@ -415,18 +415,6 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     </div>
     <div class="nav-group">
-      <div class="nav-label">도구</div>
-      <div class="nav-item" data-tab="new_bid" onclick="showTab('new_bid')">
-        <span class="nav-icon">🆕</span> 신규 입찰
-      </div>
-      <div class="nav-item" data-tab="realized" onclick="showTab('realized')">
-        <span class="nav-icon">💰</span> 판매 마진 확정
-      </div>
-      <div class="nav-item" data-tab="market" onclick="showTab('market')">
-        <span class="nav-icon">📈</span> 시장 모니터링
-      </div>
-    </div>
-    <div class="nav-group">
       <div class="nav-label">정리</div>
       <div class="nav-item" onclick="showTab('cleanup')">
         <span class="nav-icon">🧹</span> 입찰 정리
@@ -803,9 +791,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-pattern" class="tab-view" data-tab-title="판매 패턴"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-portfolio" class="tab-view" data-tab-title="모델 포트폴리오"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-logistics" class="tab-view" data-tab-title="물류 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
-      <div id="tab-new_bid" class="tab-view" data-tab-title="신규 입찰"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
-      <div id="tab-realized" class="tab-view" data-tab-title="판매 마진 확정"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
-      <div id="tab-market" class="tab-view" data-tab-title="시장 모니터링"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-cleanup" class="tab-view" data-tab-title="입찰 정리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-settings" class="tab-view" data-tab-title="환율/수수료"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
@@ -867,9 +852,6 @@ function showTab(id) {
     pattern: '📊 판매 패턴',
     portfolio: '📊 모델 포트폴리오',
     logistics: '🚚 물류 관리',
-    new_bid: '🆕 신규 입찰',
-    realized: '💰 판매 마진 확정',
-    market: '📈 시장 모니터링',
     cleanup: '🧹 입찰 정리 도구',
     settings: '환율 / 수수료 설정'
   };

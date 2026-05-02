@@ -1,0 +1,160 @@
+      <div id="tab-new_bid" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
+          <button onclick="showHelp('new_bid')"
+                  style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:20px; padding:4px 12px; font-size:13px; cursor:pointer; color:#374151;"
+                  title="이 화면 사용법 보기">
+            ❓ 도움말
+          </button>
+        </div>
+
+        <!-- 입력 -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🆕</span> 신규 입찰 일괄 도구</div>
+          <div class="text-muted" style="font-size:13px; margin-bottom:8px">
+            한 줄당 <code>모델 [TAB] CNY</code> 형식으로 입력하세요 (예: <code>JQ4110&nbsp;&nbsp;350</code>).
+          </div>
+          <textarea id="nb-input" rows="8" style="width:100%; font-family:monospace; padding:8px; border:1px solid #d1d5db; border-radius:6px"
+            placeholder="JQ4110&#9;350&#10;IX7693&#9;420"></textarea>
+          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="nbFetchAndCalc()">시장가 수집 + 마진 계산</button>
+            <button class="btn btn-outline" onclick="nbAddSelectedToQueue()">선택 항목 큐 등록</button>
+            <span id="nb-status" class="text-muted" style="font-size:12px; align-self:center"></span>
+          </div>
+        </div>
+
+        <!-- 결과 -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title"><span class="icon">📋</span> 결과</div>
+          <div id="nb-summary" style="margin-bottom:8px; font-size:13px; color:#374151"></div>
+          <div id="nb-table" style="overflow:auto"></div>
+        </div>
+
+        <script>
+        let __nbItems = [];
+
+        function __parseLines(txt) {
+          return (txt || '').split(/\n/)
+            .map(l => l.trim())
+            .filter(Boolean)
+            .map(l => {
+              const parts = l.split(/[\s\t]+/);
+              if (parts.length < 2) return null;
+              const cny = parseFloat((parts[parts.length - 1] || '').replace(/[^0-9.]/g, ''));
+              const model = parts.slice(0, -1).join(' ').trim();
+              if (!model || !cny) return null;
+              return { model, cny };
+            })
+            .filter(Boolean);
+        }
+
+        async function nbFetchAndCalc() {
+          const status = document.getElementById('nb-status');
+          const summary = document.getElementById('nb-summary');
+          const tbl = document.getElementById('nb-table');
+          tbl.innerHTML = ''; summary.textContent = '';
+          const inputs = __parseLines(document.getElementById('nb-input').value);
+          if (!inputs.length) { status.textContent = '유효한 입력 없음'; return; }
+          const models = inputs.map(x => x.model);
+          status.textContent = `${models.length}개 모델 시장가 수집 중...`;
+          let priceMap = {};
+          try {
+            const r = await fetch('/api/new-bid/auto-fetch-prices', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ models })
+            });
+            const d = await r.json();
+            if (!d.ok) { status.textContent = '시장가 수집 실패: ' + (d.error || '?'); return; }
+            for (const r of (d.results || [])) {
+              priceMap[r.model] = r.ok ? (r.sizes || []) : [];
+            }
+          } catch (e) { status.textContent = '시장가 에러: ' + e.message; return; }
+
+          const items = [];
+          for (const inp of inputs) {
+            const sizes = priceMap[inp.model] || [];
+            if (!sizes.length) {
+              items.push({ model: inp.model, size: '', sale_price: 0, cny: inp.cny, status: 'NOPRICE', reason: '시장가 없음' });
+              continue;
+            }
+            for (const s of sizes) {
+              const sale = s.recent_price || s.recentPrice || s.buy_price || s.buyPrice || 0;
+              items.push({ model: inp.model, size: s.size || '', sale_price: sale, cny: inp.cny });
+            }
+          }
+          status.textContent = `${items.length}건 마진 계산 중...`;
+          try {
+            const r = await fetch('/api/new-bid/calc-batch', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ items: items.filter(it => it.status !== 'NOPRICE') })
+            });
+            const d = await r.json();
+            if (!d.ok) { status.textContent = '계산 실패: ' + (d.error || '?'); return; }
+            const noprice = items.filter(it => it.status === 'NOPRICE');
+            __nbItems = (d.items || []).concat(noprice);
+            status.textContent = `완료`;
+            summary.innerHTML = `총 <b>${d.total||0}</b>건 / GO <b style="color:#059669">${d.go||0}</b> / LOW <b style="color:#d97706">${d.low||0}</b> / DEFICIT <b style="color:#dc2626">${d.deficit||0}</b> / INVALID <b>${d.invalid||0}</b> / NOPRICE <b>${noprice.length}</b>`;
+            __renderNbTable();
+          } catch (e) { status.textContent = '계산 에러: ' + e.message; }
+        }
+
+        function __renderNbTable() {
+          const tbl = document.getElementById('nb-table');
+          if (!__nbItems.length) { tbl.innerHTML = '<div class="text-muted">결과 없음</div>'; return; }
+          const rows = __nbItems.map((it, idx) => {
+            const status = it.status || '?';
+            const color = status === 'GO' ? '#059669'
+                        : status === 'LOW' ? '#d97706'
+                        : status === 'DEFICIT' ? '#dc2626' : '#6b7280';
+            const checked = status === 'GO' ? 'checked' : '';
+            return `<tr>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:center">
+                <input type="checkbox" class="nb-row-chk" data-idx="${idx}" ${checked} ${status==='GO'?'':'disabled'}>
+              </td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db">${it.model||''}</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db">${it.size||''}</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right">${(it.sale_price||0).toLocaleString()}원</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right">${(it.bid_price||0).toLocaleString()}원</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right">${(it.cost||0).toLocaleString()}원</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right; color:${color}; font-weight:bold">${(it.margin||0).toLocaleString()}원 (${it.margin_pct||0}%)</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; color:${color}; font-weight:bold">${status}</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; font-size:12px">${it.reason||''}</td>
+              <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right">${(it.cny||0).toLocaleString()}元</td>
+            </tr>`;
+          }).join('');
+          tbl.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px">
+            <thead><tr style="background:#e5e7eb">
+              <th style="padding:6px 8px; border:1px solid #d1d5db; width:40px">선택</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">모델</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">사이즈</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">판매가</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">입찰가</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">원가</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">마진</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">상태</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">사유</th>
+              <th style="padding:6px 8px; border:1px solid #d1d5db">CNY</th>
+            </tr></thead><tbody>${rows}</tbody></table>`;
+        }
+
+        async function nbAddSelectedToQueue() {
+          const status = document.getElementById('nb-status');
+          const checks = Array.from(document.querySelectorAll('.nb-row-chk:checked'));
+          if (!checks.length) { status.textContent = '선택된 항목 없음'; return; }
+          const picks = checks.map(c => __nbItems[parseInt(c.dataset.idx)]).filter(Boolean);
+          status.textContent = `${picks.length}건 큐 등록 중...`;
+          let ok = 0, fail = 0;
+          for (const it of picks) {
+            try {
+              const r = await fetch('/api/queue/add', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ model: it.model, size: it.size, cny: it.cny, sale_price: it.sale_price, bid_price: it.bid_price })
+              });
+              const d = await r.json();
+              if (d.ok) ok++; else fail++;
+            } catch (e) { fail++; }
+          }
+          status.textContent = `완료: 성공 ${ok} / 실패 ${fail}`;
+        }
+        </script>
+      </div>
