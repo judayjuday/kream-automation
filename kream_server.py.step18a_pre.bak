@@ -2330,8 +2330,6 @@ def api_delete_bids():
     """선택한 입찰 삭제"""
     data = request.json or {}
     order_ids = data.get("orderIds", [])
-    verify = data.get("verify", False)
-    wait_seconds = data.get("wait_seconds", 300)
     if not order_ids:
         return jsonify({"error": "orderIds 필요"}), 400
 
@@ -2350,37 +2348,7 @@ def api_delete_bids():
             finish_task(tid, error=str(e))
 
     threading.Thread(target=run, daemon=True).start()
-    response_data = {"taskId": tid}
-    if verify:
-        response_data["verify_after_seconds"] = wait_seconds
-        response_data["hint"] = f"task 완료 후 {wait_seconds}초 대기 → /api/my-bids/sync 호출 → 잔존 확인 권장"
-    return jsonify(response_data)
-
-
-@app.route("/api/my-bids/verify-deleted", methods=["POST"])
-def api_verify_deleted():
-    """삭제 검증: order_ids 리스트가 my_bids_local.json에서 사라졌는지 확인."""
-    data = request.get_json() or {}
-    order_ids = data.get("orderIds", [])
-    if not order_ids:
-        return jsonify({"ok": False, "error": "orderIds required"}), 400
-    try:
-        local_path = MY_BIDS_FILE
-        if not local_path.exists():
-            return jsonify({"ok": True, "remaining": [], "remaining_count": 0, "all_deleted": True, "note": "local cache 없음"})
-        local = json.loads(local_path.read_text(encoding="utf-8"))
-        bids = local.get("bids", []) if isinstance(local, dict) else []
-        existing_ids = {str(b.get("orderId")) for b in bids}
-        remaining = [oid for oid in order_ids if str(oid) in existing_ids]
-        return jsonify({
-            "ok": True,
-            "requested": len(order_ids),
-            "remaining": remaining,
-            "remaining_count": len(remaining),
-            "all_deleted": len(remaining) == 0,
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"taskId": tid})
 
 
 async def delete_bids(order_ids, tid):
@@ -7122,135 +7090,10 @@ def api_health():
             status = "warning"
 
         result["status"] = status
-
-        # 환경 정보 (Step 18-A)
-        try:
-            settings_data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            result["environment"] = settings_data.get("environment", "unknown")
-            result["kream_main_accessible"] = settings_data.get("kream_main_accessible", None)
-        except Exception:
-            result["environment"] = "unknown"
-            result["kream_main_accessible"] = None
-
         return jsonify(result)
 
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
-
-
-def detect_environment():
-    """kream.co.kr 접근 가능 여부 1회 체크. 결과는 settings.json에 캐시."""
-    import socket as _socket
-    try:
-        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8")) if SETTINGS_FILE.exists() else {}
-    except Exception:
-        settings = {}
-
-    accessible = False
-    try:
-        _socket.setdefaulttimeout(5)
-        _socket.gethostbyname("kream.co.kr")
-        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        s.settimeout(5)
-        s.connect(("kream.co.kr", 443))
-        s.close()
-        accessible = True
-    except Exception:
-        accessible = False
-    finally:
-        _socket.setdefaulttimeout(None)
-
-    settings["kream_main_accessible"] = accessible
-    settings["environment"] = "imac_kr" if accessible else "macbook_overseas"
-    settings["env_checked_at"] = datetime.now().isoformat()
-    try:
-        SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as _e:
-        print(f"[ENV] settings 저장 실패: {_e}")
-    print(f"[ENV] kream.co.kr accessible={accessible}, environment={settings['environment']}")
-    return accessible
-
-
-@app.route("/api/daily-summary", methods=["GET"])
-def api_daily_summary():
-    """오늘 작업 요약: 입찰/삭제/판매/pending/auth 실패."""
-    try:
-        conn = sqlite3.connect(str(PRICE_DB))
-        c = conn.cursor()
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        bids_today = 0
-        try:
-            c.execute("""
-                SELECT COUNT(*) FROM price_adjustments
-                WHERE DATE(executed_at) = ? AND status = 'executed'
-            """, (today,))
-            bids_today = c.fetchone()[0] or 0
-        except Exception:
-            bids_today = 0
-
-        auto_adjust_today = 0
-        try:
-            c.execute("""
-                SELECT COUNT(*) FROM auto_adjust_log
-                WHERE DATE(executed_at) = ?
-            """, (today,))
-            auto_adjust_today = c.fetchone()[0] or 0
-        except Exception:
-            auto_adjust_today = 0
-
-        sales_today = 0
-        try:
-            c.execute("""
-                SELECT COUNT(*) FROM sales_history
-                WHERE DATE(trade_date) = ?
-            """, (today,))
-            sales_today = c.fetchone()[0] or 0
-        except Exception:
-            sales_today = 0
-
-        pending_now = 0
-        try:
-            c.execute("SELECT COUNT(*) FROM price_adjustments WHERE status = 'pending'")
-            pending_now = c.fetchone()[0] or 0
-        except Exception:
-            pending_now = 0
-
-        auth_failures = 0
-        try:
-            c.execute("""
-                SELECT COUNT(*) FROM notifications
-                WHERE type = 'auth_failure'
-                AND datetime(created_at) > datetime('now', '-24 hours')
-                AND (dismissed IS NULL OR dismissed = 0)
-            """)
-            auth_failures = c.fetchone()[0] or 0
-        except Exception:
-            auth_failures = 0
-
-        last_sale = None
-        try:
-            c.execute("SELECT MAX(trade_date) FROM sales_history")
-            last_sale = c.fetchone()[0] or None
-        except Exception:
-            last_sale = None
-
-        conn.close()
-
-        return jsonify({
-            "ok": True,
-            "date": today,
-            "summary": {
-                "bids_today": bids_today,
-                "auto_adjust_today": auto_adjust_today,
-                "sales_today": sales_today,
-                "pending_now": pending_now,
-                "auth_failures_24h": auth_failures,
-                "last_sale_date": last_sale,
-            },
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/health/test-alert", methods=["POST"])
@@ -9766,11 +9609,6 @@ if __name__ == "__main__":
     print(f"  모니터링 스케줄: 매일 {MONITOR_HOURS}시")
     print(f"  판매 수집: 30분 간격 + ±5분 지터")
     print("=" * 50)
-    # 환경 자동 감지 (Step 18-A): kream.co.kr 접근 가능 여부 1회 체크
-    try:
-        detect_environment()
-    except Exception as _e:
-        print(f"[ENV] detect_environment 실패: {_e}")
     # 서버 시작 시 환율 자동 조회 (백그라운드)
     threading.Thread(target=fetch_exchange_rates, daemon=True).start()
     # 모니터링 자동 시작

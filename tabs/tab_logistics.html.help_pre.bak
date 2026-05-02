@@ -1,4 +1,13 @@
       <div id="tab-logistics" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
+          <button onclick="showHelp('logistics')"
+                  style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:20px; padding:4px 12px; font-size:13px; cursor:pointer; color:#374151;"
+                  title="이 화면 사용법 보기">
+            ❓ 도움말
+          </button>
+        </div>
+
         <!-- 허브넷 PDF 자동 다운로드 (Step 9) -->
         <div class="card" style="margin-bottom:16px">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">

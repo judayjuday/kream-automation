@@ -1,4 +1,21 @@
       <div id="tab-prices" class="tab-view">
+        <!-- Step 18-A: 환경 차단 배너 -->
+        <div id="env-block-banner" style="display:none; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:12px; border-radius:6px; margin-bottom:12px;">
+          🚫 <strong>현재 환경에서 가격 수집 불가</strong><br>
+          <small>kream.co.kr 접근 차단됨 (해외 환경). 사무실 iMac 또는 VPN 환경에서만 동작합니다.</small>
+        </div>
+        <script>
+        (async () => {
+          try {
+            const r = await fetch('/api/health');
+            const d = await r.json();
+            if (d.environment === 'macbook_overseas' || d.kream_main_accessible === false) {
+              const el = document.getElementById('env-block-banner');
+              if (el) el.style.display = 'block';
+            }
+          } catch(e) {}
+        })();
+        </script>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
           <span style="font-size:14px; color:#6b7280;">현재 메뉴</span>
           <button onclick="showHelp('prices')"
