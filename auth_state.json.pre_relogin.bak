@@ -11,11 +11,21 @@
       "sameSite": "Lax"
     },
     {
+      "name": "recommend_vacation_mode_confirm",
+      "value": "1",
+      "domain": "partner.kream.co.kr",
+      "path": "/",
+      "expires": 1778295983.275801,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
       "name": "_ga_40SLZL29RR",
-      "value": "GS2.1.s1777688130$o14$g1$t1777690802$j60$l0$h0",
+      "value": "GS2.1.s1777688130$o14$g1$t1777691938$j60$l0$h0",
       "domain": ".kream.co.kr",
       "path": "/",
-      "expires": 1812250802.877332,
+      "expires": 1812251938.736824,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
