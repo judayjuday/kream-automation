@@ -1,0 +1,55 @@
+{
+  "cookies": [
+    {
+      "name": "_ga",
+      "value": "GA1.1.2051611842.1777629338",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812189337.672854,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_40SLZL29RR",
+      "value": "GS2.1.s1777683125$o13$g1$t1777683795$j25$l0$h0",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243795.564817,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://partner.kream.co.kr",
+      "localStorage": [
+        {
+          "name": "accessToken",
+          "value": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc2NTczNzEsIm5iZiI6MTc3NzY1NzM3MSwianRpIjoiNTRlOTQ0YWUtNTUzOC00OWY0LTk3ZGItMTFlYzIwYmRlOWU3IiwiZXhwIjoxNzc3Njg2MTcxLCJ0eXBlIjoiYWNjZXNzIiwiZnJlc2giOmZhbHNlfQ.3dw-sZx0lAWoaG0N4QhCAD9H5avf4nYgzIr1OiWkhY8"
+        },
+        {
+          "name": "neverShowHomeNotice383",
+          "value": "true"
+        },
+        {
+          "name": "authorization",
+          "value": "{\"accessToken\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc2NTczNzEsIm5iZiI6MTc3NzY1NzM3MSwianRpIjoiNTRlOTQ0YWUtNTUzOC00OWY0LTk3ZGItMTFlYzIwYmRlOWU3IiwiZXhwIjoxNzc3Njg2MTcxLCJ0eXBlIjoiYWNjZXNzIiwiZnJlc2giOmZhbHNlfQ.3dw-sZx0lAWoaG0N4QhCAD9H5avf4nYgzIr1OiWkhY8\",\"refreshToken\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjExMTczLCJpYXQiOjE3Nzc2MjkzNDgsIm5iZiI6MTc3NzYyOTM0OCwianRpIjoiZTNkNzcyNWEtZmUzNC00ZThlLWFhNTEtMzMyZGE4ZjdhMWM3IiwiZXhwIjoxNzc3NzE1NzQ4LCJ0eXBlIjoicmVmcmVzaCJ9.XkeShaWb-xdIUkpyFl9b_GK4TitJQO_YlVB4X-2Vxv8\",\"expiredTime\":1777686171000}"
+        },
+        {
+          "name": "neverShowNewUserBenefitModal",
+          "value": "false"
+        },
+        {
+          "name": "neverShowHomeNotice379",
+          "value": "true"
+        },
+        {
+          "name": "neverShowHomeNotice382",
+          "value": "true"
+        }
+      ]
+    }
+  ]
+}

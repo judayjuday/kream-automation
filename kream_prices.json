@@ -1,68 +1,344 @@
 [
   {
-    "product_id": "299955",
+    "product_id": "467187",
     "kream": {
-      "product_id": "299955",
-      "product_name": "아디다스 올웨이즈 오리지널 데님 숄더백 블랙",
-      "product_name_en": "Adidas Always Original Denim Shoulder Bag Black",
-      "model_number": "IX7694",
-      "display_price": 76000,
-      "instant_buy_price": 76000,
-      "instant_sell_price": 64000,
-      "recent_trade_price": 68000,
+      "product_id": "467187",
+      "product_name": "(W) 아디다스 오즈가이아 트리플 블랙",
+      "product_name_en": "(W) Adidas Ozgaia Triple Black",
+      "model_number": "JQ4110",
+      "display_price": 79000,
+      "instant_buy_price": 80000,
+      "instant_sell_price": 111000,
+      "recent_trade_price": 87000,
       "price_change": null,
-      "total_trades": 149,
+      "total_trades": 3246,
       "trade_history": [
         {
-          "price": 68000,
-          "size": "ONE SIZE",
-          "date": "26/04/25"
+          "price": 87000,
+          "size": "11시간 전"
+        },
+        {
+          "price": 88000,
+          "size": "15시간 전"
+        },
+        {
+          "price": 87000,
+          "size": "22시간 전"
+        },
+        {
+          "price": 87000,
+          "size": "23시간 전"
         },
         {
           "price": 79000,
-          "size": "ONE SIZE",
-          "date": "26/04/19"
-        },
-        {
-          "price": 79000,
-          "size": "ONE SIZE",
-          "date": "26/04/13"
-        },
-        {
-          "price": 78000,
-          "size": "ONE SIZE",
-          "date": "26/03/23"
-        },
-        {
-          "price": 99000,
-          "size": "ONE SIZE",
-          "date": "26/03/22"
+          "size": "W245",
+          "date": "26/05/01"
         }
       ],
       "sell_bids": [
         {
-          "price": 76000,
-          "size": "ONE SIZE",
+          "price": 130000,
+          "size": "W215",
+          "quantity": 1
+        },
+        {
+          "price": 110000,
+          "size": "W220",
+          "quantity": 1
+        },
+        {
+          "price": 98000,
+          "size": "W225",
+          "quantity": 1
+        },
+        {
+          "price": 88000,
+          "size": "W230",
+          "quantity": 1
+        },
+        {
+          "price": 92000,
+          "size": "W235",
+          "quantity": 1
+        },
+        {
+          "price": 80000,
+          "size": "W240",
+          "quantity": 1
+        },
+        {
+          "price": 88000,
+          "size": "W245",
+          "quantity": 1
+        },
+        {
+          "price": 106000,
+          "size": "W250",
+          "quantity": 1
+        },
+        {
+          "price": 119000,
+          "size": "W255",
+          "quantity": 1
+        },
+        {
+          "price": 152000,
+          "size": "W260",
+          "quantity": 1
+        },
+        {
+          "price": 213000,
+          "size": "W265",
+          "quantity": 1
+        },
+        {
+          "price": 213000,
+          "size": "W270",
+          "quantity": 1
+        },
+        {
+          "price": 203000,
+          "size": "W275",
+          "quantity": 1
+        },
+        {
+          "price": 201000,
+          "size": "W280",
           "quantity": 1
         }
       ],
       "buy_bids": [
         {
-          "price": 64000,
-          "size": "ONE SIZE",
+          "price": 110000,
+          "size": "W215",
+          "quantity": 1
+        },
+        {
+          "price": 100000,
+          "size": "W220",
+          "quantity": 1
+        },
+        {
+          "price": 73000,
+          "size": "W225",
+          "quantity": 1
+        },
+        {
+          "price": 68000,
+          "size": "W230",
+          "quantity": 1
+        },
+        {
+          "price": 66000,
+          "size": "W235",
+          "quantity": 1
+        },
+        {
+          "price": 79000,
+          "size": "W240",
+          "quantity": 1
+        },
+        {
+          "price": 75000,
+          "size": "W245",
+          "quantity": 1
+        },
+        {
+          "price": 98000,
+          "size": "W250",
+          "quantity": 1
+        },
+        {
+          "price": 91000,
+          "size": "W255",
+          "quantity": 1
+        },
+        {
+          "price": 72000,
+          "size": "W260",
+          "quantity": 1
+        },
+        {
+          "price": 111000,
+          "size": "W280",
           "quantity": 1
         }
       ],
-      "collected_at": "2026-05-01T23:12:57.775698",
+      "collected_at": "2026-05-02T11:11:08.681687",
       "source": "kream.co.kr",
       "size_delivery_prices": [
         {
-          "size": "ONE SIZE",
-          "buyPrice": 76000,
-          "sellPrice": 64000,
-          "buyFast": 79000,
-          "buyNormal": 79000,
-          "buyOverseas": 76000,
+          "size": "W215",
+          "buyPrice": 130000,
+          "sellPrice": 110000,
+          "buyFast": null,
+          "buyNormal": 149000,
+          "buyOverseas": 130000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W220",
+          "buyPrice": 110000,
+          "sellPrice": 100000,
+          "buyFast": null,
+          "buyNormal": 148000,
+          "buyOverseas": 110000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W225",
+          "buyPrice": 98000,
+          "sellPrice": 73000,
+          "buyFast": null,
+          "buyNormal": 98000,
+          "buyOverseas": 112000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W230",
+          "buyPrice": 88000,
+          "sellPrice": 68000,
+          "buyFast": 88000,
+          "buyNormal": 104000,
+          "buyOverseas": 116000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W235",
+          "buyPrice": 92000,
+          "sellPrice": 66000,
+          "buyFast": null,
+          "buyNormal": 92000,
+          "buyOverseas": 112000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W240",
+          "buyPrice": 80000,
+          "sellPrice": 79000,
+          "buyFast": 80000,
+          "buyNormal": 85000,
+          "buyOverseas": 112000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W245",
+          "buyPrice": 88000,
+          "sellPrice": 75000,
+          "buyFast": null,
+          "buyNormal": 88000,
+          "buyOverseas": 116000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W250",
+          "buyPrice": 106000,
+          "sellPrice": 98000,
+          "buyFast": 135000,
+          "buyNormal": 136000,
+          "buyOverseas": 106000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W255",
+          "buyPrice": 119000,
+          "sellPrice": 91000,
+          "buyFast": null,
+          "buyNormal": 163000,
+          "buyOverseas": 119000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W260",
+          "buyPrice": 152000,
+          "sellPrice": 72000,
+          "buyFast": null,
+          "buyNormal": 181000,
+          "buyOverseas": 152000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W265",
+          "buyPrice": 213000,
+          "sellPrice": null,
+          "buyFast": null,
+          "buyNormal": 227000,
+          "buyOverseas": 213000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W270",
+          "buyPrice": 213000,
+          "sellPrice": null,
+          "buyFast": null,
+          "buyNormal": 272000,
+          "buyOverseas": 213000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W275",
+          "buyPrice": 203000,
+          "sellPrice": null,
+          "buyFast": null,
+          "buyNormal": 226000,
+          "buyOverseas": 203000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W280",
+          "buyPrice": 201000,
+          "sellPrice": 111000,
+          "buyFast": null,
+          "buyNormal": 221000,
+          "buyOverseas": 201000,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W285",
+          "buyPrice": null,
+          "sellPrice": null,
+          "buyFast": null,
+          "buyNormal": null,
+          "buyOverseas": null,
+          "sellFast": null,
+          "sellNormal": null,
+          "sellOverseas": null
+        },
+        {
+          "size": "W290",
+          "buyPrice": null,
+          "sellPrice": null,
+          "buyFast": null,
+          "buyNormal": null,
+          "buyOverseas": null,
           "sellFast": null,
           "sellNormal": null,
           "sellOverseas": null
@@ -70,9 +346,100 @@
       ],
       "size_prices": [
         {
-          "size": "ONE SIZE",
-          "buyNowPrice": 76000,
-          "sellNowPrice": 64000,
+          "size": "W215",
+          "buyNowPrice": 130000,
+          "sellNowPrice": 110000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W220",
+          "buyNowPrice": 110000,
+          "sellNowPrice": 100000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W225",
+          "buyNowPrice": 98000,
+          "sellNowPrice": 73000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W230",
+          "buyNowPrice": 88000,
+          "sellNowPrice": 68000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W235",
+          "buyNowPrice": 92000,
+          "sellNowPrice": 66000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W240",
+          "buyNowPrice": 80000,
+          "sellNowPrice": 79000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W245",
+          "buyNowPrice": 88000,
+          "sellNowPrice": 75000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W250",
+          "buyNowPrice": 106000,
+          "sellNowPrice": 98000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W255",
+          "buyNowPrice": 119000,
+          "sellNowPrice": 91000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W260",
+          "buyNowPrice": 152000,
+          "sellNowPrice": 72000,
+          "sellBidCount": 1,
+          "buyBidCount": 1
+        },
+        {
+          "size": "W265",
+          "buyNowPrice": 213000,
+          "sellNowPrice": null,
+          "sellBidCount": 1,
+          "buyBidCount": 0
+        },
+        {
+          "size": "W270",
+          "buyNowPrice": 213000,
+          "sellNowPrice": null,
+          "sellBidCount": 1,
+          "buyBidCount": 0
+        },
+        {
+          "size": "W275",
+          "buyNowPrice": 203000,
+          "sellNowPrice": null,
+          "sellBidCount": 1,
+          "buyBidCount": 0
+        },
+        {
+          "size": "W280",
+          "buyNowPrice": 201000,
+          "sellNowPrice": 111000,
           "sellBidCount": 1,
           "buyBidCount": 1
         }

@@ -1,0 +1,548 @@
+{
+  "cookies": [
+    {
+      "name": "NACT",
+      "value": "1",
+      "domain": ".naver.com",
+      "path": "/oauth2.0",
+      "expires": 1777715798.379277,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ticketExpire",
+      "value": "0",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "webDid",
+      "value": "e365ee38-e15b-42e5-8710-c58605da8400",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1809165394.597884,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_fwb",
+      "value": "182KYu7rRz2bufiu6TNpJrG.1777629395513",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.067325,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NWB",
+      "value": "8996a1a9e909d6db7eab20aa1a9e3db1.1777629395559",
+      "domain": ".wcs.naver.com",
+      "path": "/",
+      "expires": 1812243723.119508,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "NAC",
+      "value": "urcyBEBImagq",
+      "domain": ".naver.com",
+      "path": "/",
+      "expires": 1812189398.377853,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "airbridge_migration_metadata__kream",
+      "value": "%7B%22version%22%3A%221.11.7%22%7D",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.397449,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ab180ClientId",
+      "value": "29ac2cae-8736-49f7-adf7-f2fcff7d5fcb",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.398856,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ab180ClientId",
+      "value": "932eccd7-5cc6-462b-b0fc-e6c0c0a0ea41",
+      "domain": ".abr.ge",
+      "path": "/",
+      "expires": 1812243723.466987,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "airbridge_device_alias__kream",
+      "value": "%7B%22amplitude_device_id%22%3A%22aefb7e02-a306-4b55-b84f-087ceedaf33f%22%7D",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.523073,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gcl_au",
+      "value": "1.1.952637411.1777629396",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1785405396,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.3.1476057184.1777629397",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1777770123,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NID_JST",
+      "value": "Cwb/jxmCA5FmGfEErlFDIaQVAzzxvzDpIeGfouD/LEAVAYSpHEk5tLCf56umD6eAFvkRkuWZEXgwmxQtroPyPKGgUDE6S0apEbPO0UM6M7Yqh+k2AvR5DgyuGrhXV4DSdRdmNg+/YkDPkgetU4y3HSQnN7waEIrInUip2p4aW3k=",
+      "domain": ".nid.naver.com",
+      "path": "/",
+      "expires": 1794909398.083545,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "nid_slevel",
+      "value": "1",
+      "domain": ".nid.naver.com",
+      "path": "/",
+      "expires": 1809165398,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NNB",
+      "value": "7AQ3B26WPD2GS",
+      "domain": ".naver.com",
+      "path": "/",
+      "expires": 1812189404.171807,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "nid_inf",
+      "value": "1314039943",
+      "domain": ".naver.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NID_AUT",
+      "value": "zyOoJEBFfPra6MNBlru8Q7fmgzLRczvX/N0U1yfEZ/3IwWs+lEGnr206AQUp41FE",
+      "domain": ".naver.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NID_SES",
+      "value": "AAABpmxIjCACpFBi8K5Ia/1wJ/VtPnaZnffK+nSrH5rnM+CwKzeFUYyi3TJjPM5Je+xjfiiHJ3Lbmm8X9pmRbBYw5ZMP1zUuyxow67JjuzeIDe+5Vnlqvr45rI3a1cLfQkOf761RCpqQLNvVSukO2YfN2GyJS77aVUC9jLxnW8R19G7ys4SoHBLQKiIdGlkUcY2SqKnPj9OGXJG2iSlFPN7YZBYXeRWSw84lpX7ky7i/uybFMUt0VPe6vadQhiuKGKBIWRAscxyxtP9gW9D3Elh9PCQiY4JVYE4iLPT34fr4+EgRjsl7yULC9dLUzc6cq7Kc8xdwLYQrtzWjlwnR9W6RYQy+VKLzz4h8luuGUCTOVLmztM2LcIfWeiK+IPIgMAt3H+2qzRkR61qYJrA075VLFh6Nu4MwKUrCJZ2YF0z+DAy7rsIUrBNCoP02WyzDWIlJogi3iSh+jLpwfb9ELc5+/RwBCcQdlky74IO/05mrYFXNUSn5dAICAYToqOt9VRWHEe0f5RmxfAgPFhWe534dt9L+qpefl4cbQTFD7FTN1ozetDOR2Eliztw0eifeTNf0Vg==",
+      "domain": ".naver.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "BUC",
+      "value": "sIfplzJqwZT-rplfhLhJJAp_u_hbT5zcsebOQ9YTXXE=",
+      "domain": ".naver.com",
+      "path": "/",
+      "expires": 1812189404.172238,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_token.social_naver.p-2",
+      "value": "false",
+      "domain": "kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_refresh_token.social_naver.p-2",
+      "value": "false",
+      "domain": "kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "login_type",
+      "value": "social",
+      "domain": "kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_refresh_token.local.p-2",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc3NzYyOTQwNCwianRpIjoiNTRhZWNiYmQtYzJkMi00ZDI0LTliYTEtMDBiNzI2ZTZhZWUzIiwidHlwZSI6InJlZnJlc2giLCJpZGVudGl0eSI6NDg5MDYsIm5iZiI6MTc3NzYyOTQwNCwiZXhwIjoxNzc3NzE1ODA0LCJ1YyI6eyJzYWZlIjp0cnVlfSwidWQiOiIuZUp4RmpzdE93ekFVUkhfbHlxdFdxcDFyeDNiU2RJVllBQ29SaTFhQ25lWEVGMm8xVGFMVWdBRHg3NFNIaEdaM1pvNDBIeXdrVmpHRnluSTBIT1VlMTVXeGxkYWlzQ2gxd1ZZczBFdHN5YVcza2VicEt6WF9MSVpmc3FIY0dxSzg1Q1JOdzdVaXc4dENJbTlOYWRFRVgyckVXWnZvTkNSeVBvUnBGcVZVUWhvdGNpWEs5ZHctbjJseV9vbjY3MHYxOEI2N3ptZEdJQ3hxMzhZLURlZkRCbTc2UkIzTUFPNTI4QUFTblRTdVdNTEZPSFowVDgwMnBzemtoY2d0TExiWC1fcDJCVjA4RWx4UmV4eVdjSG1ZaGhObFVxSDRDZXo4bzVfaW44SS12d0NHOGt6Vy5VZG9jZWgzTGpQUGhwOEdnbWVSRFgxRnhKNG8ifQ.qSW58ElSDDYXvoz09eSk5ZBgMKlM-k5TyfjMqcbG2f0",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "strategy",
+      "value": "local",
+      "domain": "kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "airbridge_user__kream",
+      "value": "%7B%22externalUserID%22%3A%22eb8b462b-90d3-4670-adc9-4cb36ae6086b%22%2C%22externalUserEmail%22%3A%22ls%u2022%u2022%u2022%u2022%u2022@naver.com%22%2C%22externalUserPhone%22%3Anull%2C%22alias%22%3A%7B%7D%2C%22attributes%22%3A%7B%22birthday%22%3A%22undefined%22%2C%22gender%22%3A%22undefined%22%7D%7D",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.522565,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "AMP_MKTG_487619ef1d",
+      "value": "JTdCJTdE",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1809169212,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_fbp",
+      "value": "fb.2.1777633212226.642437050803475784",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1785459723,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_token.local.p-2",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc3NzY4MzYxMCwianRpIjoiZGE4MjE5ZDUtYTE3ZC00MGNlLWE1ZGEtOWYzMzYxMWFmMGVkIiwidHlwZSI6ImFjY2VzcyIsImlkZW50aXR5Ijo0ODkwNiwibmJmIjoxNzc3NjgzNjEwLCJleHAiOjE3Nzc2OTA4MTAsInVjIjp7InNhZmUiOnRydWV9LCJ1ZCI6Ii5lSnhGanN0T3d6QVVSSF9seXF0V3FwMXJPODZySzhRQ1VJbFl0QkxzSWllLWJhMjZTWlFhRUNELW5mQ1EwT3pPekpIbWc3bklLcVpRWlJ3TlI3VkRXU0ZXRW9VdVM1WGxiTVVjdmZpT212ZzIwang5cGZhZmVmZEwxcVF6UTZRTFR0SzBQRlZrZUpGTDVKMHBNalRPRmluaXJFMTBIaUkxMXJscEZxVlVRcHBVYUNXS2NtNmZMelExOWtEOTk2VjZlUGNoMk1RSWhFVnRPOV9INFhKY3cxMGZLY0FNNEdFTFR5Q3hrYWJKbDNBMWpvRWVxZDM0bUJpZEM1M0JZbk83cS05WEVQeUo0SWE2MDdDRTYtTTBuQ21SQ3NWUFlHdjNkdkpfQ3Z2OEFuamNUTWcuMXFWbUtxcFB2WjM5eDB3LXRzZUs3ZDRQR1VZIn0.naPQhbC6jxcnGizwqJIIOL0NUR3lvpYnaXDiDWeKyNc",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ab.storage.deviceId.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+      "value": "g%3Ab23fdcc3-03cf-933c-7419-edcaffd72321%7Ce%3Aundefined%7Cc%3A1777629404858%7Cl%3A1777683612036",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ab.storage.userId.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+      "value": "g%3Aeb8b462b-90d3-4670-adc9-4cb36ae6086b%7Ce%3Aundefined%7Cc%3A1777629404856%7Cl%3A1777683612036",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "web_to_app_dismiss",
+      "value": "false",
+      "domain": "kream.co.kr",
+      "path": "/",
+      "expires": 1777687212.414658,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "wcs_bt",
+      "value": "s_59a6a417df3:1777683723",
+      "domain": "kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.085088,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_SRFKTMTR0R",
+      "value": "GS2.1.s1777683612$o6$g1$t1777683723$j10$l0$h0",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.26264,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_5LYDPM15LW",
+      "value": "GS2.1.s1777683613$o6$g1$t1777683723$j10$l0$h0",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.279593,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.3.804251913.1777629396",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.282466,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "airbridge_session__kream",
+      "value": "%7B%22id%22%3A%22368bdabf-69bd-4c9f-8c20-89d535797a68%22%2C%22timeout%22%3A1800000%2C%22start%22%3A1777683612446%2C%22end%22%3A1777683723522%7D",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243723.522747,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ab.storage.sessionId.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+      "value": "g%3Af0910d1d-b93b-7bd1-9cac-d897a3625880%7Ce%3A1777685530681%7Cc%3A1777683612035%7Cl%3A1777683730681",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1812243730,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "AMP_487619ef1d",
+      "value": "JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjJhZWZiN2UwMi1hMzA2LTRiNTUtYjg0Zi0wODdjZWVkYWYzM2YlMjIlMkMlMjJ1c2VySWQlMjIlM0ElMjJlYjhiNDYyYi05MGQzLTQ2NzAtYWRjOS00Y2IzNmFlNjA4NmIlMjIlMkMlMjJzZXNzaW9uSWQlMjIlM0ExNzc3NjgzNjExOTk4JTJDJTIyb3B0T3V0JTIyJTNBZmFsc2UlMkMlMjJsYXN0RXZlbnRUaW1lJTIyJTNBMTc3NzY4MzczMDY5NSUyQyUyMmxhc3RFdmVudElkJTIyJTNBMjEyJTJDJTIycGFnZUNvdW50ZXIlMjIlM0EwJTdE",
+      "domain": ".kream.co.kr",
+      "path": "/",
+      "expires": 1809219730,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://kream.co.kr",
+      "localStorage": [
+        {
+          "name": "_refresh_token.local.p-2",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc3NzYyOTQwNCwianRpIjoiNTRhZWNiYmQtYzJkMi00ZDI0LTliYTEtMDBiNzI2ZTZhZWUzIiwidHlwZSI6InJlZnJlc2giLCJpZGVudGl0eSI6NDg5MDYsIm5iZiI6MTc3NzYyOTQwNCwiZXhwIjoxNzc3NzE1ODA0LCJ1YyI6eyJzYWZlIjp0cnVlfSwidWQiOiIuZUp4RmpzdE93ekFVUkhfbHlxdFdxcDFyeDNiU2RJVllBQ29SaTFhQ25lWEVGMm8xVGFMVWdBRHg3NFNIaEdaM1pvNDBIeXdrVmpHRnluSTBIT1VlMTVXeGxkYWlzQ2gxd1ZZczBFdHN5YVcza2VicEt6WF9MSVpmc3FIY0dxSzg1Q1JOdzdVaXc4dENJbTlOYWRFRVgyckVXWnZvTkNSeVBvUnBGcVZVUWhvdGNpWEs5ZHctbjJseV9vbjY3MHYxOEI2N3ptZEdJQ3hxMzhZLURlZkRCbTc2UkIzTUFPNTI4QUFTblRTdVdNTEZPSFowVDgwMnBzemtoY2d0TExiWC1fcDJCVjA4RWx4UmV4eVdjSG1ZaGhObFVxSDRDZXo4bzVfaW44SS12d0NHOGt6Vy5VZG9jZWgzTGpQUGhwOEdnbWVSRFgxRnhKNG8ifQ.qSW58ElSDDYXvoz09eSk5ZBgMKlM-k5TyfjMqcbG2f0"
+        },
+        {
+          "name": "recent_visited",
+          "value": "{\"/login\":\"2026-05-01T09:56:44.892Z\",\"/\":\"2026-05-01T09:56:46.349Z\",\"/products\":\"2026-05-02T01:02:03.206Z\",\"/search\":\"2026-05-01T13:36:25.585Z\"}"
+        },
+        {
+          "name": "ab.storage.sessionId.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":\"g:f0910d1d-b93b-7bd1-9cac-d897a3625880|e:1777685530681|c:1777683612035|l:1777683730681\"}"
+        },
+        {
+          "name": "recent_visited_home",
+          "value": "{\"/\":\"2026-05-01T09:56:46.347Z\"}"
+        },
+        {
+          "name": "_gcl_ls",
+          "value": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"eopCount\":0,\"creationTimeMs\":1777629396409},\"expires\":1785405396409}}"
+        },
+        {
+          "name": "ab.storage.session_id_for_cached_metadata.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":\"f0910d1d-b93b-7bd1-9cac-d897a3625880\"}"
+        },
+        {
+          "name": "ab.storage.deviceId.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":\"g:b23fdcc3-03cf-933c-7419-edcaffd72321|e:undefined|c:1777629404858|l:1777683612036\"}"
+        },
+        {
+          "name": "glad_loader_policy_info",
+          "value": "{\"regDate\":\"2026-05-01T11:00:11.268Z\",\"data\":{\"versionInfo\":{\"policyVersion\":\"260408.01\",\"loaderVersion\":\"1.6.0\",\"sdkVersion\":\"3.9.0\"},\"sdkInfo\":{\"latestRatio\":1,\"config\":{}},\"sentryInfo\":{\"enableSentry\":false,\"config\":{\"sampleRate\":0.001}}}}"
+        },
+        {
+          "name": "_token.local.p-2",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc3NzY4MzYxMCwianRpIjoiZGE4MjE5ZDUtYTE3ZC00MGNlLWE1ZGEtOWYzMzYxMWFmMGVkIiwidHlwZSI6ImFjY2VzcyIsImlkZW50aXR5Ijo0ODkwNiwibmJmIjoxNzc3NjgzNjEwLCJleHAiOjE3Nzc2OTA4MTAsInVjIjp7InNhZmUiOnRydWV9LCJ1ZCI6Ii5lSnhGanN0T3d6QVVSSF9seXF0V3FwMXJPODZySzhRQ1VJbFl0QkxzSWllLWJhMjZTWlFhRUNELW5mQ1EwT3pPekpIbWc3bklLcVpRWlJ3TlI3VkRXU0ZXRW9VdVM1WGxiTVVjdmZpT212ZzIwang5cGZhZmVmZEwxcVF6UTZRTFR0SzBQRlZrZUpGTDVKMHBNalRPRmluaXJFMTBIaUkxMXJscEZxVlVRcHBVYUNXS2NtNmZMelExOWtEOTk2VjZlUGNoMk1RSWhFVnRPOV9INFhKY3cxMGZLY0FNNEdFTFR5Q3hrYWJKbDNBMWpvRWVxZDM0bUJpZEM1M0JZbk83cS05WEVQeUo0SWE2MDdDRTYtTTBuQ21SQ3NWUFlHdjNkdkpfQ3Z2OEFuamNUTWcuMXFWbUtxcFB2WjM5eDB3LXRzZUs3ZDRQR1VZIn0.naPQhbC6jxcnGizwqJIIOL0NUR3lvpYnaXDiDWeKyNc"
+        },
+        {
+          "name": "ab.storage.userId.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":\"g:eb8b462b-90d3-4670-adc9-4cb36ae6086b|e:undefined|c:1777629404856|l:1777683612036\"}"
+        },
+        {
+          "name": "lastExternalReferrer",
+          "value": "empty"
+        },
+        {
+          "name": "gfp_uuid_iv",
+          "value": "7e861d21-35bb-42cc-889f-ea7576570389"
+        },
+        {
+          "name": "ab.storage.triggers.ts.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":1777683612736}"
+        },
+        {
+          "name": "recent_search_keywords",
+          "value": "[{\"type\":\"keyword\",\"keyword\":\"JQ4110\",\"destination_url\":\"/search?keyword=JQ4110\"}]"
+        },
+        {
+          "name": "AMP_unsent_487619ef1d",
+          "value": "[]"
+        },
+        {
+          "name": "ab.storage.device.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":{\"browser\":\"Chrome\",\"browser_version\":\"147\",\"os_version\":\"Mac\",\"locale\":\"ko-kr\",\"time_zone\":\"Asia/Seoul\",\"user_agent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\"}}"
+        },
+        {
+          "name": "ab.storage.sdk_metadata.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":[\"npm\"]}"
+        },
+        {
+          "name": "_token.social_naver.p-2",
+          "value": "false"
+        },
+        {
+          "name": "ab.storage.lastSdkReq.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":1777683733111}"
+        },
+        {
+          "name": "ab.storage.globalRateLimitCurrentTokenCount.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":19}"
+        },
+        {
+          "name": "NA_NACC",
+          "value": "urcyBEBImagq"
+        },
+        {
+          "name": "ab.storage.serverConfig.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":{\"s\":\"5.9.1\",\"l\":1777652955,\"e\":[\"click_search_bar\"],\"a\":[\"date_last_post_uploaded\",\"delivery_address_registered\",\"notify_ask_market_price\",\"notify_ask_value_change\",\"notify_bid_market_price\",\"notify_bid_value_change\",\"notify_social_comment\",\"notify_social_follower\",\"notify_social_mention\",\"notify_social_reaction\",\"notify_wish_value_change\",\"payment_registered\",\"total_event_draw_amount\",\"total_event_draw_count\",\"total_event_drop_amount\",\"total_event_drop_count\",\"total_price_notification_count\"],\"p\":[],\"m\":21600,\"v\":\"BI1Xnfy6581z2AEmlcfn-UFRtlDq05QpVb-UmKHDrYRTUJjDx2dKEwaeLK9T2A9gN7-e86A7hqdpJHShJcx3-fw=\",\"c\":{\"enabled\":true},\"f\":{\"enabled\":false},\"grl\":{\"capacity\":30,\"enabled\":true,\"endpoint_overrides\":{\"banners/sync\":{\"capacity\":5,\"refill_rate\":180},\"content_cards/sync\":{\"capacity\":5,\"refill_rate\":10},\"push/redeliver\":{\"capacity\":1,\"refill_rate\":180}},\"refill_rate\":30},\"b\":null}}"
+        },
+        {
+          "name": "strategy",
+          "value": "local"
+        },
+        {
+          "name": "NACT",
+          "value": "1777629395629"
+        },
+        {
+          "name": "NAC",
+          "value": "urcyBEBImagq"
+        },
+        {
+          "name": "lastExternalReferrerTime",
+          "value": "1777683723077"
+        },
+        {
+          "name": "ab.storage.triggers.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":[]}"
+        },
+        {
+          "name": "main_tab:tooltip",
+          "value": "{}"
+        },
+        {
+          "name": "login_type",
+          "value": "social"
+        },
+        {
+          "name": "ab.storage.dynamicRateLimitCurrentTokenCount.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":{\"data\":-1,\"content_cards/sync\":-1,\"feature_flags/sync\":-1,\"template\":-1,\"banners/sync\":-1}}"
+        },
+        {
+          "name": "ab.storage.lastReqToEndpoint.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":{\"data\":1777683733111}}"
+        },
+        {
+          "name": "_refresh_token.social_naver.p-2",
+          "value": "false"
+        },
+        {
+          "name": "ab.storage.messagingSessionStart.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":1777676411796}"
+        },
+        {
+          "name": "ab.storage.requestAttempts.a45e842b-5d46-46bf-8f41-2f75d6fd4b37",
+          "value": "{\"v\":{\"data\":1}}"
+        }
+      ]
+    },
+    {
+      "origin": "https://nid.naver.com",
+      "localStorage": [
+        {
+          "name": "glad_loader_policy_info",
+          "value": "{\"regDate\":\"2026-05-01T09:56:38.155Z\",\"data\":{\"versionInfo\":{\"policyVersion\":\"260408.01\",\"loaderVersion\":\"1.6.0\",\"sdkVersion\":\"3.9.0\"},\"sdkInfo\":{\"latestRatio\":1,\"config\":{}},\"sentryInfo\":{\"enableSentry\":false,\"config\":{\"sampleRate\":0.001}}}}"
+        },
+        {
+          "name": "3fbddd8d15feb0d3",
+          "value": "cc1efb23505cfd905b1fdd72ec70a7602f25ac77243c206fde7035bd9859737d"
+        },
+        {
+          "name": "d6277b37e628876c",
+          "value": "e74c108b5eeb313b31237418bed6b76b0c40946a7a29045dd9fc9983df5b2cb0"
+        },
+        {
+          "name": "gfp_uuid_iv",
+          "value": "20ce08e3-564a-4be9-bfb2-dbe88df05c0f"
+        }
+      ]
+    }
+  ]
+}

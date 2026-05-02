@@ -1,0 +1,110 @@
+{
+  "model": "JQ4110",
+  "scenario": "ONE_SIZE",
+  "bids": [
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 106000,
+      "rank": 1,
+      "date": "2026/05/01 23:56",
+      "source": "sync",
+      "orderId": "A-SN159014392",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 130000,
+      "rank": 1,
+      "date": "2026/05/01 23:56",
+      "source": "sync",
+      "orderId": "A-SN159858116",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    },
+    {
+      "productId": "467187",
+      "model": "JQ4110",
+      "size": "ONE SIZE",
+      "price": 119000,
+      "rank": 1,
+      "date": "2026/05/01 23:56",
+      "source": "sync",
+      "orderId": "A-SN159014394",
+      "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+    }
+  ],
+  "missing_cost": [],
+  "duplicates_by_size": {
+    "ONE SIZE": {
+      "count": 3,
+      "bids": [
+        {
+          "productId": "467187",
+          "model": "JQ4110",
+          "size": "ONE SIZE",
+          "price": 130000,
+          "rank": 1,
+          "date": "2026/05/01 23:56",
+          "source": "sync",
+          "orderId": "A-SN159858116",
+          "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+        },
+        {
+          "productId": "467187",
+          "model": "JQ4110",
+          "size": "ONE SIZE",
+          "price": 119000,
+          "rank": 1,
+          "date": "2026/05/01 23:56",
+          "source": "sync",
+          "orderId": "A-SN159014394",
+          "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+        },
+        {
+          "productId": "467187",
+          "model": "JQ4110",
+          "size": "ONE SIZE",
+          "price": 106000,
+          "rank": 1,
+          "date": "2026/05/01 23:56",
+          "source": "sync",
+          "orderId": "A-SN159014392",
+          "nameKr": "(W) 아디다스 오즈가이아 트리플 블랙"
+        }
+      ],
+      "recommendation": "가장 비싼 1건 삭제 권장 (사용자 확인 후 실행)"
+    }
+  },
+  "margin_analysis": [
+    {
+      "order_id": "A-SN159014392",
+      "size": "ONE SIZE",
+      "price": 106000,
+      "cost": 90081,
+      "settlement": 96504,
+      "margin": 6423,
+      "status": "OK"
+    },
+    {
+      "order_id": "A-SN159858116",
+      "size": "ONE SIZE",
+      "price": 130000,
+      "cost": 90081,
+      "settlement": 118920,
+      "margin": 28839,
+      "status": "OK"
+    },
+    {
+      "order_id": "A-SN159014394",
+      "size": "ONE SIZE",
+      "price": 119000,
+      "cost": 90081,
+      "settlement": 108646,
+      "margin": 18565,
+      "status": "OK"
+    }
+  ]
+}
