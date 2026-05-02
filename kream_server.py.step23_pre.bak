@@ -10339,121 +10339,6 @@ def api_cleanup_bulk_adjust():
 # Step 22: 구매대행 모델 반영 + 정리 자동화 + 체결률 KPI
 # ═══════════════════════════════════════════
 
-# ── Step 23: 진단 라우트 ──
-@app.route('/api/diagnostics/sync-page-dump', methods=['POST'])
-def api_sync_page_dump():
-    """판매자센터 입찰 페이지를 직접 열어서 HTML + 스크린샷 저장.
-    sync가 0건 반환할 때 페이지 상태를 사장이 직접 확인."""
-    try:
-        import asyncio
-        from pathlib import Path as _Path
-        from datetime import datetime as _dt
-
-        ts = _dt.now().strftime('%Y%m%d_%H%M%S')
-        dump_dir = _Path(__file__).parent / 'diagnostics'
-        dump_dir.mkdir(exist_ok=True)
-
-        html_path = dump_dir / f'sync_page_{ts}.html'
-        png_path = dump_dir / f'sync_page_{ts}.png'
-
-        async def dump():
-            from playwright.async_api import async_playwright
-            from kream_bot import create_browser, create_context, ensure_logged_in, dismiss_popups
-
-            async with async_playwright() as p:
-                browser = await create_browser(p, headless=True)
-                context = await create_context(browser, storage='auth_state.json')
-                page = await context.new_page()
-
-                await page.goto('https://partner.kream.co.kr/c2c/sell/bid', wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(3000)
-
-                logged_in = await ensure_logged_in(page, context)
-
-                try:
-                    await dismiss_popups(page)
-                except Exception:
-                    pass
-
-                await page.wait_for_timeout(2000)
-
-                html = await page.content()
-                html_path.write_text(html, encoding='utf-8')
-
-                await page.screenshot(path=str(png_path), full_page=True)
-
-                count_info = {}
-                for selector_desc, selector in [
-                    ('table_rows', 'table tbody tr'),
-                    ('list_items', '.bid-item, .list-item, [class*="bid"]'),
-                    ('total_text', '[class*="total"], [class*="count"]'),
-                ]:
-                    try:
-                        elements = await page.query_selector_all(selector)
-                        count_info[selector_desc] = len(elements)
-                    except Exception:
-                        count_info[selector_desc] = -1
-
-                final_url = page.url
-                title = await page.title()
-
-                await browser.close()
-
-                return {
-                    'logged_in': bool(logged_in),
-                    'final_url': final_url,
-                    'title': title,
-                    'count_info': count_info,
-                    'html_size': len(html),
-                }
-
-        result = asyncio.run(dump())
-
-        return jsonify({
-            'ok': True,
-            'timestamp': ts,
-            'html_path': str(html_path),
-            'screenshot_path': str(png_path),
-            **result,
-            'note': '스크린샷 + HTML 저장됨. 직접 열어서 입찰 보이는지 확인'
-        })
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
-
-
-@app.route('/api/diagnostics/list-dumps', methods=['GET'])
-def api_diagnostics_list_dumps():
-    """저장된 진단 덤프 목록."""
-    try:
-        from pathlib import Path as _Path
-        dump_dir = _Path(__file__).parent / 'diagnostics'
-        if not dump_dir.exists():
-            return jsonify({'ok': True, 'dumps': []})
-
-        dumps = []
-        for f in sorted(dump_dir.glob('sync_page_*.png'), reverse=True)[:20]:
-            html_f = f.with_suffix('.html')
-            dumps.append({
-                'timestamp': f.stem.replace('sync_page_', ''),
-                'screenshot': f.name,
-                'html': html_f.name if html_f.exists() else None,
-                'size_mb': round(f.stat().st_size / 1024 / 1024, 2),
-            })
-
-        return jsonify({'ok': True, 'dumps': dumps})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-@app.route('/diagnostics/<path:filename>', methods=['GET'])
-def serve_diagnostics(filename):
-    """진단 파일 (스크린샷, HTML) 직접 접근."""
-    from pathlib import Path as _Path
-    from flask import send_from_directory
-    dump_dir = _Path(__file__).parent / 'diagnostics'
-    return send_from_directory(str(dump_dir), filename)
-
-
 @app.route('/api/real-margin', methods=['GET'])
 def api_real_margin():
     """판매 체결된 건의 실제 bid_cost join → 진짜 마진 (추정 제거)."""
@@ -10528,67 +10413,6 @@ def api_real_margin():
                 unknown_cost_count += 1
                 unknown_revenue += sale_price
 
-        # Step 23: fuzzy 매칭 보강 (model+size → model)
-        fuzzy_matched_count = 0
-        estimated_revenue = 0.0
-        estimated_cost = 0.0
-        estimated_margin = 0.0
-
-        for item in items:
-            if item.get('confirmed') or item.get('cost') is not None:
-                continue
-            sp = item.get('sale_price') or 0
-            mdl = item.get('model')
-            sz = item.get('size')
-            if not mdl:
-                continue
-            est_cost = None
-            est_source = None
-            try:
-                c.execute(
-                    """
-                    SELECT AVG(cny_price), AVG(exchange_rate), AVG(COALESCE(overseas_shipping, ?))
-                    FROM bid_cost
-                    WHERE model = ? AND (size = ? OR size = ?)
-                    """,
-                    (overseas_ship_default, mdl, sz, 'ONE SIZE' if not sz else sz)
-                )
-                row = c.fetchone()
-                if row and row[0] is not None:
-                    cny_a, fx_a, ship_a = row
-                    est_cost = float(cny_a) * float(fx_a) * 1.03 + float(ship_a)
-                    est_source = 'fuzzy_model_size'
-                else:
-                    c.execute(
-                        """
-                        SELECT AVG(cny_price), AVG(exchange_rate), AVG(COALESCE(overseas_shipping, ?))
-                        FROM bid_cost
-                        WHERE model = ?
-                        """,
-                        (overseas_ship_default, mdl)
-                    )
-                    row2 = c.fetchone()
-                    if row2 and row2[0] is not None:
-                        cny_a, fx_a, ship_a = row2
-                        est_cost = float(cny_a) * float(fx_a) * 1.03 + float(ship_a)
-                        est_source = 'fuzzy_model_only'
-            except Exception:
-                est_cost = None
-
-            if est_cost is not None:
-                settlement = sp * (1 - fee_rate * 1.1) - fixed_fee
-                est_margin_v = settlement - est_cost
-                item['cost'] = round(est_cost)
-                item['margin'] = round(est_margin_v)
-                item['estimation_source'] = est_source
-                fuzzy_matched_count += 1
-                estimated_revenue += sp
-                estimated_cost += est_cost
-                estimated_margin += est_margin_v
-                # unknown_cost 카운트에서 차감 (estimated로 분류)
-                unknown_cost_count = max(0, unknown_cost_count - 1)
-                unknown_revenue = max(0.0, unknown_revenue - sp)
-
         conn.close()
 
         return jsonify({
@@ -10603,22 +10427,13 @@ def api_real_margin():
                 'avg_margin': round(confirmed_margin / confirmed_count) if confirmed_count else 0,
                 'margin_rate_pct': round((confirmed_margin / confirmed_revenue * 100) if confirmed_revenue else 0, 1),
             },
-            'estimated': {
-                'count': fuzzy_matched_count,
-                'revenue': round(estimated_revenue),
-                'cost': round(estimated_cost),
-                'margin': round(estimated_margin),
-                'avg_margin': round(estimated_margin / fuzzy_matched_count) if fuzzy_matched_count else 0,
-                'margin_rate_pct': round((estimated_margin / estimated_revenue * 100) if estimated_revenue else 0, 1),
-                'note': 'bid_cost 평균치 기반 추정 (model+size 또는 model). estimation_source 키 참조'
-            },
             'unknown_cost': {
                 'count': unknown_cost_count,
                 'revenue': round(unknown_revenue),
                 'note': 'bid_cost 데이터 없어서 마진 계산 불가'
             },
             'items': items[:50],
-            'note': '확정값(bid_cost order_id 매칭) + 추정값(model+size/model 평균) 분리'
+            'note': '확정값(bid_cost 매칭 건)만 마진 계산. 추정 없음.'
         })
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 500
@@ -11485,42 +11300,6 @@ table td{{padding:6px;border-bottom:1px solid #f3f4f6}}
         return Response(f"<pre>Error: {e}</pre>", status=500, mimetype='text/html')
 
 
-# ── Step 23: sync 0건 자동 경고 ──
-def _check_sync_health():
-    """sync 결과가 0건이면 알림."""
-    try:
-        from pathlib import Path as _Path
-        local_path = _Path(__file__).parent / 'my_bids_local.json'
-        if not local_path.exists():
-            return
-
-        local = json.loads(local_path.read_text(encoding='utf-8'))
-        bids_count = len(local.get('bids', []) if isinstance(local, dict) else [])
-        last_sync = local.get('last_sync') or local.get('updated_at') if isinstance(local, dict) else None
-
-        if bids_count == 0:
-            from datetime import datetime as _dt, timedelta as _td
-            try:
-                if last_sync:
-                    if '/' in str(last_sync):
-                        last_sync_dt = _dt.strptime(last_sync, '%Y/%m/%d %H:%M')
-                    else:
-                        last_sync_dt = _dt.fromisoformat(last_sync)
-                    if _dt.now() - last_sync_dt < _td(hours=1):
-                        try:
-                            safe_send_alert(
-                                subject='[KREAM] sync 0건 경고',
-                                body='판매자센터 sync 결과 0건. 페이지 파싱 깨졌을 가능성.\n\n/api/diagnostics/sync-page-dump 호출하여 확인 필요.',
-                                alert_type='sync_zero'
-                            )
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-
 # ── 스케줄러 작업 등록 (멱등성: replace_existing=True) ──
 def _register_step18d_jobs():
     """Step 18-D 신규 스케줄러 작업 등록 (이미 있으면 교체)."""
@@ -11566,19 +11345,6 @@ def _register_step18d_jobs():
         print("[SCHEDULER] weekly_report_save 등록 (매주 월 0:05)")
     except Exception as e:
         print(f"[SCHEDULER] weekly_report_save 등록 실패: {e}")
-
-    # Step 23: sync 0건 자동 경고 (35분 간격)
-    try:
-        scheduler.add_job(
-            _check_sync_health,
-            'interval', minutes=35,
-            id='sync_health_check',
-            replace_existing=True,
-            misfire_grace_time=300,
-        )
-        print("[SCHEDULER] sync_health_check 등록 (35분 간격)")
-    except Exception as e:
-        print(f"[SCHEDULER] sync_health_check 등록 실패: {e}")
 
 
 # ═══════════════════════════════════════════
