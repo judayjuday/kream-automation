@@ -862,33 +862,11 @@ def add_notification(ntype, title, message="", action_url=""):
     conn.close()
 
 
-_alert_dedup_lock = {}
-
-
-def _should_send_alert_dedupe(subject, body, window_sec=60):
-    """동일 알림 디바운싱: window_sec 내 동일 (subject, body) 조합은 차단."""
-    import time
-    key = (str(subject)[:200], str(body)[:500])
-    now = time.time()
-    last = _alert_dedup_lock.get(key, 0)
-    if now - last < window_sec:
-        return False
-    _alert_dedup_lock[key] = now
-    if len(_alert_dedup_lock) > 500:
-        cutoff = now - 3600
-        for k in list(_alert_dedup_lock.keys()):
-            if _alert_dedup_lock[k] < cutoff:
-                del _alert_dedup_lock[k]
-    return True
-
-
 def safe_send_alert(subject, body, alert_type='info'):
     """알림 발송 안전 wrapper. 실패해도 서버 동작에 영향 X.
     1) DB notifications 테이블에 누적, 2) 이메일 시도, 두 단계 모두 try/except.
     기존 notifications 스키마(title/message)를 그대로 사용 (subject→title, body→message).
     """
-    if not _should_send_alert_dedupe(subject, body):
-        return
     import sys
     try:
         conn = sqlite3.connect(str(PRICE_DB))
