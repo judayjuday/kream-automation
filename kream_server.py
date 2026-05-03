@@ -917,6 +917,80 @@ def safe_send_alert(subject, body, alert_type='info'):
         print(f"[ALERT-EMAIL-FAIL] {e}", file=sys.stderr)
 
 
+# ── Step 33-A: 자동 재로그인 인프라 ──
+def _check_session_and_relogin():
+    """sync 1h+ 멈추면 자동 재로그인. 6h 쿨다운."""
+    from datetime import datetime, timedelta
+    from pathlib import Path
+
+    state_file = Path(__file__).parent / '.relogin_state.json'
+    state = {}
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text())
+        except Exception:
+            pass
+
+    # 6h 쿨다운
+    last_attempt = state.get('last_attempt')
+    if last_attempt:
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            if datetime.now() - last_dt < timedelta(hours=6):
+                return
+        except Exception:
+            pass
+
+    # sync 시각 확인
+    local_path = Path(__file__).parent / 'my_bids_local.json'
+    if not local_path.exists():
+        return
+
+    try:
+        local = json.loads(local_path.read_text(encoding='utf-8'))
+        last_sync = local.get('lastSync') or local.get('last_sync')
+        if last_sync:
+            try:
+                last_sync_dt = datetime.strptime(last_sync, '%Y/%m/%d %H:%M')
+            except Exception:
+                last_sync_dt = datetime.fromisoformat(last_sync)
+            if datetime.now() - last_sync_dt < timedelta(hours=1):
+                return
+    except Exception:
+        return
+
+    print("[AUTO-RELOGIN] 세션 만료 추정 → 자동 재로그인", flush=True)
+    state['last_attempt'] = datetime.now().isoformat()
+    state_file.write_text(json.dumps(state, indent=2))
+
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['python3', 'kream_bot.py', '--mode', 'auto-login-partner'],
+            capture_output=True, text=True, timeout=180,
+            cwd=str(Path(__file__).parent)
+        )
+        if result.returncode == 0:
+            print("[AUTO-RELOGIN] ✅ 성공", flush=True)
+            state['last_success'] = datetime.now().isoformat()
+            state_file.write_text(json.dumps(state, indent=2))
+            try:
+                safe_send_alert('[KREAM] 자동 재로그인 성공', '세션 만료 → 자동 재로그인 완료', 'auto_relogin_success')
+            except Exception:
+                pass
+        else:
+            print(f"[AUTO-RELOGIN] ❌ 실패: {result.stderr[:300]}", flush=True)
+            state['last_failure'] = datetime.now().isoformat()
+            state['last_failure_reason'] = result.stderr[:500]
+            state_file.write_text(json.dumps(state, indent=2))
+            try:
+                safe_send_alert('[KREAM] 자동 재로그인 실패', f'수동 점검 필요\n\n{result.stderr[:500]}', 'auto_relogin_failure')
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[AUTO-RELOGIN] ❌ 예외: {e}", flush=True)
+
+
 # 판매 수집 스케줄러 상태
 sales_scheduler_state = {
     "running": False,
@@ -12699,6 +12773,79 @@ def api_market_collect_now():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+# ─────────────────────────────────────────────
+# Step 33-A: 자동 재로그인 + 알림 통계 API
+# ─────────────────────────────────────────────
+@app.route('/api/auth/relogin-status', methods=['GET'])
+def api_relogin_status():
+    from pathlib import Path
+    state_file = Path(__file__).parent / '.relogin_state.json'
+    state = {}
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text())
+        except Exception:
+            pass
+    auth_path = Path(__file__).parent / 'auth_state.json'
+    auth_mtime = None
+    if auth_path.exists():
+        from datetime import datetime
+        auth_mtime = datetime.fromtimestamp(auth_path.stat().st_mtime).isoformat()
+    return jsonify({
+        'ok': True,
+        'auth_state_updated_at': auth_mtime,
+        'last_attempt': state.get('last_attempt'),
+        'last_success': state.get('last_success'),
+        'last_failure': state.get('last_failure'),
+        'last_failure_reason': state.get('last_failure_reason'),
+    })
+
+
+@app.route('/api/auth/relogin-now', methods=['POST'])
+def api_relogin_now():
+    import threading as _th
+    def run():
+        from pathlib import Path
+        state_file = Path(__file__).parent / '.relogin_state.json'
+        if state_file.exists():
+            try:
+                state = json.loads(state_file.read_text())
+                state.pop('last_attempt', None)
+                state_file.write_text(json.dumps(state))
+            except Exception:
+                pass
+        _check_session_and_relogin()
+    _th.Thread(target=run, daemon=True).start()
+    return jsonify({'ok': True, 'note': '백그라운드 재로그인 시작'})
+
+
+@app.route('/api/notifications/stats', methods=['GET'])
+def api_notifications_stats():
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        c = conn.cursor()
+        c.execute("SELECT type, COUNT(*) as cnt, MAX(created_at) as latest FROM notifications WHERE datetime(created_at) > datetime('now', '-7 days') GROUP BY type ORDER BY cnt DESC")
+        rows = c.fetchall()
+        conn.close()
+        return jsonify({'ok': True, 'period_days': 7, 'by_type': [{'type': r[0], 'count': r[1], 'latest': r[2]} for r in rows]})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/notifications/cleanup-old', methods=['POST'])
+def api_notifications_cleanup():
+    try:
+        conn = sqlite3.connect(str(PRICE_DB))
+        c = conn.cursor()
+        c.execute("DELETE FROM notifications WHERE datetime(created_at) < datetime('now', '-30 days')")
+        deleted = c.rowcount
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'deleted': deleted})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 # ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
@@ -12775,6 +12922,19 @@ if __name__ == "__main__":
             print("[SCHEDULER] market_price_collect 등록 (2h)")
         except Exception as _me:
             print(f"[SCHEDULER] market_price_collect 실패: {_me}")
+    # Step 33-A: 자동 재로그인 체크 (30분 간격)
+    if scheduler is not None:
+        try:
+            scheduler.add_job(
+                _check_session_and_relogin,
+                'interval', minutes=30,
+                id='auto_relogin_check',
+                replace_existing=True,
+                misfire_grace_time=300,
+            )
+            print("[SCHEDULER] auto_relogin_check 등록 (30분)")
+        except Exception as e:
+            print(f"[SCHEDULER] auto_relogin_check 실패: {e}")
     if scheduler is not None:
         try:
             scheduler.start()

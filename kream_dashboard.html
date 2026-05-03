@@ -496,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <!-- 세션 경고 배너 -->
     <div id="session-warning" style="display:none; background:#fee; border:1px solid #c00; color:#c00; padding:10px 16px; border-radius:8px; margin:0 0 12px; font-size:13px; font-weight:600">
       <span id="session-warning-text"></span>
-      <button class="btn btn-outline btn-sm" onclick="triggerRelogin()" style="margin-left:12px;border-color:#c00;color:#c00;font-size:11px">자동 재로그인</button>
+      <button class="btn btn-outline btn-sm" onclick="manualRelogin()" style="margin-left:12px;border-color:#c00;color:#c00;font-size:11px">즉시 재로그인</button>
       <button onclick="document.getElementById('session-warning').style.display='none'" style="float:right; background:none; border:none; color:#c00; cursor:pointer; font-size:16px">&times;</button>
     </div>
 
@@ -7092,6 +7092,50 @@ function checkSessionStatus() {
 }
 checkSessionStatus();
 setInterval(checkSessionStatus, 300000); // 5분마다
+
+function manualRelogin() {
+  const btn = document.querySelector('[onclick="manualRelogin()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '재로그인 중...'; }
+  fetch('/api/auth/relogin-now', {method:'POST'})
+    .then(r => r.json()).then(data => {
+      if (!data || data.ok !== true) {
+        if (btn) { btn.disabled = false; btn.textContent = '즉시 재로그인'; }
+        alert('재로그인 요청 실패');
+        return;
+      }
+      // 백그라운드 재로그인 시작 → 상태 폴링
+      let attempts = 0;
+      const maxAttempts = 60; // 최대 3분 (3s × 60)
+      const poll = setInterval(() => {
+        attempts++;
+        fetch('/api/auth/relogin-status').then(r => r.json()).then(s => {
+          if (!s || !s.ok) return;
+          const finished = s.last_success || s.last_failure;
+          const lastAttempt = s.last_attempt;
+          if (finished && lastAttempt && (
+              (s.last_success && s.last_success >= lastAttempt) ||
+              (s.last_failure && s.last_failure >= lastAttempt)
+          )) {
+            clearInterval(poll);
+            if (btn) { btn.disabled = false; btn.textContent = '즉시 재로그인'; }
+            if (s.last_success && (!s.last_failure || s.last_success >= s.last_failure)) {
+              alert('즉시 재로그인 성공');
+            } else {
+              alert('즉시 재로그인 실패: ' + (s.last_failure_reason || '원인 불명'));
+            }
+            if (typeof checkSessionStatus === 'function') checkSessionStatus();
+          } else if (attempts >= maxAttempts) {
+            clearInterval(poll);
+            if (btn) { btn.disabled = false; btn.textContent = '즉시 재로그인'; }
+            alert('재로그인 결과 확인 시간 초과 (계속 진행 중일 수 있음)');
+          }
+        }).catch(() => {});
+      }, 3000);
+    }).catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = '즉시 재로그인'; }
+      alert('재로그인 요청 실패: ' + e);
+    });
+}
 
 function triggerRelogin() {
   const btn = document.querySelector('[onclick="triggerRelogin()"]');
