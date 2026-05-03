@@ -4934,8 +4934,8 @@ def api_my_bids_sync():
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            from kream_adjuster import collect_my_bids
-            bids = loop.run_until_complete(collect_my_bids(headless=get_headless()))
+            from kream_adjuster import collect_my_bids_via_menu
+            bids = loop.run_until_complete(collect_my_bids_via_menu(headless=get_headless()))
             loop.close()
 
             data = {

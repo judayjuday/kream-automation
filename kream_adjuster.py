@@ -706,17 +706,16 @@ async def collect_my_bids_via_menu(headless=True) -> list:
       매입가 | 예상마진 | 마진율 | 발매가 | 일반판매최근가 | 보관(100) | 보관(95)
     """
     from playwright.async_api import async_playwright
-    from playwright_stealth import stealth_async as stealth
-    from kream_bot import create_browser, create_context, ensure_logged_in, dismiss_popups
+    from kream_bot import create_browser, create_context, ensure_logged_in, dismiss_popups, apply_stealth
     import re
-    
+
     bids = []
-    
+
     async with async_playwright() as p:
         browser = await create_browser(p, headless=headless)
         context = await create_context(browser, storage='auth_state.json')
         page = await context.new_page()
-        await stealth(page)
+        await apply_stealth(page)
         
         # 1. 메인 페이지 진입
         print("[SYNC-V2] 메인 페이지 이동...", flush=True, file=sys.stderr)
@@ -788,26 +787,98 @@ async def collect_my_bids_via_menu(headless=True) -> list:
         await page.wait_for_timeout(2000)
         print(f"[SYNC-V2] 최종 URL: {page.url}", flush=True, file=sys.stderr)
         
-        # 5. 페이지네이션 — '10개씩 보기' → '50개씩 보기' 변경 시도
+        # 5. 페이지네이션 — '10개씩 보기' → '100개씩 보기' 변경 시도 (정확한 셀렉터만)
+        # select 우선: 옵션에 '개씩 보기' 텍스트가 있는 select만 페이지 사이즈 셀렉터로 인정
+        size_changed = False
         try:
-            await page.evaluate("""
+            size_changed = await page.evaluate("""
                 () => {
-                    // select 박스 또는 dropdown 찾기
                     const selects = document.querySelectorAll('select');
                     for (const s of selects) {
                         const opts = Array.from(s.options || []);
-                        const opt50 = opts.find(o => o.text.includes('50') || o.value === '50');
-                        if (opt50) {
-                            s.value = opt50.value;
+                        const isPageSize = opts.some(o => /개씩 보기|per page|\\/page/i.test(o.text || ''));
+                        if (!isPageSize) continue;
+                        const opt = opts.find(o => /100/.test(o.text)) || opts.find(o => /50/.test(o.text));
+                        if (opt) {
+                            s.value = opt.value;
                             s.dispatchEvent(new Event('change', { bubbles: true }));
-                            return true;
+                            return 'select:' + opt.text;
                         }
                     }
                     return false;
                 }
             """)
-            await page.wait_for_timeout(2000)
-        except: pass
+        except Exception as e:
+            print(f"[SYNC-V2] select 페이지 사이즈 변경 에러: {e}", flush=True, file=sys.stderr)
+        # 클릭 기반 드롭다운 (정확한 패턴만): '10개씩 보기' 텍스트 버튼
+        if not size_changed:
+            try:
+                opened = await page.evaluate("""
+                    () => {
+                        const cands = Array.from(document.querySelectorAll('button, [role="button"], [role="combobox"], div'));
+                        for (const el of cands) {
+                            const t = (el.textContent || '').trim();
+                            if (/^(10|20)개씩 보기$/.test(t)) {
+                                el.click();
+                                return t;
+                            }
+                        }
+                        return null;
+                    }
+                """)
+                if opened:
+                    await page.wait_for_timeout(700)
+                    size_changed = await page.evaluate("""
+                        () => {
+                            const cands = Array.from(document.querySelectorAll('li, [role="option"], button, a, div'));
+                            for (const target of ['100개씩 보기', '50개씩 보기']) {
+                                for (const el of cands) {
+                                    const t = (el.textContent || '').trim();
+                                    if (t === target) {
+                                        el.click();
+                                        return 'click:' + target;
+                                    }
+                                }
+                            }
+                            return false;
+                        }
+                    """)
+            except Exception as e:
+                print(f"[SYNC-V2] 클릭 페이지 사이즈 변경 에러: {e}", flush=True, file=sys.stderr)
+        print(f"[SYNC-V2] 페이지 사이즈 변경: {size_changed}", flush=True, file=sys.stderr)
+        if size_changed:
+            await page.wait_for_timeout(3000)
+
+        # 5-1. 페이지네이션 영역 디버그 dump (1회만)
+        try:
+            pag_debug = await page.evaluate("""
+                () => {
+                    const out = [];
+                    // pagination 후보 영역
+                    const sels = ['[class*="pagination"]', '[class*="Pagination"]', 'nav', 'ul[class*="pag"]'];
+                    for (const sel of sels) {
+                        const els = Array.from(document.querySelectorAll(sel));
+                        for (const el of els) {
+                            const txt = (el.innerText || '').replace(/\\s+/g, ' ').trim().substring(0, 200);
+                            if (txt.length < 3) continue;
+                            out.push(`[${sel}] ${txt}`);
+                        }
+                    }
+                    // 본문 하단 button/a 중 숫자/화살표 텍스트
+                    const all = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                    const arrows = all.filter(b => {
+                        const t = (b.textContent || '').trim();
+                        return t === '›' || t === '〉' || t === '>' || t === '다음' || t === 'Next' || /^\\d{1,2}$/.test(t);
+                    }).map(b => {
+                        return `${b.tagName}|cls=${(b.className||'').toString().substring(0,60)}|aria=${b.getAttribute('aria-label')||''}|text=${(b.textContent||'').trim()}`;
+                    });
+                    return { boxes: out.slice(0, 5), arrows: arrows.slice(0, 30) };
+                }
+            """)
+            print(f"[SYNC-V2-DBG] pagination boxes: {pag_debug.get('boxes')}", flush=True, file=sys.stderr)
+            print(f"[SYNC-V2-DBG] pagination arrows: {pag_debug.get('arrows')}", flush=True, file=sys.stderr)
+        except Exception as e:
+            print(f"[SYNC-V2-DBG] dump 에러: {e}", flush=True, file=sys.stderr)
         
         # 6. 데이터 추출 (모든 페이지 순회)
         all_rows = []
@@ -888,30 +959,63 @@ async def collect_my_bids_via_menu(headless=True) -> list:
             
             print(f"[SYNC-V2] 페이지 {page_num}: {len(rows_data)}건 추출", flush=True, file=sys.stderr)
             all_rows.extend(rows_data)
-            
-            # 다음 페이지 클릭
-            has_next = await page.evaluate("""
-                () => {
-                    // 페이지네이션 버튼 (다음 페이지 또는 ›)
-                    const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-                    for (const b of buttons) {
-                        const text = (b.textContent || '').trim();
-                        const aria = b.getAttribute('aria-label') || '';
-                        if ((text === '›' || text === '>' || aria.includes('다음') || aria.includes('Next'))
-                            && !b.disabled && !b.getAttribute('aria-disabled')) {
-                            b.click();
-                            return true;
-                        }
-                    }
+
+            # 다음 페이지 클릭 — KREAM Base_ 클래스 + 숫자 텍스트 패턴
+            target_page = page_num + 1
+            has_next = await page.evaluate(f"""
+                () => {{
+                    const targetPage = {target_page};
+                    const all = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                    // (1) KREAM 페이지 버튼: className에 'Base_' 포함 + 텍스트가 정확한 숫자
+                    for (const b of all) {{
+                        const txt = (b.textContent || '').trim();
+                        const cls = (b.className || '').toString();
+                        const disabled = b.disabled || b.getAttribute('aria-disabled') === 'true' || cls.includes('disabled');
+                        if (disabled) continue;
+                        if (cls.includes('Base_') && txt === String(targetPage)) {{
+                            b.click(); return 'kream-num:' + txt;
+                        }}
+                    }}
+                    // (2) aria-label 기반 next
+                    for (const b of all) {{
+                        const aria = (b.getAttribute('aria-label') || '').toLowerCase();
+                        const cls = (b.className || '').toString();
+                        const disabled = b.disabled || b.getAttribute('aria-disabled') === 'true' || cls.includes('disabled');
+                        if (disabled) continue;
+                        if (aria.includes('next') || aria.includes('다음 페이지') || aria === '다음') {{
+                            b.click(); return 'aria:' + aria;
+                        }}
+                    }}
+                    // (3) 텍스트 ›, >, 다음, Next, 〉
+                    for (const b of all) {{
+                        const txt = (b.textContent || '').trim();
+                        const cls = (b.className || '').toString();
+                        const disabled = b.disabled || b.getAttribute('aria-disabled') === 'true' || cls.includes('disabled');
+                        if (disabled) continue;
+                        if (txt === '›' || txt === '>' || txt === '다음' || txt === 'Next' || txt === '〉') {{
+                            b.click(); return 'text:' + txt;
+                        }}
+                    }}
+                    // (4) 일반 숫자 버튼 (Base_ 미보유)
+                    for (const b of all) {{
+                        const txt = (b.textContent || '').trim();
+                        const cls = (b.className || '').toString();
+                        const disabled = b.disabled || b.getAttribute('aria-disabled') === 'true' || cls.includes('disabled');
+                        if (disabled) continue;
+                        if (txt === String(targetPage)) {{
+                            b.click(); return 'num:' + txt;
+                        }}
+                    }}
                     return false;
-                }
+                }}
             """)
-            
+
+            print(f"[SYNC-V2] 다음 페이지 클릭: {has_next}", flush=True, file=sys.stderr)
             if not has_next:
-                print(f"[SYNC-V2] 마지막 페이지 도달", flush=True, file=sys.stderr)
+                print(f"[SYNC-V2] 마지막 페이지 도달 (page {page_num})", flush=True, file=sys.stderr)
                 break
-            
-            await page.wait_for_timeout(2500)
+
+            await page.wait_for_timeout(3000)
             page_num += 1
         
         # 중복 제거

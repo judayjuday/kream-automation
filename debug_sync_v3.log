@@ -1,0 +1,53 @@
+>>> visible 브라우저로 sync 실행
+[SYNC-V2] 메인 페이지 이동...
+[SYNC-V2] '통합 입찰 관리' 메뉴 확장...
+[SYNC-V2] 1차 클릭: 입찰 내역 관리
+[SYNC-V2] 데이터 감지됨
+[SYNC-V2] 최종 URL: https://partner.kream.co.kr/business/asks
+[SYNC-V2] 페이지 사이즈 변경: False
+[SYNC-V2-DBG] pagination boxes: []
+[SYNC-V2-DBG] pagination arrows: ['BUTTON|cls=Base_base__ot5b7 Base_cursor-pointer__bzaFY Base_display-fle|aria=|text=1', 'BUTTON|cls=Base_base__ot5b7 Base_cursor-pointer__bzaFY Base_display-fle|aria=|text=2', 'BUTTON|cls=Base_base__ot5b7 Base_cursor-pointer__bzaFY Base_display-fle|aria=|text=3', 'BUTTON|cls=Base_base__ot5b7 Base_cursor-pointer__bzaFY Base_display-fle|aria=|text=4', 'BUTTON|cls=Base_base__ot5b7 Base_cursor-pointer__bzaFY Base_display-fle|aria=|text=5', 'BUTTON|cls=Base_base__ot5b7 Base_cursor-pointer__bzaFY Base_display-fle|aria=|text=6']
+[SYNC-V2] 페이지 1 추출 중...
+[SYNC-V2] 페이지 1: 10건 추출
+[SYNC-V2] 다음 페이지 클릭: kream-num:2
+[SYNC-V2] 페이지 2 추출 중...
+[SYNC-V2] 페이지 2: 10건 추출
+[SYNC-V2] 다음 페이지 클릭: kream-num:3
+[SYNC-V2] 페이지 3 추출 중...
+[SYNC-V2] 페이지 3: 10건 추출
+[SYNC-V2] 다음 페이지 클릭: kream-num:4
+[SYNC-V2] 페이지 4 추출 중...
+[SYNC-V2] 페이지 4: 10건 추출
+[SYNC-V2] 다음 페이지 클릭: kream-num:5
+[SYNC-V2] 페이지 5 추출 중...
+[SYNC-V2] 페이지 5: 10건 추출
+[SYNC-V2] 다음 페이지 클릭: kream-num:6
+[SYNC-V2] 페이지 6 추출 중...
+[SYNC-V2] 페이지 6: 1건 추출
+[SYNC-V2] 다음 페이지 클릭: False
+[SYNC-V2] 마지막 페이지 도달 (page 6)
+[SYNC-V2] 총 51건 (중복 제거 후)
+
+>>> 결과: 51건
+  [1] {'orderId': 'A-SN160262299', 'model': '1183B938-100', 'size': '', 'bidPrice': 168000, 'bidRank': 3, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262299\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n260\n\n-\n168,000원\n입찰 순번 3\n\n-\n\n-\n\n-\n\n-\n\n165,000원\n\n+27,000원 (+19.6%)\n\n195,000원\n\n+44,000원 (+29.1%)\n\n117,000원\n\n-69,000원 (-37.1%)\n\n167,000원\n\n+9,000원 (+5.7%)\n\n176,000원\n\n195,000원\n\n182,000원\n\n167,000원\n\n125,000원\n\n-\n'}
+  [2] {'orderId': 'A-SN160262298', 'model': '1183B938-100', 'size': '', 'bidPrice': 168000, 'bidRank': 2, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262298\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n260\n\n-\n168,000원\n입찰 순번 2\n\n-\n\n-\n\n-\n\n-\n\n165,000원\n\n+27,000원 (+19.6%)\n\n195,000원\n\n+44,000원 (+29.1%)\n\n117,000원\n\n-69,000원 (-37.1%)\n\n167,000원\n\n+9,000원 (+5.7%)\n\n176,000원\n\n195,000원\n\n182,000원\n\n167,000원\n\n125,000원\n\n-\n'}
+  [3] {'orderId': 'A-SN160262297', 'model': '1183B938-100', 'size': '', 'bidPrice': 170000, 'bidRank': 3, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262297\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n255\n\n-\n170,000원\n입찰 순번 3\n\n-\n\n-\n\n-\n\n-\n\n148,000원\n\n+1,000원 (+0.7%)\n\n178,000원\n\n-20,000원 (-10.1%)\n\n186,000원\n\n+46,000원 (+32.9%)\n\n177,000원\n\n179,000원\n\n-\n\n-\n\n169,000원\n\n105,000원\n\n-\n\n7,635\n\n82\n\n8\n\n1\n\n무기한\n\n26/04/19 0'}
+  [4] {'orderId': 'A-SN160262296', 'model': '1183B938-100', 'size': '', 'bidPrice': 170000, 'bidRank': 2, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262296\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n255\n\n-\n170,000원\n입찰 순번 2\n\n-\n\n-\n\n-\n\n-\n\n148,000원\n\n+1,000원 (+0.7%)\n\n178,000원\n\n-20,000원 (-10.1%)\n\n186,000원\n\n+46,000원 (+32.9%)\n\n177,000원\n\n179,000원\n\n-\n\n-\n\n169,000원\n\n105,000원\n\n-\n\n7,635\n\n82\n\n8\n\n1\n\n무기한\n\n26/04/19 0'}
+  [5] {'orderId': 'A-SN160262295', 'model': '1183B938-100', 'size': '', 'bidPrice': 172000, 'bidRank': 3, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262295\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n250\n\n-\n172,000원\n입찰 순번 3\n\n-\n\n-\n\n-\n\n-\n\n167,000원\n\n0원 (0%)\n\n196,000원\n\n0원 (0%)\n\n158,000원\n\n+10,000원 (+6.8%)\n\n171,000원\n\n-1,000원 (-0.6%)\n\n171,000원\n\n196,000원\n\n-\n\n170,000원\n\n100,000원\n\n-\n\n7,635\n\n81\n\n11\n\n1\n\n무기한\n\n26/0'}
+  [6] {'orderId': 'A-SN160262294', 'model': '1183B938-100', 'size': '', 'bidPrice': 172000, 'bidRank': 2, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262294\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n250\n\n-\n172,000원\n입찰 순번 2\n\n-\n\n-\n\n-\n\n-\n\n167,000원\n\n0원 (0%)\n\n196,000원\n\n0원 (0%)\n\n158,000원\n\n+10,000원 (+6.8%)\n\n171,000원\n\n-1,000원 (-0.6%)\n\n171,000원\n\n196,000원\n\n-\n\n170,000원\n\n100,000원\n\n-\n\n7,635\n\n81\n\n11\n\n1\n\n무기한\n\n26/0'}
+  [7] {'orderId': 'A-SN160262293', 'model': '1183B938-100', 'size': '', 'bidPrice': 163000, 'bidRank': 3, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262293\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n245\n\n-\n163,000원\n입찰 순번 3\n\n-\n\n-\n\n-\n\n-\n\n153,000원\n\n-1,000원 (-0.6%)\n\n182,000원\n\n-32,000원 (-15%)\n\n-\n164,000원\n\n0원 (0%)\n\n150,000원\n\n190,000원\n\n-\n\n162,000원\n\n-\n\n-\n\n7,635\n\n162\n\n11\n\n0\n\n무기한\n\n26/04/19 02:53:09\n\n26/04/19 '}
+  [8] {'orderId': 'A-SN160262290', 'model': '1183B938-100', 'size': '', 'bidPrice': 163000, 'bidRank': 2, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262290\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n245\n\n-\n163,000원\n입찰 순번 2\n\n-\n\n-\n\n-\n\n-\n\n153,000원\n\n-1,000원 (-0.6%)\n\n182,000원\n\n-32,000원 (-15%)\n\n-\n164,000원\n\n0원 (0%)\n\n150,000원\n\n190,000원\n\n-\n\n162,000원\n\n-\n\n-\n\n7,635\n\n162\n\n11\n\n0\n\n무기한\n\n26/04/19 02:53:09\n\n26/04/19 '}
+  [9] {'orderId': 'A-SN160262289', 'model': '1183B938-100', 'size': '', 'bidPrice': 164000, 'bidRank': 3, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262289\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n240\n\n-\n164,000원\n입찰 순번 3\n\n-\n\n-\n\n-\n\n-\n\n150,000원\n\n-1,000원 (-0.7%)\n\n160,000원\n\n-2,000원 (-1.2%)\n\n188,000원\n\n+26,000원 (+16%)\n\n164,000원\n\n+3,000원 (+1.9%)\n\n171,000원\n\n181,000원\n\n-\n\n163,000원\n\n129,000원\n\n-\n\n7,635\n\n235\n\n'}
+  [10] {'orderId': 'A-SN160262288', 'model': '1183B938-100', 'size': '', 'bidPrice': 164000, 'bidRank': 2, 'nameKr': 'Onitsuka', 'rawText': 'A-SN160262288\n\n해외\n\n1183B938-100 (220596)\nOnitsuka Tiger Tokuten White Black\n오니츠카 타이거 토쿠텐 화이트 블랙\n\n240\n\n-\n164,000원\n입찰 순번 2\n\n-\n\n-\n\n-\n\n-\n\n150,000원\n\n-1,000원 (-0.7%)\n\n160,000원\n\n-2,000원 (-1.2%)\n\n188,000원\n\n+26,000원 (+16%)\n\n164,000원\n\n+3,000원 (+1.9%)\n\n171,000원\n\n181,000원\n\n-\n\n163,000원\n\n129,000원\n\n-\n\n7,635\n\n235\n\n'}
+🔐 로그인 상태 확인 중... → https://partner.kream.co.kr/c2c
+  → 현재 URL: https://partner.kream.co.kr/c2c
+  → HTML 소스 길이: 170986
+  🔍 HTML 앞부분: <!DOCTYPE html><html data-sentry-element="Html" data-sentry-component="Document" data-sentry-source-file="_document.tsx"><head data-sentry-element="Head" data-sentry-source-file="_document.tsx"><meta charset="utf-8" data-next-head=""><title data-next-head="">KREAM 판매자 센터 - KREAM 판매자 센터</title><meta name="viewport" content="width=1200, initial-scale=1" data-sentry-element="meta" data-sentry-source-file="Head.tsx" data-next-head=""><link rel="icon" type="image/png" sizes="96x96" href="/favicon/fav
+  → 페이지 body 텍스트 길이: 3082
+  → 네비게이션 요소: 38개
+✅ 로그인 확인 완료
+🔄 팝업 확인 중...
+  ✓ 팝업 1 닫음 (WELCOME)
+  ✓ 팝업 처리 완료
+🔄 팝업 확인 중...
+  ✓ 팝업 처리 완료
