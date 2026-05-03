@@ -9,7 +9,7 @@
           try {
             const r = await fetch('/api/health');
             const d = await r.json();
-            if (d.environment === 'macbook_overseas' || d.kream_main_accessible === false) {
+            if (d.environment === 'macbook_overseas' || d.environment === 'overseas_blocked' || d.environment === 'offline' || d.kream_main_accessible === false) {
               const el = document.getElementById('env-block-banner-discover');
               if (el) el.style.display = 'block';
             }

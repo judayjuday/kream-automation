@@ -11,6 +11,7 @@ KREAM 판매자센터 자동화 - Flask 백엔드 서버
 import asyncio
 import json
 import logging
+import os
 import math
 import random
 import re
@@ -7175,7 +7176,10 @@ def api_health():
 
 
 def detect_environment():
-    """kream.co.kr 실제 HTTP 응답 확인. settings.json에 캐시. (Step 18-B: HTTP 강화)"""
+    """kream.co.kr 실제 HTTP 응답 확인. settings.json에 캐시.
+    Step 33-D: timeout만으로 overseas 단정 X — 네이버 백업 체크로 IP차단/오프라인 분리.
+    FORCE_ENV 환경변수가 설정되면 그 값을 우선 사용 (수동 우회).
+    """
     try:
         settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8")) if SETTINGS_FILE.exists() else {}
     except Exception:
@@ -7183,6 +7187,23 @@ def detect_environment():
 
     accessible = False
     detection_detail = "unknown"
+    env_name = "unknown"
+
+    forced = os.environ.get("FORCE_ENV", "").strip()
+    if forced:
+        env_name = forced
+        accessible = forced in ("korea", "imac_kr")
+        detection_detail = "forced_via_FORCE_ENV"
+        settings["kream_main_accessible"] = accessible
+        settings["environment"] = env_name
+        settings["env_checked_at"] = datetime.now().isoformat()
+        settings["env_detection_detail"] = detection_detail
+        try:
+            SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as _e:
+            print(f"[ENV] settings 저장 실패: {_e}")
+        print(f"[ENV] HTTP-check: accessible={accessible}, detail={detection_detail}, env={env_name}")
+        return accessible
 
     try:
         try:
@@ -7190,22 +7211,24 @@ def detect_environment():
         except ImportError:
             detection_detail = "requests_module_missing"
             settings["kream_main_accessible"] = False
-            settings["environment"] = "macbook_overseas"
+            settings["environment"] = "offline"
             settings["env_checked_at"] = datetime.now().isoformat()
             settings["env_detection_detail"] = detection_detail
             try:
                 SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
             except Exception as _e:
                 print(f"[ENV] settings 저장 실패: {_e}")
-            print(f"[ENV] requests 모듈 없음 — fallback macbook_overseas")
+            print(f"[ENV] requests 모듈 없음 — fallback offline")
             return False
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
         }
+        kream_failed = False
         try:
-            r = _requests.get("https://kream.co.kr", timeout=10, headers=headers, allow_redirects=True)
+            r = _requests.get("https://kream.co.kr", timeout=15, headers=headers, allow_redirects=True)
             if r.status_code == 200:
                 body_lower = r.text.lower()[:5000]
                 head_text = r.text[:5000]
@@ -7214,28 +7237,54 @@ def detect_environment():
                     detection_detail = "http_200_kream_marker"
                 else:
                     detection_detail = "http_200_but_no_marker"
+                    kream_failed = True
             elif r.status_code in (403, 451):
                 detection_detail = f"blocked_http_{r.status_code}"
+                kream_failed = True
             else:
                 detection_detail = f"http_{r.status_code}"
+                kream_failed = True
         except _requests.exceptions.Timeout:
             detection_detail = "timeout"
+            kream_failed = True
         except _requests.exceptions.ConnectionError:
             detection_detail = "connection_error"
+            kream_failed = True
         except Exception as _e:
             detection_detail = f"error_{type(_e).__name__}"
+            kream_failed = True
+
+        if accessible:
+            env_name = "korea"
+        elif kream_failed:
+            naver_ok = False
+            try:
+                rn = _requests.get("https://www.naver.com", timeout=5, headers=headers, allow_redirects=True)
+                if rn.status_code == 200:
+                    naver_ok = True
+            except Exception:
+                naver_ok = False
+            if naver_ok:
+                env_name = "overseas_blocked"
+                detection_detail = f"{detection_detail}+naver_ok"
+            else:
+                env_name = "offline"
+                detection_detail = f"{detection_detail}+naver_fail"
+        else:
+            env_name = "offline"
     except Exception as _e:
         detection_detail = f"outer_error_{type(_e).__name__}"
+        env_name = "offline"
 
     settings["kream_main_accessible"] = accessible
-    settings["environment"] = "imac_kr" if accessible else "macbook_overseas"
+    settings["environment"] = env_name
     settings["env_checked_at"] = datetime.now().isoformat()
     settings["env_detection_detail"] = detection_detail
     try:
         SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as _e:
         print(f"[ENV] settings 저장 실패: {_e}")
-    print(f"[ENV] HTTP-check: accessible={accessible}, detail={detection_detail}, env={settings['environment']}")
+    print(f"[ENV] HTTP-check: accessible={accessible}, detail={detection_detail}, env={env_name}")
     return accessible
 
 
@@ -11517,7 +11566,7 @@ table td{{padding:6px;border-bottom:1px solid #f3f4f6}}
 
   <div class="card">
     <h2>🌐 환경</h2>
-    <div class="row"><span class="k">environment</span><span class="v {('ok' if env=='imac_kr' else 'warn')}">{env}</span></div>
+    <div class="row"><span class="k">environment</span><span class="v {('ok' if env in ('korea','imac_kr') else 'warn')}">{env}</span></div>
     <div class="row"><span class="k">detail</span><span class="v">{env_detail}</span></div>
     <div class="row"><span class="k">checked_at</span><span class="v muted">{env_checked_at}</span></div>
   </div>
