@@ -82,6 +82,8 @@ async def save_state_with_localstorage(page, context, path, origin_url):
 # 1단계: 내 입찰 목록 수집
 # ═══════════════════════════════════════════
 
+# DEPRECATED 2026-05-05: collect_my_bids_via_menu 사용 권장
+# Step 34 v4 이후 size 추출 깨짐. 롤백 옵션으로만 보존.
 async def collect_my_bids(headless=True) -> list:
     """partner.kream.co.kr/business/asks 에서 현재 입찰 중인 내역 수집"""
     async with async_playwright() as p:
@@ -644,14 +646,24 @@ async def _click_modify_and_change(page: Page, order_id: str, new_price: int) ->
 
 async def full_adjust_flow(headless=True):
     """1→2→3단계 실행 (수집+분석+제안)"""
-    # 1) 내 입찰 수집
+    # 1) 내 입찰 수집 — Step 34 v5: collect_my_bids_via_menu 사용 (sync API와 동일)
     print("=" * 50)
     print("  1단계: 내 입찰 목록 수집")
-    my_bids = await collect_my_bids(headless)
+    my_bids = await collect_my_bids_via_menu(headless)
     print(f"  입찰 {len(my_bids)}건 수집")
 
     if not my_bids:
         return {"bids": [], "market": {}, "recommendations": []}
+
+    # 어댑터: via_menu는 productId를 반환하지 않으므로 rawText에서 추출
+    # rawText 패턴 예: "MODEL (12345)" → productId="12345"
+    import re as _re
+    for _b in my_bids:
+        if not _b.get("productId"):
+            _rt = _b.get("rawText", "") or ""
+            _m = _re.search(r"\((\d+)\)", _rt)
+            if _m:
+                _b["productId"] = _m.group(1)
 
     # 2) 시장 데이터 수집 (중복 상품 제거)
     product_ids = list(set(b["productId"] for b in my_bids if b.get("productId")))
