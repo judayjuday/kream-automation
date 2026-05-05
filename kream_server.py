@@ -5023,6 +5023,7 @@ def api_my_bids_sync():
                     "source": "sync",
                     "orderId": b.get("orderId", ""),
                     "nameKr": b.get("nameKr", ""),
+                    "rawText": b.get("rawText", ""),
                 } for b in bids],
                 "lastSync": datetime.now().strftime("%Y/%m/%d %H:%M"),
             }

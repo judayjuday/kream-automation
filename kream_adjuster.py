@@ -927,7 +927,9 @@ async def collect_my_bids_via_menu(headless=True) -> list:
                         const model = modelMatch ? modelMatch[1] : '';
                         
                         // 사이즈 (예: 260, 245, ONE SIZE, W215)
-                        const sizeMatch = rowText.match(/\b(W?\d{2,3}(?:\.\d)?|ONE SIZE)\b/);
+                        // Step34-v4: 사이즈는 단독 라인 + 다음 줄 '-' + 다음 줄 가격 컨텍스트로 식별.
+                        // \\n은 Python에서 LF로 escape되지 않도록 더블 백슬래시 필수.
+                        const sizeMatch = rowText.match(/\\n\\s*(\\d{2,3}(?:\\.\\d)?|ONE SIZE|W\\d{2,3}|[A-Z]{1,3})\\s*\\n\\s*-\\s*\\n\\s*[\\d,]+\\s*원/);
                         const size = sizeMatch ? sizeMatch[1] : '';
                         
                         // 판매희망가 (입찰가)
