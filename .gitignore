@@ -20,3 +20,8 @@ tunnel.log
 
 # Step 29 codegen capture (HAR 파일이 큼)
 codegen_capture/*.har
+.env.local
+
+# 백업 파일 (자동 생성, Git 관리 안 함)
+*.bak
+*.bak.*

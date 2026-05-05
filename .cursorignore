@@ -1,0 +1,47 @@
+# 인증/세션 (절대 인덱싱 금지)
+auth_state.json
+auth_state_kream.json
+auth_state_*.json
+.relogin_state.json
+
+# 환경변수
+.env
+.env.*
+*.env
+
+# 로그
+*.log
+server.log
+*.log.*
+
+# 백업 파일
+*.bak
+*.bak.*
+
+# 데이터베이스
+*.db
+*.db-shm
+*.db-wal
+
+# 큐/임시 데이터
+queue_data.json
+my_bids_local.json
+kream_prices.json
+batch_history.json
+alert_history.json
+
+# 테스트/디버그 덤프
+/tmp/kream_step34/
+v3_diagnostic_samples.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
