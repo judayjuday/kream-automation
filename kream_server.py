@@ -916,6 +916,38 @@ def safe_send_alert(subject, body, alert_type='info'):
     except Exception as e:
         print(f"[ALERT-EMAIL-FAIL] {e}", file=sys.stderr)
 
+    # Discord 4채널 발송 (이메일 실패와 무관하게 시도, 실패는 stderr만)
+    try:
+        from services.discord_notifier import send_for_alert_type
+        send_for_alert_type(alert_type, str(subject)[:256], str(body)[:4000])
+    except Exception as e:
+        print(f"[ALERT-DISCORD-FAIL] {e}", file=sys.stderr)
+
+
+@app.route("/api/discord/test", methods=["POST"])
+def api_discord_test():
+    """Discord 4채널 연결 테스트. 사장님 폰 알림 수신 확인용."""
+    try:
+        from services.discord_notifier import send_discord, get_loaded_channels, COLORS
+    except Exception as e:
+        return jsonify({"error": f"discord_notifier import 실패: {e}"}), 500
+
+    loaded = get_loaded_channels()
+    plan = {
+        "bids":   ("✅ KREAM 입찰 채널 테스트",  "이 채널은 입찰 갱신/가격 자동조정/경쟁자 침입 감지 알림용", COLORS["info"]),
+        "sales":  ("💰 KREAM 판매 채널 테스트",  "이 채널은 체결 감지/자동 재입찰 트리거 알림용", COLORS["success"]),
+        "errors": ("⚠️ KREAM 에러 채널 테스트",  "이 채널은 헬스체크 critical/sync 멈춤/자동 재로그인/자동 토글 차단 알림용", COLORS["error"]),
+        "daily":  ("📊 KREAM 일일 채널 테스트",  "이 채널은 매일 23:55 일일 리포트(매출/마진/체결률) 알림용", COLORS["warn"]),
+    }
+    results = {}
+    for ch, (title, body, color) in plan.items():
+        if ch not in loaded:
+            results[ch] = "missing_webhook"
+            continue
+        ok = send_discord(ch, title, body, color=color, dedupe=False)
+        results[ch] = "ok" if ok else "fail"
+    return jsonify(results)
+
 
 # ── Step 33-A: 자동 재로그인 인프라 ──
 def _check_session_and_relogin():
