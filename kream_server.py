@@ -8679,6 +8679,35 @@ def auto_rebid_after_sale(sale_records):
 
 # ── 자동 재입찰 API ──
 
+@app.route("/api/auto-rebid/dry-run", methods=["POST"])
+def api_auto_rebid_dry_run():
+    """판매 후 N시간 내 후보 시뮬레이션 (실제 입찰 X). Step 35."""
+    try:
+        from services.auto_rebid import run_dry_run, format_dry_run_for_discord
+
+        settings = {}
+        if SETTINGS_FILE.exists():
+            try:
+                settings = json.loads(SETTINGS_FILE.read_text())
+            except Exception:
+                pass
+
+        body = request.get_json(silent=True) or {}
+        hours = int(body.get("hours", 24))
+        result = run_dry_run(settings, hours=hours)
+
+        try:
+            msg = format_dry_run_for_discord(result)
+            safe_send_alert(subject="자동 재입찰 dry-run", body=msg, alert_type="info")
+        except Exception as de:
+            result["discord_error"] = str(de)
+
+        return jsonify({"ok": True, "result": result})
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route("/api/auto-rebid/status")
 def api_auto_rebid_status():
     """자동 재입찰 상태"""
@@ -8701,15 +8730,29 @@ def api_auto_rebid_status():
         today_failed = c.execute(
             "SELECT COUNT(*) FROM auto_rebid_log WHERE action='rebid_failed' "
             "AND date(executed_at)=date('now','localtime')").fetchone()[0]
+        today_dry_run = c.execute(
+            "SELECT COUNT(*) FROM auto_rebid_log WHERE action LIKE 'dry_run_%' "
+            "AND date(executed_at)=date('now','localtime')").fetchone()[0]
+        today_dry_run_go = c.execute(
+            "SELECT COUNT(*) FROM auto_rebid_log WHERE action='dry_run_GO' "
+            "AND date(executed_at)=date('now','localtime')").fetchone()[0]
         last_sale = c.execute("SELECT MAX(collected_at) FROM sales_history").fetchone()[0]
         conn.close()
 
         return jsonify({
             "ok": True,
             "enabled": settings.get("auto_rebid_enabled", False),
+            "dry_run": settings.get("auto_rebid_dry_run", True),
             "daily_max": settings.get("auto_rebid_daily_max", 20),
+            "min_profit": settings.get("auto_rebid_min_profit", 4000),
             "blacklist": settings.get("auto_rebid_blacklist", []),
-            "today": {"success": today_success, "skipped": today_skipped, "failed": today_failed},
+            "today": {
+                "success": today_success,
+                "skipped": today_skipped,
+                "failed": today_failed,
+                "dry_run": today_dry_run,
+                "dry_run_go": today_dry_run_go,
+            },
             "last_sale": last_sale,
         })
     except Exception as e:
@@ -8802,6 +8845,10 @@ def api_auto_rebid_history():
             query += " AND action LIKE 'skipped_%'"
         elif filter_type == "failed":
             query += " AND action='rebid_failed'"
+        elif filter_type == "dry_run":
+            query += " AND action LIKE 'dry_run_%'"
+        elif filter_type == "real":
+            query += " AND action NOT LIKE 'dry_run_%'"
         if from_date:
             query += " AND date(executed_at) >= ?"
             params.append(from_date)
