@@ -55,33 +55,58 @@ def lookup_price(model, size=None):
 
 
 def upsert_price(model, size, cny_price, **kwargs):
-    """등록/수정 (UNIQUE(model, size) 기반)."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
-        INSERT INTO model_price_book
-        (model, size, cny_price, category, brand, is_bulk_item, notes, source, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(model, size) DO UPDATE SET
-            cny_price = excluded.cny_price,
-            category = COALESCE(excluded.category, category),
-            brand = COALESCE(excluded.brand, brand),
-            is_bulk_item = excluded.is_bulk_item,
-            notes = COALESCE(excluded.notes, notes),
-            source = excluded.source,
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        (
-            model,
-            str(size) if size else None,
-            cny_price,
-            kwargs.get("category"),
-            kwargs.get("brand"),
-            int(kwargs.get("is_bulk_item", 0) or 0),
-            kwargs.get("notes"),
-            kwargs.get("source", "사장님 직접 입력"),
-        ),
+    """등록/수정.
+
+    NULL-safe 처리: SQLite UNIQUE는 NULL을 서로 다른 값으로 취급하므로
+    ON CONFLICT(model, size)가 size=NULL 케이스를 못 잡음.
+    → 명시적으로 SELECT → UPDATE/INSERT 분기.
+    """
+    size_v = str(size) if size else None
+    params = (
+        kwargs.get("category"),
+        kwargs.get("brand"),
+        int(kwargs.get("is_bulk_item", 0) or 0),
+        kwargs.get("notes"),
+        kwargs.get("source", "사장님 직접 입력"),
+        cny_price,
     )
+
+    conn = sqlite3.connect(DB_PATH)
+    if size_v is None:
+        existing = conn.execute(
+            "SELECT id FROM model_price_book WHERE model = ? AND size IS NULL",
+            (model,),
+        ).fetchone()
+    else:
+        existing = conn.execute(
+            "SELECT id FROM model_price_book WHERE model = ? AND size = ?",
+            (model, size_v),
+        ).fetchone()
+
+    if existing:
+        conn.execute(
+            """
+            UPDATE model_price_book
+            SET cny_price = ?,
+                category = COALESCE(?, category),
+                brand = COALESCE(?, brand),
+                is_bulk_item = ?,
+                notes = COALESCE(?, notes),
+                source = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (cny_price, params[0], params[1], params[2], params[3], params[4], existing[0]),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO model_price_book
+            (model, size, cny_price, category, brand, is_bulk_item, notes, source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (model, size_v, cny_price, params[0], params[1], params[2], params[3], params[4]),
+        )
     conn.commit()
     conn.close()
 

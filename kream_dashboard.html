@@ -415,6 +415,12 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     </div>
     <div class="nav-group">
+      <div class="nav-label">원가</div>
+      <div class="nav-item" data-tab="price_book" onclick="showTab('price_book')">
+        <span class="nav-icon">💰</span> 단가표
+      </div>
+    </div>
+    <div class="nav-group">
       <div class="nav-label">도구</div>
       <div class="nav-item" data-tab="new_bid" onclick="showTab('new_bid')">
         <span class="nav-icon">🆕</span> 신규 입찰
@@ -808,6 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-market" class="tab-view" data-tab-title="시장 모니터링"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-cleanup" class="tab-view" data-tab-title="입찰 정리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-settings" class="tab-view" data-tab-title="환율/수수료"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-price_book" class="tab-view" data-tab-title="단가표"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
   </div>

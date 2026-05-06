@@ -1,0 +1,405 @@
+      <div id="tab-price_book" class="tab-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 0; border-bottom:1px solid #e5e7eb;">
+          <span style="font-size:14px; color:#6b7280;">단가표 (Step 37/38) — 자주 다루는 모델 마스터 원가</span>
+          <button class="btn btn-primary" onclick="pbOpenModal()" style="font-size:13px">+ 신규 모델 등록</button>
+        </div>
+
+        <!-- 요약 카드 4개 -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:16px">
+          <div class="card" style="padding:12px">
+            <div style="font-size:12px; color:var(--text3)">등록 모델 수</div>
+            <div id="pb-stat-total" style="font-size:24px; font-weight:700; margin-top:4px">-</div>
+          </div>
+          <div class="card" style="padding:12px">
+            <div style="font-size:12px; color:var(--text3)">대량 모델 (⭐)</div>
+            <div id="pb-stat-bulk" style="font-size:24px; font-weight:700; margin-top:4px">-</div>
+          </div>
+          <div class="card" style="padding:12px">
+            <div style="font-size:12px; color:var(--text3)">마지막 갱신</div>
+            <div id="pb-stat-updated" style="font-size:13px; font-weight:600; margin-top:4px">-</div>
+          </div>
+          <div class="card" style="padding:12px">
+            <div style="font-size:12px; color:var(--text3)">NO_COST 후보 (자동 재입찰)</div>
+            <div id="pb-stat-nocost" style="font-size:24px; font-weight:700; margin-top:4px; color:var(--danger)">-</div>
+          </div>
+        </div>
+
+        <!-- 검색/필터 바 -->
+        <div class="card" style="padding:12px; margin-bottom:12px">
+          <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center">
+            <input id="pb-search" type="text" placeholder="모델 검색 (부분 일치)"
+                   oninput="pbRender()" style="flex:1; min-width:180px; padding:6px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+            <select id="pb-filter-cat" onchange="pbRender()" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+              <option value="">전체 카테고리</option>
+              <option value="신발">신발</option>
+              <option value="가방">가방</option>
+              <option value="의류">의류</option>
+              <option value="기타">기타</option>
+            </select>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; cursor:pointer">
+              <input type="checkbox" id="pb-filter-bulk" onchange="pbRender()"> ⭐ 대량만
+            </label>
+            <button class="btn btn-outline" onclick="pbReload()" style="font-size:12px">🔄 새로고침</button>
+          </div>
+        </div>
+
+        <!-- 메인 테이블 -->
+        <div class="card" style="padding:0; margin-bottom:16px">
+          <div style="overflow-x:auto">
+            <table style="width:100%">
+              <thead>
+                <tr>
+                  <th style="width:40px">⭐</th>
+                  <th>모델</th>
+                  <th>사이즈</th>
+                  <th style="text-align:right">위안 ¥</th>
+                  <th style="text-align:right">원화 환산</th>
+                  <th>카테고리</th>
+                  <th>브랜드</th>
+                  <th>비고</th>
+                  <th>출처</th>
+                  <th>갱신</th>
+                  <th style="width:80px">동작</th>
+                </tr>
+              </thead>
+              <tbody id="pb-tbody">
+                <tr><td colspan="11" class="text-muted" style="padding:24px; text-align:center">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- NO_COST / size_mismatch 후보 패널 -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title">
+            <span class="icon">⚠️</span> 단가표 보강 후보 (자동 재입찰 NO_COST 분석)
+          </div>
+          <div style="font-size:12px; color:var(--text3); margin-bottom:8px">최근 30일 판매건 중 단가표/bid_cost에 없는 모델</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+            <div>
+              <div style="font-size:13px; font-weight:600; margin-bottom:6px">🆕 등록 안 된 모델 (model_missing)</div>
+              <div id="pb-nocost-missing" style="font-size:13px"><span class="text-muted">로딩 중...</span></div>
+            </div>
+            <div>
+              <div style="font-size:13px; font-weight:600; margin-bottom:6px">📐 사이즈 불일치 (size_mismatch)</div>
+              <div id="pb-nocost-mismatch" style="font-size:13px"><span class="text-muted">로딩 중...</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 모달: 신규 등록 / 수정 -->
+        <div id="pb-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:9999; align-items:center; justify-content:center">
+          <div style="background:#fff; border-radius:8px; padding:20px; min-width:420px; max-width:560px; width:92%; max-height:90vh; overflow-y:auto">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+              <span id="pb-modal-title" style="font-size:16px; font-weight:700">신규 모델 등록</span>
+              <button onclick="pbCloseModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#6b7280">×</button>
+            </div>
+
+            <div style="display:grid; gap:10px">
+              <label style="font-size:13px">
+                <span style="color:#dc2626">*</span> 모델
+                <input id="pb-form-model" type="text" placeholder="예: IX7693"
+                       style="width:100%; padding:6px 10px; margin-top:4px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+              </label>
+              <label style="font-size:13px">
+                사이즈 <span class="text-muted">(비우면 "전 사이즈" 적용)</span>
+                <input id="pb-form-size" type="text" placeholder="예: ONE SIZE / 235 / W250 (또는 비움)"
+                       style="width:100%; padding:6px 10px; margin-top:4px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+              </label>
+              <label style="font-size:13px">
+                <span style="color:#dc2626">*</span> 위안 단가 ¥
+                <input id="pb-form-cny" type="number" step="0.01" placeholder="205"
+                       oninput="pbUpdateKrw()"
+                       style="width:100%; padding:6px 10px; margin-top:4px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+                <div id="pb-form-krw" style="font-size:12px; color:var(--text3); margin-top:4px"></div>
+              </label>
+              <label style="font-size:13px">
+                카테고리
+                <select id="pb-form-category" style="width:100%; padding:6px 10px; margin-top:4px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+                  <option value="">선택...</option>
+                  <option value="신발">신발</option>
+                  <option value="가방">가방</option>
+                  <option value="의류">의류</option>
+                  <option value="기타">기타</option>
+                </select>
+              </label>
+              <label style="font-size:13px">
+                브랜드
+                <input id="pb-form-brand" type="text" list="pb-brand-list" placeholder="예: Onitsuka Tiger"
+                       style="width:100%; padding:6px 10px; margin-top:4px; border:1px solid #d1d5db; border-radius:6px; font-size:13px">
+                <datalist id="pb-brand-list"></datalist>
+              </label>
+              <label style="font-size:13px; display:inline-flex; align-items:center; gap:6px">
+                <input id="pb-form-bulk" type="checkbox"> ⭐ 대량 구매 모델 (is_bulk_item)
+              </label>
+              <label style="font-size:13px">
+                비고 (notes)
+                <textarea id="pb-form-notes" rows="2" placeholder="예: 대량 구매 모델 / W215~W255 전 사이즈 동일"
+                          style="width:100%; padding:6px 10px; margin-top:4px; border:1px solid #d1d5db; border-radius:6px; font-size:13px; resize:vertical"></textarea>
+              </label>
+            </div>
+
+            <div id="pb-form-msg" style="margin-top:10px; font-size:13px"></div>
+
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px">
+              <button class="btn btn-outline" onclick="pbCloseModal()" style="font-size:13px">취소</button>
+              <button id="pb-form-submit" class="btn btn-primary" onclick="pbSubmit()" style="font-size:13px">저장</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+      (function () {
+        if (window.__pbInit) return;
+        window.__pbInit = true;
+
+        let pbItems = [];
+        let pbRate = 217;  // settings에서 보강
+
+        async function pbFetchSettings() {
+          try {
+            const r = await fetch('/api/settings').then(x => x.json());
+            const s = r && (r.settings || r) || {};
+            if (s.exchange_rate) pbRate = Number(s.exchange_rate) || 217;
+          } catch (e) {}
+        }
+
+        async function pbReload() {
+          await pbFetchSettings();
+          const r = await fetch('/api/price-book/list').then(x => x.json()).catch(() => ({ items: [] }));
+          pbItems = (r && r.items) || [];
+          pbRefreshSummary();
+          pbRefreshBrandList();
+          pbRender();
+          pbReloadNoCost();
+        }
+        window.pbReload = pbReload;
+
+        function pbRefreshSummary() {
+          const total = pbItems.length;
+          const bulk = pbItems.filter(i => i.is_bulk_item).length;
+          let latest = '-';
+          if (pbItems.length) {
+            const sorted = [...pbItems].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+            latest = sorted[0].updated_at || '-';
+          }
+          const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+          setEl('pb-stat-total', total);
+          setEl('pb-stat-bulk', bulk);
+          setEl('pb-stat-updated', latest);
+        }
+
+        function pbRefreshBrandList() {
+          const dl = document.getElementById('pb-brand-list');
+          if (!dl) return;
+          const brands = [...new Set(pbItems.map(i => i.brand).filter(Boolean))];
+          dl.innerHTML = brands.map(b => `<option value="${pbEsc(b)}">`).join('');
+        }
+
+        function pbEsc(s) {
+          return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function pbRender() {
+          const tbody = document.getElementById('pb-tbody');
+          if (!tbody) return;
+          const q = (document.getElementById('pb-search').value || '').toLowerCase();
+          const cat = document.getElementById('pb-filter-cat').value;
+          const bulkOnly = document.getElementById('pb-filter-bulk').checked;
+
+          let rows = pbItems.slice();
+          if (q) rows = rows.filter(r => (r.model || '').toLowerCase().includes(q));
+          if (cat) rows = rows.filter(r => r.category === cat);
+          if (bulkOnly) rows = rows.filter(r => r.is_bulk_item);
+
+          if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="padding:24px; text-align:center">표시할 모델 없음</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = rows.map(r => {
+            const sizeDisp = r.size == null || r.size === '' ? '<span class="text-muted">전 사이즈</span>' : pbEsc(r.size);
+            const krw = Math.round(Number(r.cny_price || 0) * pbRate * 1.03).toLocaleString();
+            const star = r.is_bulk_item
+              ? `<span title="대량 모델" style="cursor:pointer; font-size:16px" onclick="pbToggleBulk(${r.id}, 0)">⭐</span>`
+              : `<span title="대량 모델로 표시" style="cursor:pointer; font-size:16px; opacity:.3" onclick="pbToggleBulk(${r.id}, 1)">☆</span>`;
+            const json = pbEsc(JSON.stringify(r));
+            return `<tr>
+              <td>${star}</td>
+              <td><b>${pbEsc(r.model)}</b></td>
+              <td>${sizeDisp}</td>
+              <td style="text-align:right">¥${Number(r.cny_price).toLocaleString()}</td>
+              <td style="text-align:right; color:var(--text3); font-size:12px">≈ ${krw}원</td>
+              <td>${pbEsc(r.category) || '-'}</td>
+              <td>${pbEsc(r.brand) || '-'}</td>
+              <td style="font-size:12px; max-width:240px; white-space:normal">${pbEsc(r.notes) || ''}</td>
+              <td style="font-size:12px; color:var(--text3)">${pbEsc(r.source) || '-'}</td>
+              <td style="font-size:12px; color:var(--text3)">${pbEsc(r.updated_at) || '-'}</td>
+              <td><button class="btn btn-outline" style="font-size:11px; padding:2px 8px" onclick='pbOpenModal(${json})'>수정</button></td>
+            </tr>`;
+          }).join('');
+        }
+        window.pbRender = pbRender;
+
+        function pbUpdateKrw() {
+          const cny = Number(document.getElementById('pb-form-cny').value) || 0;
+          const krw = Math.round(cny * pbRate * 1.03);
+          const el = document.getElementById('pb-form-krw');
+          if (el) el.textContent = cny ? `≈ 원화 환산 ${krw.toLocaleString()}원 (환율 ${pbRate}, ×1.03)` : '';
+        }
+        window.pbUpdateKrw = pbUpdateKrw;
+
+        function pbOpenModal(row) {
+          row = row || null;
+          document.getElementById('pb-modal-title').textContent = row ? `수정: ${row.model}` : '신규 모델 등록';
+          document.getElementById('pb-form-msg').textContent = '';
+          document.getElementById('pb-form-model').value = row ? (row.model || '') : '';
+          document.getElementById('pb-form-model').readOnly = !!row;
+          document.getElementById('pb-form-size').value = row ? (row.size || '') : '';
+          document.getElementById('pb-form-size').readOnly = !!row;
+          document.getElementById('pb-form-cny').value = row ? (row.cny_price || '') : '';
+          document.getElementById('pb-form-category').value = row ? (row.category || '') : '';
+          document.getElementById('pb-form-brand').value = row ? (row.brand || '') : '';
+          document.getElementById('pb-form-bulk').checked = row ? !!row.is_bulk_item : false;
+          document.getElementById('pb-form-notes').value = row ? (row.notes || '') : '';
+          pbUpdateKrw();
+          document.getElementById('pb-modal').style.display = 'flex';
+        }
+        window.pbOpenModal = pbOpenModal;
+
+        function pbCloseModal() {
+          document.getElementById('pb-modal').style.display = 'none';
+        }
+        window.pbCloseModal = pbCloseModal;
+
+        async function pbSubmit() {
+          const model = document.getElementById('pb-form-model').value.trim();
+          const sizeRaw = document.getElementById('pb-form-size').value.trim();
+          const size = sizeRaw === '' ? null : sizeRaw;
+          const cny = parseFloat(document.getElementById('pb-form-cny').value);
+          const msgEl = document.getElementById('pb-form-msg');
+
+          if (!model) { msgEl.innerHTML = '<span style="color:#dc2626">모델 필수</span>'; return; }
+          if (!cny || cny <= 0) { msgEl.innerHTML = '<span style="color:#dc2626">위안 단가 필수 (양수)</span>'; return; }
+
+          const payload = {
+            model, size, cny_price: cny,
+            category: document.getElementById('pb-form-category').value || null,
+            brand: document.getElementById('pb-form-brand').value.trim() || null,
+            is_bulk_item: document.getElementById('pb-form-bulk').checked ? 1 : 0,
+            notes: document.getElementById('pb-form-notes').value.trim() || null,
+            source: '사장님 직접 입력',
+          };
+          msgEl.textContent = '저장 중...';
+          try {
+            const r = await fetch('/api/price-book/upsert', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }).then(x => x.json());
+            if (!r.ok) throw new Error(r.error || '저장 실패');
+            msgEl.innerHTML = '<span style="color:#16a34a">저장 완료</span>';
+            await pbReload();
+            setTimeout(pbCloseModal, 600);
+          } catch (e) {
+            msgEl.innerHTML = `<span style="color:#dc2626">${pbEsc(e.message)}</span>`;
+          }
+        }
+        window.pbSubmit = pbSubmit;
+
+        async function pbToggleBulk(id, newVal) {
+          const row = pbItems.find(i => i.id === id);
+          if (!row) return;
+          const payload = {
+            model: row.model, size: row.size, cny_price: row.cny_price,
+            category: row.category, brand: row.brand,
+            is_bulk_item: newVal, notes: row.notes,
+            source: '사장님 직접 입력',
+          };
+          try {
+            const r = await fetch('/api/price-book/upsert', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }).then(x => x.json());
+            if (!r.ok) throw new Error(r.error || '실패');
+            await pbReload();
+          } catch (e) {
+            alert('⭐ 토글 실패: ' + e.message);
+          }
+        }
+        window.pbToggleBulk = pbToggleBulk;
+
+        async function pbReloadNoCost() {
+          const m = document.getElementById('pb-nocost-missing');
+          const s = document.getElementById('pb-nocost-mismatch');
+          if (!m || !s) return;
+          try {
+            const r = await fetch('/api/auto-rebid/no-cost-analysis?hours=720').then(x => x.json());
+            if (!r.ok) throw new Error(r.error || '실패');
+
+            const stat = document.getElementById('pb-stat-nocost');
+            if (stat) stat.textContent = (r.summary.model_missing_count || 0) + (r.summary.size_mismatch_count || 0);
+
+            const missing = r.details.model_size_missing || [];
+            const mismatch = r.details.size_mismatch || [];
+
+            if (!missing.length) {
+              m.innerHTML = '<span class="text-muted">없음</span>';
+            } else {
+              const grouped = {};
+              missing.forEach(x => {
+                const k = `${x.model}|${x.size}`;
+                grouped[k] = (grouped[k] || 0) + 1;
+              });
+              m.innerHTML = Object.entries(grouped).map(([k, cnt]) => {
+                const [model, size] = k.split('|');
+                const json = pbEsc(JSON.stringify({ model, size, cny_price: '' }));
+                return `<div style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center">
+                  <span><b>${pbEsc(model)}</b> / ${pbEsc(size)} <span class="text-muted">(${cnt}건 판매)</span></span>
+                  <button class="btn btn-primary" style="font-size:11px; padding:2px 8px" onclick='pbOpenModal(${json})'>+ 단가표에 추가</button>
+                </div>`;
+              }).join('');
+            }
+
+            if (!mismatch.length) {
+              s.innerHTML = '<span class="text-muted">없음</span>';
+            } else {
+              s.innerHTML = mismatch.map(x => `
+                <div style="padding:6px 8px; border:1px solid #fde68a; background:#fffbeb; border-radius:6px; margin-bottom:4px">
+                  <div><b>${pbEsc(x.model)}</b> / 판매 size: <code>${pbEsc(x.sale_size)}</code></div>
+                  <div style="font-size:12px; color:var(--text3); margin-top:2px">
+                    bid_cost 등록 size: ${(x.registered_sizes || []).map(z => `<code>${pbEsc(z)}</code>`).join(', ') || '-'}
+                  </div>
+                  <div style="font-size:11px; color:#92400e; margin-top:2px">
+                    ⚠️ 가방 등 전 사이즈 동일 가격이면 단가표에 size 비우고 등록 (= GO_FUZZY → GO 승급)
+                  </div>
+                </div>
+              `).join('');
+            }
+          } catch (e) {
+            m.innerHTML = `<span style="color:#dc2626">로드 실패: ${pbEsc(e.message)}</span>`;
+            s.innerHTML = '';
+          }
+        }
+
+        // 탭 진입 시 자동 로드
+        if (typeof window._onTabShown === 'function') {
+          const orig = window._onTabShown;
+          window._onTabShown = function (id) {
+            try { orig(id); } catch (e) {}
+            if (id === 'price_book' && !window.__pbLoaded) {
+              window.__pbLoaded = true;
+              pbReload();
+            }
+          };
+        } else {
+          // 폴백: 즉시 로드 (현재 활성 탭이 price_book인 경우)
+          if (document.getElementById('tab-price_book') &&
+              document.getElementById('tab-price_book').classList.contains('active')) {
+            pbReload();
+          }
+        }
+      })();
+      </script>

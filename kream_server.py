@@ -707,19 +707,34 @@ def _init_model_price_book_table():
     c.execute("CREATE INDEX IF NOT EXISTS idx_pb_model ON model_price_book(model)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_pb_bulk ON model_price_book(is_bulk_item)")
 
-    # 시드 데이터 (사장님 제공) — INSERT OR IGNORE: 이미 있으면 무시
+    # 시드 데이터 (사장님 제공) — NULL-safe 존재 체크 후 INSERT.
+    # SQLite UNIQUE 제약은 NULL을 서로 다른 값으로 취급하므로
+    # INSERT OR IGNORE만으로는 size=NULL 시드의 중복을 막지 못함.
     seeds = [
         ("IX7693", "ONE SIZE", 205, "가방", None, 1, "대량 구매 모델", "사장님 직접 입력"),
         ("IX7694", "ONE SIZE", 205, "가방", None, 1, "대량 구매 모델", "사장님 직접 입력"),
         ("JQ4110", None, 370, "가방", None, 1,
          "대량 구매 모델 / W215~W255 전 사이즈 동일", "사장님 직접 입력"),
     ]
-    c.executemany(
-        """INSERT OR IGNORE INTO model_price_book
-           (model, size, cny_price, category, brand, is_bulk_item, notes, source)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        seeds,
-    )
+    for seed in seeds:
+        model, size = seed[0], seed[1]
+        if size is None:
+            cnt = c.execute(
+                "SELECT COUNT(*) FROM model_price_book WHERE model = ? AND size IS NULL",
+                (model,),
+            ).fetchone()[0]
+        else:
+            cnt = c.execute(
+                "SELECT COUNT(*) FROM model_price_book WHERE model = ? AND size = ?",
+                (model, size),
+            ).fetchone()[0]
+        if cnt == 0:
+            c.execute(
+                """INSERT INTO model_price_book
+                   (model, size, cny_price, category, brand, is_bulk_item, notes, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                seed,
+            )
     conn.commit()
     conn.close()
 
