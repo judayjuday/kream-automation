@@ -683,6 +683,50 @@ def _init_auto_rebid_log_table():
 _init_auto_rebid_log_table()
 
 
+def _init_model_price_book_table():
+    """model_price_book — 모델별 마스터 단가표 (Step 37).
+
+    size=NULL 레코드는 해당 모델 모든 사이즈에 동일 단가 적용 (가방류 등).
+    UNIQUE(model, size) 제약, INSERT OR IGNORE로 시드 안전.
+    """
+    conn = sqlite3.connect(str(PRICE_DB))
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS model_price_book (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model TEXT NOT NULL,
+        size TEXT,
+        cny_price REAL NOT NULL,
+        category TEXT,
+        brand TEXT,
+        is_bulk_item INTEGER DEFAULT 0,
+        notes TEXT,
+        source TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(model, size)
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_pb_model ON model_price_book(model)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_pb_bulk ON model_price_book(is_bulk_item)")
+
+    # 시드 데이터 (사장님 제공) — INSERT OR IGNORE: 이미 있으면 무시
+    seeds = [
+        ("IX7693", "ONE SIZE", 205, "가방", None, 1, "대량 구매 모델", "사장님 직접 입력"),
+        ("IX7694", "ONE SIZE", 205, "가방", None, 1, "대량 구매 모델", "사장님 직접 입력"),
+        ("JQ4110", None, 370, "가방", None, 1,
+         "대량 구매 모델 / W215~W255 전 사이즈 동일", "사장님 직접 입력"),
+    ]
+    c.executemany(
+        """INSERT OR IGNORE INTO model_price_book
+           (model, size, cny_price, category, brand, is_bulk_item, notes, source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        seeds,
+    )
+    conn.commit()
+    conn.close()
+
+
+_init_model_price_book_table()
+
+
 # ── 조건부 입찰 (conditional_bids) DB ──
 def _init_conditional_bids_table():
     conn = sqlite3.connect(str(PRICE_DB))
@@ -8678,6 +8722,61 @@ def auto_rebid_after_sale(sale_records):
 
 
 # ── 자동 재입찰 API ──
+
+@app.route("/api/price-book/list", methods=["GET"])
+def api_price_book_list():
+    """단가표 전체 조회 (Step 37). bulk_only=1 → is_bulk_item=1만."""
+    try:
+        from services.price_book import list_all
+        bulk_only = request.args.get("bulk_only", "0") in ("1", "true", "True")
+        items = list_all(bulk_only=bulk_only)
+        return jsonify({"ok": True, "items": items, "count": len(items)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/price-book/lookup", methods=["GET"])
+def api_price_book_lookup():
+    """단가표 조회 (model+size). size 생략 시 size IS NULL 매칭."""
+    try:
+        from services.price_book import lookup_price
+        model = request.args.get("model", "").strip()
+        size = request.args.get("size")
+        if not model:
+            return jsonify({"ok": False, "error": "model required"}), 400
+        if size is not None:
+            size = size.strip() or None
+        row = lookup_price(model, size)
+        return jsonify({"ok": True, "matched": bool(row), "row": row})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/price-book/upsert", methods=["POST"])
+def api_price_book_upsert():
+    """단가표 등록/수정. body: {model, size, cny_price, category, brand, is_bulk_item, notes, source}."""
+    try:
+        from services.price_book import upsert_price, lookup_price
+        body = request.get_json(silent=True) or {}
+        model = (body.get("model") or "").strip()
+        cny_price = body.get("cny_price")
+        if not model or cny_price in (None, ""):
+            return jsonify({"ok": False, "error": "model and cny_price required"}), 400
+        size = body.get("size")
+        if isinstance(size, str):
+            size = size.strip() or None
+        upsert_price(
+            model, size, float(cny_price),
+            category=body.get("category"),
+            brand=body.get("brand"),
+            is_bulk_item=int(body.get("is_bulk_item", 0) or 0),
+            notes=body.get("notes"),
+            source=body.get("source", "사장님 직접 입력"),
+        )
+        return jsonify({"ok": True, "row": lookup_price(model, size)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.route("/api/auto-rebid/no-cost-analysis", methods=["GET"])
 def api_auto_rebid_no_cost_analysis():

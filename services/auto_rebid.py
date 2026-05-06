@@ -71,16 +71,25 @@ def has_active_bid(model, size):
 
 
 def get_bid_cost(model, size):
-    """bid_cost 매칭. Step 36: 1차 model+size 정확, 2차 model만 fuzzy.
+    """원가 매칭. Step 37: 폴백 체인 확장.
 
-    리턴 dict에 match_type ∈ {'exact', 'fuzzy_size'} 포함.
+    1차: bid_cost (model, size) 정확
+    2차: model_price_book (model, size) 정확 또는 (model, NULL = 전 사이즈)
+    3차: bid_cost (model만) fuzzy
+
+    리턴 dict의 match_type:
+      bid_cost_exact / price_book_exact / price_book_all_sizes / bid_cost_fuzzy
+    price_book 매칭 시 exchange_rate/overseas_shipping/other_costs는 None →
+    calc_expected_profit이 settings 기본값으로 보강.
     """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
+    # 1차: bid_cost 정확
     row = conn.execute(
         """
-        SELECT cny_price, exchange_rate, overseas_shipping, other_costs, size, 'exact' as match_type
+        SELECT cny_price, exchange_rate, overseas_shipping, other_costs, size,
+               'bid_cost_exact' as match_type
         FROM bid_cost
         WHERE model = ? AND size = ?
         ORDER BY rowid DESC
@@ -88,19 +97,41 @@ def get_bid_cost(model, size):
         """,
         (model, str(size)),
     ).fetchone()
+    if row:
+        conn.close()
+        return dict(row)
+    conn.close()
 
-    if not row:
-        row = conn.execute(
-            """
-            SELECT cny_price, exchange_rate, overseas_shipping, other_costs, size, 'fuzzy_size' as match_type
-            FROM bid_cost
-            WHERE model = ?
-            ORDER BY rowid DESC
-            LIMIT 1
-            """,
-            (model,),
-        ).fetchone()
+    # 2차: model_price_book
+    try:
+        from services.price_book import lookup_price
+        pb = lookup_price(model, size)
+    except Exception:
+        pb = None
+    if pb:
+        return {
+            "cny_price": pb["cny_price"],
+            "exchange_rate": None,
+            "overseas_shipping": None,
+            "other_costs": None,
+            "size": size if pb["match_type"] == "exact" else None,
+            "match_type": f"price_book_{pb['match_type']}",
+        }
 
+    # 3차: bid_cost fuzzy (model만)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        """
+        SELECT cny_price, exchange_rate, overseas_shipping, other_costs, size,
+               'bid_cost_fuzzy' as match_type
+        FROM bid_cost
+        WHERE model = ?
+        ORDER BY rowid DESC
+        LIMIT 1
+        """,
+        (model,),
+    ).fetchone()
     conn.close()
     return dict(row) if row else None
 
@@ -110,13 +141,18 @@ def calc_settlement(price):
     return int(price * (1 - 0.06 * 1.1) - 2500)
 
 
-def calc_expected_profit(rebid_price, cost_row):
-    """원가 없으면 None 반환 (절대 규칙 #1)."""
+def calc_expected_profit(rebid_price, cost_row, settings=None):
+    """원가 없으면 None 반환 (절대 규칙 #1).
+
+    Step 37: cost_row의 환율/배송비가 None이면 settings 기본값으로 보강
+    (price_book 폴백은 cost_row에 환율/배송비가 없음).
+    """
     if not cost_row or not cost_row.get("cny_price"):
         return None
+    settings = settings or {}
     cny = cost_row["cny_price"]
-    rate = cost_row.get("exchange_rate") or 217
-    shipping = cost_row.get("overseas_shipping") or 8000
+    rate = cost_row.get("exchange_rate") or settings.get("exchange_rate") or 217
+    shipping = cost_row.get("overseas_shipping") or settings.get("overseas_shipping") or 8000
     other = cost_row.get("other_costs") or 0
     cost_krw = int(cny * rate * 1.03) + shipping + other
     return calc_settlement(rebid_price) - cost_krw
@@ -168,7 +204,7 @@ def evaluate_candidate(cand, settings, conn):
     match_type = cost_row.get("match_type")
     matched_cost_size = cost_row.get("size")
     rebid_price = sale_price
-    profit = calc_expected_profit(rebid_price, cost_row)
+    profit = calc_expected_profit(rebid_price, cost_row, settings)
     min_profit = int(settings.get("auto_rebid_min_profit", 4000))
 
     if profit is None:
@@ -178,7 +214,9 @@ def evaluate_candidate(cand, settings, conn):
         return {"status": "LOW", "rebid_price": rebid_price, "expected_profit": profit,
                 "match_type": match_type, "matched_cost_size": matched_cost_size}
 
-    status = "GO_FUZZY" if match_type == "fuzzy_size" else "GO"
+    # GO_FUZZY: size를 정확히 매칭하지 못한 케이스 (사장님 검증 필요)
+    fuzzy_set = {"bid_cost_fuzzy", "price_book_all_sizes"}
+    status = "GO_FUZZY" if match_type in fuzzy_set else "GO"
     return {"status": status, "rebid_price": rebid_price, "expected_profit": profit,
             "match_type": match_type, "matched_cost_size": matched_cost_size}
 
