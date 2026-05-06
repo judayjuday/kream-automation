@@ -25,23 +25,30 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = str(BASE_DIR / "price_history.db")
 MY_BIDS_PATH = BASE_DIR / "my_bids_local.json"
 
+# Step 36 정책 상수
+COOLDOWN_HOURS = 6  # KREAM 운송장 정시 자동발급 + 취소 불가 → 짧게 가능
+SHIP_STATUS_OK = "판매자 발송완료"  # 정상 거래만 후보 (테스트/미발송 자동 제외)
+DEFAULT_DAILY_MAX = 10  # 보수적 기본값 (settings에 명시값 있으면 그게 우선)
+
 
 def get_rebid_candidates(hours=24):
     """sales_history 최근 N시간 판매건 → 후보 list[dict].
 
     trade_date / collected_at 둘 중 더 최근값 기준으로 필터.
+    Step 36: ship_status='판매자 발송완료'만 (정상 거래, 테스트/미발송 자동 제외).
     """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     rows = conn.execute(
         """
-        SELECT order_id, product_id, model, size, sale_price, trade_date, collected_at
+        SELECT order_id, product_id, model, size, sale_price, trade_date, collected_at, ship_status
         FROM sales_history
         WHERE COALESCE(trade_date, collected_at) >= ?
+          AND ship_status = ?
         ORDER BY COALESCE(trade_date, collected_at) DESC
         """,
-        (cutoff,),
+        (cutoff, SHIP_STATUS_OK),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -64,12 +71,16 @@ def has_active_bid(model, size):
 
 
 def get_bid_cost(model, size):
-    """bid_cost에서 model+size 가장 최근 1건 (fuzzy)."""
+    """bid_cost 매칭. Step 36: 1차 model+size 정확, 2차 model만 fuzzy.
+
+    리턴 dict에 match_type ∈ {'exact', 'fuzzy_size'} 포함.
+    """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+
     row = conn.execute(
         """
-        SELECT cny_price, exchange_rate, overseas_shipping, other_costs
+        SELECT cny_price, exchange_rate, overseas_shipping, other_costs, size, 'exact' as match_type
         FROM bid_cost
         WHERE model = ? AND size = ?
         ORDER BY rowid DESC
@@ -77,6 +88,19 @@ def get_bid_cost(model, size):
         """,
         (model, str(size)),
     ).fetchone()
+
+    if not row:
+        row = conn.execute(
+            """
+            SELECT cny_price, exchange_rate, overseas_shipping, other_costs, size, 'fuzzy_size' as match_type
+            FROM bid_cost
+            WHERE model = ?
+            ORDER BY rowid DESC
+            LIMIT 1
+            """,
+            (model,),
+        ).fetchone()
+
     conn.close()
     return dict(row) if row else None
 
@@ -98,13 +122,19 @@ def calc_expected_profit(rebid_price, cost_row):
     return calc_settlement(rebid_price) - cost_krw
 
 
-def check_cooldown(conn, model, size, hours=24):
-    """auto_rebid_log에서 동일 model+size 24h 내 시도(dry-run/실행 모두) 존재 여부."""
+def check_cooldown(conn, model, size, hours=None):
+    """auto_rebid_log에서 동일 model+size 쿨다운 내 '실제' 재입찰 시도 존재 여부.
+
+    Step 36: dry_run_* action은 쿨다운 카운트에서 제외 (실제 실행만).
+    """
+    if hours is None:
+        hours = COOLDOWN_HOURS
     cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     cnt = conn.execute(
         """
         SELECT COUNT(*) FROM auto_rebid_log
         WHERE model = ? AND size = ? AND executed_at >= ?
+          AND action NOT LIKE 'dry_run_%'
         """,
         (model, str(size), cutoff),
     ).fetchone()[0]
@@ -114,38 +144,49 @@ def check_cooldown(conn, model, size, hours=24):
 def evaluate_candidate(cand, settings, conn):
     """후보 1건 평가 → status 반환.
 
-    status: GO / LOW / NO_COST / ACTIVE_BID_EXISTS / COOLDOWN
+    status: GO / GO_FUZZY / LOW / NO_COST / ACTIVE_BID_EXISTS / COOLDOWN
+      · GO_FUZZY: 마진 통과했지만 bid_cost를 size fuzzy로 매칭한 케이스
+        → 사장님이 size 매칭 정확도 점검 후 등록 보강 권장
     """
     model = cand["model"]
     size = cand["size"]
     sale_price = cand["sale_price"]
 
     if has_active_bid(model, size):
-        return {"status": "ACTIVE_BID_EXISTS", "rebid_price": None, "expected_profit": None}
+        return {"status": "ACTIVE_BID_EXISTS", "rebid_price": None, "expected_profit": None,
+                "match_type": None, "matched_cost_size": None}
 
-    if check_cooldown(conn, model, size, hours=24):
-        return {"status": "COOLDOWN", "rebid_price": None, "expected_profit": None}
+    if check_cooldown(conn, model, size):
+        return {"status": "COOLDOWN", "rebid_price": None, "expected_profit": None,
+                "match_type": None, "matched_cost_size": None}
 
     cost_row = get_bid_cost(model, size)
     if not cost_row:
-        return {"status": "NO_COST", "rebid_price": sale_price, "expected_profit": None}
+        return {"status": "NO_COST", "rebid_price": sale_price, "expected_profit": None,
+                "match_type": None, "matched_cost_size": None}
 
+    match_type = cost_row.get("match_type")
+    matched_cost_size = cost_row.get("size")
     rebid_price = sale_price
     profit = calc_expected_profit(rebid_price, cost_row)
     min_profit = int(settings.get("auto_rebid_min_profit", 4000))
 
     if profit is None:
-        return {"status": "NO_COST", "rebid_price": rebid_price, "expected_profit": None}
+        return {"status": "NO_COST", "rebid_price": rebid_price, "expected_profit": None,
+                "match_type": match_type, "matched_cost_size": matched_cost_size}
     if profit < min_profit:
-        return {"status": "LOW", "rebid_price": rebid_price, "expected_profit": profit}
+        return {"status": "LOW", "rebid_price": rebid_price, "expected_profit": profit,
+                "match_type": match_type, "matched_cost_size": matched_cost_size}
 
-    return {"status": "GO", "rebid_price": rebid_price, "expected_profit": profit}
+    status = "GO_FUZZY" if match_type == "fuzzy_size" else "GO"
+    return {"status": status, "rebid_price": rebid_price, "expected_profit": profit,
+            "match_type": match_type, "matched_cost_size": matched_cost_size}
 
 
 def log_dry_run(conn, cand, eval_result):
     """기존 auto_rebid_log 스키마 그대로, action에 dry_run_<status> prefix."""
     action = f"dry_run_{eval_result['status']}"
-    skip_reason = eval_result["status"] if eval_result["status"] != "GO" else None
+    skip_reason = eval_result["status"] if eval_result["status"] not in ("GO", "GO_FUZZY") else None
     conn.execute(
         """
         INSERT INTO auto_rebid_log
@@ -172,15 +213,19 @@ def run_dry_run(settings, hours=24, daily_max=None):
     """전체 실행. 실제 place_bid 호출 X.
 
     리턴: {candidates_total, by_status, items, executable, executable_count, daily_max, hours}
+    Step 36: GO_FUZZY 분류 추가, executable에는 GO + GO_FUZZY 모두 포함.
     """
     if daily_max is None:
-        daily_max = int(settings.get("auto_rebid_daily_max", 20))
+        daily_max = int(settings.get("auto_rebid_daily_max", DEFAULT_DAILY_MAX))
 
     candidates = get_rebid_candidates(hours=hours)
     conn = sqlite3.connect(DB_PATH)
 
     items = []
-    by_status = {"GO": 0, "LOW": 0, "NO_COST": 0, "ACTIVE_BID_EXISTS": 0, "COOLDOWN": 0}
+    by_status = {
+        "GO": 0, "GO_FUZZY": 0, "LOW": 0, "NO_COST": 0,
+        "ACTIVE_BID_EXISTS": 0, "COOLDOWN": 0,
+    }
 
     for cand in candidates:
         eval_result = evaluate_candidate(cand, settings, conn)
@@ -191,7 +236,7 @@ def run_dry_run(settings, hours=24, daily_max=None):
 
     conn.close()
 
-    executable = [i for i in items if i["status"] == "GO"][:daily_max]
+    executable = [i for i in items if i["status"] in ("GO", "GO_FUZZY")][:daily_max]
 
     return {
         "candidates_total": len(candidates),
@@ -205,15 +250,15 @@ def run_dry_run(settings, hours=24, daily_max=None):
 
 
 def format_dry_run_for_discord(result):
-    """Discord bids 채널용 메시지 포맷."""
+    """Discord bids 채널용 메시지 포맷. Step 36: ship_status, GO_FUZZY 표시 추가."""
     lines = [f"자동 재입찰 dry-run ({datetime.now().strftime('%Y-%m-%d %H:%M')})"]
     lines.append(f"")
     lines.append(f"후보: {result['candidates_total']}건 (최근 {result['hours']}h)")
     bs = result["by_status"]
     lines.append(
-        f"GO {bs.get('GO', 0)} / LOW {bs.get('LOW', 0)} / "
-        f"NO_COST {bs.get('NO_COST', 0)} / ACTIVE {bs.get('ACTIVE_BID_EXISTS', 0)} / "
-        f"COOLDOWN {bs.get('COOLDOWN', 0)}"
+        f"GO {bs.get('GO', 0)} / GO_FUZZY {bs.get('GO_FUZZY', 0)} / "
+        f"LOW {bs.get('LOW', 0)} / NO_COST {bs.get('NO_COST', 0)} / "
+        f"ACTIVE {bs.get('ACTIVE_BID_EXISTS', 0)} / COOLDOWN {bs.get('COOLDOWN', 0)}"
     )
     lines.append(f"실제 실행 시: {result['executable_count']}건 (한도 {result['daily_max']})")
     lines.append("")
@@ -223,8 +268,12 @@ def format_dry_run_for_discord(result):
         profit = f"{profit_v:,}" if profit_v is not None else "NULL"
         rebid_v = i.get("rebid_price")
         rebid = f"{rebid_v:,}" if rebid_v else "-"
+        ship = i.get("ship_status") or "-"
+        suffix = ""
+        if i.get("status") == "GO_FUZZY" and i.get("matched_cost_size"):
+            suffix = f" (cost_size={i.get('matched_cost_size')})"
         lines.append(
-            f"- {i.get('model')} / {i.get('size')} / 판매 {i.get('sale_price'):,} → "
-            f"재입찰 {rebid} / 마진 {profit} / {i.get('status')}"
+            f"- {i.get('model')} / {i.get('size')} ({ship}) / 판매 {i.get('sale_price'):,} → "
+            f"재입찰 {rebid} / 마진 {profit} / {i.get('status')}{suffix}"
         )
     return "\n".join(lines)

@@ -8679,6 +8679,73 @@ def auto_rebid_after_sale(sale_records):
 
 # ── 자동 재입찰 API ──
 
+@app.route("/api/auto-rebid/no-cost-analysis", methods=["GET"])
+def api_auto_rebid_no_cost_analysis():
+    """NO_COST 후보 분류 (Step 36 진단). 어떤 원가를 보강해야 할지 알려줌."""
+    try:
+        from services.auto_rebid import get_rebid_candidates
+
+        hours = int(request.args.get("hours", 720))
+        candidates = get_rebid_candidates(hours=hours)
+
+        conn = sqlite3.connect(str(PRICE_DB))
+        conn.row_factory = sqlite3.Row
+
+        result = {
+            "model_size_missing": [],
+            "size_mismatch": [],
+            "matched": [],
+        }
+
+        for c in candidates:
+            model = c["model"]
+            size = str(c["size"])
+
+            model_cnt = conn.execute(
+                "SELECT COUNT(*) FROM bid_cost WHERE model = ?", (model,)
+            ).fetchone()[0]
+
+            if model_cnt == 0:
+                result["model_size_missing"].append({
+                    "model": model, "size": size,
+                    "sale_price": c["sale_price"], "order_id": c["order_id"],
+                })
+                continue
+
+            exact_cnt = conn.execute(
+                "SELECT COUNT(*) FROM bid_cost WHERE model = ? AND size = ?",
+                (model, size),
+            ).fetchone()[0]
+
+            if exact_cnt == 0:
+                sizes = [r[0] for r in conn.execute(
+                    "SELECT DISTINCT size FROM bid_cost WHERE model = ?", (model,)
+                ).fetchall()]
+                result["size_mismatch"].append({
+                    "model": model, "sale_size": size,
+                    "registered_sizes": sizes,
+                    "sale_price": c["sale_price"], "order_id": c["order_id"],
+                })
+            else:
+                result["matched"].append({"model": model, "size": size})
+
+        conn.close()
+
+        return jsonify({
+            "ok": True,
+            "summary": {
+                "total_candidates": len(candidates),
+                "model_missing_count": len(result["model_size_missing"]),
+                "size_mismatch_count": len(result["size_mismatch"]),
+                "matched_count": len(result["matched"]),
+            },
+            "details": result,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route("/api/auto-rebid/dry-run", methods=["POST"])
 def api_auto_rebid_dry_run():
     """판매 후 N시간 내 후보 시뮬레이션 (실제 입찰 X). Step 35."""
