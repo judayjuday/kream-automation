@@ -715,6 +715,32 @@ def _init_model_price_book_table():
         ("IX7694", "ONE SIZE", 205, "가방", None, 1, "대량 구매 모델", "사장님 직접 입력"),
         ("JQ4110", None, 370, "가방", None, 1,
          "대량 구매 모델 / W215~W255 전 사이즈 동일", "사장님 직접 입력"),
+        # Step 40: 1203A243 시리즈 (bid_cost 21건 실데이터 검증값)
+        # 사장님 회상값 385 대신 bid_cost 일치값 380/375 채택
+        ("1203A243-021", "225", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-021", "230", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-021", "235", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-021", "240", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-021", "245", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-021", "250", 375, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 250사이즈는 375", "bid_cost 검증"),
+        ("1203A243-100", "225", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-100", "230", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 누락 사이즈 신규", "bid_cost 검증"),
+        ("1203A243-100", "235", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-100", "240", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-100", "245", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
+        ("1203A243-100", "250", 380, "신발", "Onitsuka Tiger", 1,
+         "대량 구매 / bid_cost 21건 평균", "bid_cost 검증"),
     ]
     for seed in seeds:
         model, size = seed[0], seed[1]
