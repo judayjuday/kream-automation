@@ -18,6 +18,7 @@
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -144,15 +145,33 @@ def calc_settlement(price):
 def calc_expected_profit(rebid_price, cost_row, settings=None):
     """원가 없으면 None 반환 (절대 규칙 #1).
 
-    Step 37: cost_row의 환율/배송비가 None이면 settings 기본값으로 보강
-    (price_book 폴백은 cost_row에 환율/배송비가 없음).
+    Step 41 환율 폴백 체인:
+      1) cost_row.exchange_rate (입찰 시점 환율, bid_cost에서 옴)
+      2) settings.exchange_rate (현재 환율)
+      3) 217 (안전 폴백)
+
+    배송비 폴백:
+      1) cost_row.overseas_shipping
+      2) settings.overseas_shipping
+      3) 8000
     """
     if not cost_row or not cost_row.get("cny_price"):
         return None
     settings = settings or {}
     cny = cost_row["cny_price"]
-    rate = cost_row.get("exchange_rate") or settings.get("exchange_rate") or 217
-    shipping = cost_row.get("overseas_shipping") or settings.get("overseas_shipping") or 8000
+
+    rate = cost_row.get("exchange_rate")
+    if not rate:
+        rate = settings.get("exchange_rate")
+    if not rate:
+        rate = 217
+
+    shipping = cost_row.get("overseas_shipping")
+    if shipping is None:
+        shipping = settings.get("overseas_shipping")
+    if shipping is None:
+        shipping = 8000
+
     other = cost_row.get("other_costs") or 0
     cost_krw = int(cny * rate * 1.03) + shipping + other
     return calc_settlement(rebid_price) - cost_krw
@@ -251,8 +270,10 @@ def log_dry_run(conn, cand, eval_result):
 def run_dry_run(settings, hours=24, daily_max=None):
     """전체 실행. 실제 place_bid 호출 X.
 
-    리턴: {candidates_total, by_status, items, executable, executable_count, daily_max, hours}
-    Step 36: GO_FUZZY 분류 추가, executable에는 GO + GO_FUZZY 모두 포함.
+    Step 41:
+      - today_real_count / remaining_quota 시뮬레이션
+      - min_profit 응답에 노출
+      - dry_run_* 로그 7일 자동 정리 (실행 로그는 보존)
     """
     if daily_max is None:
         daily_max = int(settings.get("auto_rebid_daily_max", DEFAULT_DAILY_MAX))
@@ -273,46 +294,113 @@ def run_dry_run(settings, hours=24, daily_max=None):
         by_status[s] = by_status.get(s, 0) + 1
         items.append({**cand, **eval_result})
 
+    # 오늘 이미 실행된 실제 재입찰 수 (dry_run 제외, success만)
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_real_count = conn.execute(
+        """
+        SELECT COUNT(*) FROM auto_rebid_log
+        WHERE date(executed_at) = ?
+          AND action NOT LIKE 'dry_run_%'
+          AND action LIKE '%success%'
+        """,
+        (today,),
+    ).fetchone()[0]
+    remaining_quota = max(0, daily_max - today_real_count)
+
+    # 7일 이상된 dry_run 로그 정리 (실제 실행 로그는 보존)
+    cleanup_deleted = 0
+    try:
+        cleanup_cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        cleanup_deleted = conn.execute(
+            """
+            DELETE FROM auto_rebid_log
+            WHERE action LIKE 'dry_run_%' AND executed_at < ?
+            """,
+            (cleanup_cutoff,),
+        ).rowcount
+        conn.commit()
+        if cleanup_deleted > 0:
+            print(f"[CLEANUP] dry_run 로그 {cleanup_deleted}건 정리 (7일 경과)", file=sys.stderr)
+    except Exception as e:
+        print(f"[CLEANUP-FAIL] {e}", file=sys.stderr)
+
     conn.close()
 
-    executable = [i for i in items if i["status"] in ("GO", "GO_FUZZY")][:daily_max]
+    executable = [i for i in items if i["status"] in ("GO", "GO_FUZZY")][:remaining_quota]
+    min_profit = int(settings.get("auto_rebid_min_profit", 3000))
 
     return {
         "candidates_total": len(candidates),
         "by_status": by_status,
         "executable_count": len(executable),
         "daily_max": daily_max,
+        "today_real_count": today_real_count,
+        "remaining_quota": remaining_quota,
+        "min_profit": min_profit,
         "hours": hours,
+        "cleanup_deleted": cleanup_deleted,
         "items": items,
         "executable": executable,
     }
 
 
 def format_dry_run_for_discord(result):
-    """Discord bids 채널용 메시지 포맷. Step 36: ship_status, GO_FUZZY 표시 추가."""
+    """Discord bids 채널용 메시지 포맷. Step 41 강화:
+    - GO 후보 전체 표시 (5건 제한 X)
+    - 예상 마진 합계
+    - LOW 별도 섹션
+    - 일 한도 시뮬 (today_real / remaining_quota)
+    """
     lines = [f"자동 재입찰 dry-run ({datetime.now().strftime('%Y-%m-%d %H:%M')})"]
-    lines.append(f"")
-    lines.append(f"후보: {result['candidates_total']}건 (최근 {result['hours']}h)")
+    lines.append("")
+
     bs = result["by_status"]
+    lines.append(f"후보: {result['candidates_total']}건 (최근 {result['hours']}h)")
     lines.append(
         f"GO {bs.get('GO', 0)} / GO_FUZZY {bs.get('GO_FUZZY', 0)} / "
         f"LOW {bs.get('LOW', 0)} / NO_COST {bs.get('NO_COST', 0)} / "
         f"ACTIVE {bs.get('ACTIVE_BID_EXISTS', 0)} / COOLDOWN {bs.get('COOLDOWN', 0)}"
     )
-    lines.append(f"실제 실행 시: {result['executable_count']}건 (한도 {result['daily_max']})")
+
+    executable_items = result.get("executable", [])
+    total_profit = sum((i.get("expected_profit") or 0) for i in executable_items)
+    today_real = result.get("today_real_count", 0)
+    remaining = result.get("remaining_quota", result.get("daily_max", 0))
+    min_profit = result.get("min_profit", 3000)
+    lines.append(
+        f"실행 시: {result['executable_count']}건 / "
+        f"오늘 실행 {today_real} / 잔여 {remaining} (한도 {result['daily_max']}) / "
+        f"예상 마진 합계 {total_profit:,}원 / min_profit {min_profit:,}"
+    )
     lines.append("")
-    lines.append("[상위 5건]")
-    for i in result["items"][:5]:
-        profit_v = i.get("expected_profit")
-        profit = f"{profit_v:,}" if profit_v is not None else "NULL"
-        rebid_v = i.get("rebid_price")
-        rebid = f"{rebid_v:,}" if rebid_v else "-"
-        ship = i.get("ship_status") or "-"
-        suffix = ""
-        if i.get("status") == "GO_FUZZY" and i.get("matched_cost_size"):
-            suffix = f" (cost_size={i.get('matched_cost_size')})"
-        lines.append(
-            f"- {i.get('model')} / {i.get('size')} ({ship}) / 판매 {i.get('sale_price'):,} → "
-            f"재입찰 {rebid} / 마진 {profit} / {i.get('status')}{suffix}"
-        )
+
+    go_items = [i for i in result["items"] if i["status"] in ("GO", "GO_FUZZY")]
+    if go_items:
+        lines.append(f"[GO 후보 전체 {len(go_items)}건]")
+        for i in go_items:
+            profit_v = i.get("expected_profit")
+            profit = f"{profit_v:,}" if profit_v is not None else "NULL"
+            rebid_v = i.get("rebid_price")
+            rebid = f"{rebid_v:,}" if rebid_v else "-"
+            tag = "GO" if i["status"] == "GO" else "FUZZY"
+            suffix = ""
+            if i.get("status") == "GO_FUZZY" and i.get("matched_cost_size"):
+                suffix = f" (cost_size={i.get('matched_cost_size')})"
+            lines.append(
+                f"[{tag}] {i.get('model')}/{i.get('size')} | "
+                f"{i.get('sale_price'):,} → {rebid} | 마진 {profit}{suffix}"
+            )
+
+    low_items = [i for i in result["items"] if i["status"] == "LOW"]
+    if low_items:
+        lines.append("")
+        lines.append(f"[LOW {len(low_items)}건 — min_profit {min_profit:,} 미달]")
+        for i in low_items[:3]:
+            profit_v = i.get("expected_profit")
+            profit = f"{profit_v:,}" if profit_v is not None else "NULL"
+            lines.append(
+                f"[LOW] {i.get('model')}/{i.get('size')} | "
+                f"{i.get('sale_price'):,} | 마진 {profit}"
+            )
+
     return "\n".join(lines)
