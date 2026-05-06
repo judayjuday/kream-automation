@@ -214,9 +214,10 @@ def evaluate_candidate(cand, settings, conn):
         return {"status": "LOW", "rebid_price": rebid_price, "expected_profit": profit,
                 "match_type": match_type, "matched_cost_size": matched_cost_size}
 
-    # GO_FUZZY: size를 정확히 매칭하지 못한 케이스 (사장님 검증 필요)
-    fuzzy_set = {"bid_cost_fuzzy", "price_book_all_sizes"}
-    status = "GO_FUZZY" if match_type in fuzzy_set else "GO"
+    # GO_FUZZY: bid_cost를 model만 매칭한 우연 케이스만 (사장님 검증 필요).
+    # Step 39: price_book_all_sizes는 사장님이 명시적으로 "전 사이즈 동일"
+    # 선언한 신뢰도 높은 매칭 → GO로 승급.
+    status = "GO_FUZZY" if match_type == "bid_cost_fuzzy" else "GO"
     return {"status": status, "rebid_price": rebid_price, "expected_profit": profit,
             "match_type": match_type, "matched_cost_size": matched_cost_size}
 
