@@ -123,6 +123,114 @@ def supplier_roi() -> List[Dict]:
         conn.close()
 
 
+def market_price_trend(model: str, days: int = 30) -> Dict[str, Any]:
+    """KREAM 시장 가격 추세 (price_history 테이블 기반)."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(price_history)")
+        cols = {c[1] for c in cur.fetchall()}
+
+        if not cols:
+            return {'model': model, 'history': [], 'note': 'price_history table not found'}
+
+        # KREAM price_history는 collected_at 컬럼 사용 (스키마 동적 감지)
+        time_col = None
+        for cand in ('recorded_at', 'created_at', 'collected_at', 'updated_at'):
+            if cand in cols:
+                time_col = cand
+                break
+        if not time_col:
+            return {'model': model, 'history': [], 'note': 'no time column'}
+
+        price_col = None
+        for cand in ('buy_price', 'immediate_price', 'price'):
+            if cand in cols:
+                price_col = cand
+                break
+        if not price_col:
+            return {'model': model, 'history': [], 'note': 'no price column'}
+
+        cur.execute(f"""
+            SELECT {time_col} as ts, {price_col} as price
+            FROM price_history
+            WHERE model = ?
+              AND {time_col} >= datetime('now', '-{days} days')
+            ORDER BY {time_col} ASC
+        """, (model,))
+        rows = [dict(r) for r in cur.fetchall()]
+
+        if not rows:
+            return {'model': model, 'history': [], 'note': 'no data'}
+
+        prices = [r['price'] for r in rows if r['price']]
+        return {
+            'model': model,
+            'history': rows,
+            'sample_count': len(rows),
+            'min_price': min(prices) if prices else None,
+            'max_price': max(prices) if prices else None,
+            'avg_price': round(sum(prices) / len(prices), 2) if prices else None,
+            'first_price': rows[0]['price'],
+            'last_price': rows[-1]['price'],
+            'change_pct': round((rows[-1]['price'] - rows[0]['price']) / rows[0]['price'] * 100, 2) if rows[0]['price'] else 0,
+        }
+    finally:
+        conn.close()
+
+
+def market_volatility_top(days: int = 7, limit: int = 20) -> List[Dict]:
+    """변동성 큰 모델 TOP (최근 N일)."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(price_history)")
+        cols = {c[1] for c in cur.fetchall()}
+        if not cols:
+            return []
+
+        time_col = None
+        for cand in ('recorded_at', 'created_at', 'collected_at', 'updated_at'):
+            if cand in cols:
+                time_col = cand
+                break
+        if not time_col:
+            return []
+
+        price_col = None
+        for cand in ('buy_price', 'immediate_price', 'price'):
+            if cand in cols:
+                price_col = cand
+                break
+        if not price_col:
+            return []
+
+        cur.execute(f"""
+            SELECT
+                model,
+                COUNT(*) as samples,
+                MIN({price_col}) as min_p,
+                MAX({price_col}) as max_p,
+                AVG({price_col}) as avg_p
+            FROM price_history
+            WHERE {time_col} >= datetime('now', '-{days} days')
+              AND {price_col} > 0
+            GROUP BY model
+            HAVING samples >= 3
+            ORDER BY (max_p - min_p) DESC
+            LIMIT {limit}
+        """)
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d['volatility_pct'] = round((d['max_p'] - d['min_p']) / d['avg_p'] * 100, 2) if d['avg_p'] else 0
+            d['range_krw'] = d['max_p'] - d['min_p']
+            rows.append(d)
+        return rows
+    finally:
+        conn.close()
+
+
 def comprehensive_dashboard() -> Dict[str, Any]:
     """종합 비즈니스 대시보드 데이터."""
     return {

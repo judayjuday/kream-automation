@@ -14025,6 +14025,32 @@ def api_insights_dashboard():
 
 
 # ═══════════════════════════════════════════
+# Step 47-2: KREAM 시장 가격 추적
+# ═══════════════════════════════════════════
+
+@app.route('/api/insights/market-trend/<path:model>', methods=['GET'])
+def api_insights_market_trend(model):
+    try:
+        from services import business_insights as bi_svc
+        days = int(request.args.get('days', 30))
+        return jsonify({'success': True, **bi_svc.market_price_trend(model, days)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/insights/volatility-top', methods=['GET'])
+def api_insights_volatility():
+    try:
+        from services import business_insights as bi_svc
+        days = int(request.args.get('days', 7))
+        limit = int(request.args.get('limit', 20))
+        items = bi_svc.market_volatility_top(days, limit)
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
