@@ -14124,6 +14124,20 @@ def api_catalog():
 
 
 # ═══════════════════════════════════════════
+# Step 47-7: 통합 헤드라인 (홈)
+# ═══════════════════════════════════════════
+
+@app.route('/api/headline', methods=['GET'])
+def api_headline():
+    """대시보드 홈 KPI."""
+    try:
+        from services import headline as hl_svc
+        return jsonify({'success': True, **hl_svc.get_headline()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 

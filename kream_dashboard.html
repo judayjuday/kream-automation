@@ -370,6 +370,12 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="sidebar">
     <div class="sidebar-logo">KREAM <span>셀러</span></div>
     <div class="nav-group">
+      <div class="nav-label">홈</div>
+      <div class="nav-item" data-tab="home" onclick="showTab('home')">
+        <span class="nav-icon">🏠</span> 홈 대시보드
+      </div>
+    </div>
+    <div class="nav-group">
       <div class="nav-label">판매 관리</div>
       <div class="nav-item active" onclick="showTab('register')">
         <span class="nav-icon">📦</span> 상품 등록/입찰
@@ -847,6 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-backup" class="tab-view" data-tab-title="백업 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-insights" class="tab-view" data-tab-title="비즈니스 인사이트"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-api_catalog" class="tab-view" data-tab-title="API 카탈로그"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-home" class="tab-view" data-tab-title="홈 대시보드"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
   </div>
@@ -915,7 +922,8 @@ function showTab(id) {
     data_quality: '🔍 데이터 품질',
     backup: '💾 백업 관리',
     insights: '📈 비즈니스 인사이트',
-    api_catalog: '📚 API 카탈로그'
+    api_catalog: '📚 API 카탈로그',
+    home: '🏠 홈 대시보드'
   };
   document.getElementById('page-title').textContent = titles[id] || '';
 

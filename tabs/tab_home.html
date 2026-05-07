@@ -1,0 +1,125 @@
+<!-- 홈 대시보드 (Step 47-7) -->
+<div class="tab-content" id="tab-home">
+  <h2>🏠 홈 대시보드</h2>
+
+  <div id="home-loading">로딩 중...</div>
+
+  <div id="home-content" style="display:none;">
+
+    <!-- 오늘 핵심 KPI -->
+    <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:20px;border-radius:8px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;">오늘 (<span id="home-today-date"></span>)</h3>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+        <div>
+          <div style="opacity:0.8;font-size:13px;">판매</div>
+          <div style="font-size:36px;font-weight:bold;" id="home-today-sales">-</div>
+          <div style="font-size:14px;" id="home-today-revenue">-</div>
+        </div>
+        <div>
+          <div style="opacity:0.8;font-size:13px;">자동 재입찰</div>
+          <div style="font-size:36px;font-weight:bold;" id="home-rebid-success">-</div>
+          <div style="font-size:14px;" id="home-rebid-profit">-</div>
+        </div>
+        <div>
+          <div style="opacity:0.8;font-size:13px;">자동 재입찰 상태</div>
+          <div style="font-size:24px;font-weight:bold;" id="home-rebid-status">-</div>
+          <div style="font-size:13px;" id="home-rebid-quota">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 이번 주 -->
+    <div style="background:#fff;border:1px solid #ddd;padding:16px;border-radius:8px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;">📅 최근 7일</h3>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+        <div>
+          <div style="color:#666;font-size:13px;">판매 건수</div>
+          <div style="font-size:28px;font-weight:bold;" id="home-week-sales">-</div>
+        </div>
+        <div>
+          <div style="color:#666;font-size:13px;">매출</div>
+          <div style="font-size:24px;font-weight:bold;" id="home-week-revenue">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 미매칭 / 주의 -->
+    <div style="background:#fff3e0;padding:16px;border-radius:8px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;">⚠️ 처리 대기</h3>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+        <div onclick="if(typeof showTab==='function')showTab('remittance')" style="cursor:pointer;">
+          <div style="color:#666;font-size:13px;">미매칭 송금 (잔액)</div>
+          <div style="font-size:24px;font-weight:bold;color:#ff9800;" id="home-unmatched-rem">-</div>
+        </div>
+        <div onclick="if(typeof showTab==='function')showTab('remittance')" style="cursor:pointer;">
+          <div style="color:#666;font-size:13px;">미매칭 입찰</div>
+          <div style="font-size:24px;font-weight:bold;color:#ff9800;" id="home-unmatched-bid">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 빠른 이동 -->
+    <h3>🚀 빠른 이동</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+      <button onclick="showTab('insights')" style="padding:16px;background:#e8f5e9;border:1px solid #4caf50;border-radius:6px;cursor:pointer;">📈 인사이트</button>
+      <button onclick="showTab('remittance')" style="padding:16px;background:#e3f2fd;border:1px solid #2196f3;border-radius:6px;cursor:pointer;">💸 송금</button>
+      <button onclick="showTab('rebid_monitor')" style="padding:16px;background:#fff3e0;border:1px solid #ff9800;border-radius:6px;cursor:pointer;">🤖 자동 재입찰</button>
+      <button onclick="showTab('data_quality')" style="padding:16px;background:#f3e5f5;border:1px solid #9c27b0;border-radius:6px;cursor:pointer;">🔍 데이터 품질</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadHome() {
+  const r = await fetch('/api/headline');
+  const d = await r.json();
+  if (!d.success) {
+    document.getElementById('home-loading').textContent = '오류: ' + d.error;
+    return;
+  }
+
+  document.getElementById('home-loading').style.display = 'none';
+  document.getElementById('home-content').style.display = '';
+
+  // 오늘
+  document.getElementById('home-today-date').textContent = new Date().toLocaleDateString('ko-KR');
+  document.getElementById('home-today-sales').textContent = d.today.cnt + '건';
+  document.getElementById('home-today-revenue').textContent = (d.today.revenue||0).toLocaleString() + ' ₩';
+
+  document.getElementById('home-rebid-success').textContent = d.rebid_today.success || 0;
+  document.getElementById('home-rebid-profit').textContent =
+    (d.rebid_today.profit || 0).toLocaleString() + ' ₩' +
+    (d.rebid_today.failed > 0 ? ` (실패 ${d.rebid_today.failed})` : '');
+
+  const status = d.rebid_status.enabled
+    ? (d.rebid_status.dry_run ? '⚠️ DRY-RUN' : '🟢 ENABLE')
+    : '⚪ OFF';
+  document.getElementById('home-rebid-status').textContent = status;
+  document.getElementById('home-rebid-quota').textContent =
+    `오늘 ${d.rebid_today.success || 0}/${d.rebid_status.daily_max || 0}`;
+
+  // 주
+  document.getElementById('home-week-sales').textContent = d.this_week.cnt + '건';
+  document.getElementById('home-week-revenue').textContent = (d.this_week.revenue||0).toLocaleString() + ' ₩';
+
+  // 미매칭
+  document.getElementById('home-unmatched-rem').textContent =
+    `${d.unmatched_remittance.count}건 / ${d.unmatched_remittance.remaining_cny.toLocaleString()} ¥`;
+  document.getElementById('home-unmatched-bid').textContent =
+    `${d.unmatched_bid.count}건 / ${d.unmatched_bid.cny.toLocaleString()} ¥`;
+}
+
+if (typeof registerTabLoader === 'function') {
+  registerTabLoader('home', loadHome);
+} else {
+  loadHome();
+}
+
+// 1분마다 자동 갱신
+setInterval(() => {
+  const t = document.getElementById('tab-home');
+  if (t && t.classList && t.classList.contains('active')) {
+    loadHome();
+  }
+}, 60000);
+</script>
