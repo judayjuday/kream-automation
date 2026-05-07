@@ -7,32 +7,27 @@
 
 ## 🔥 우선순위 높음
 
-### 1. 송금 환율 시스템 (Step 41+에서 약속)
+### 1. 송금 환율 시스템 (Step 41+에서 약속) — ✅ 완료 (인프라, Step 42)
 
 **배경 (사장님 비즈니스 모델):**
 - 한 달에 2~3번 해외 송금 (CNY 환전)
 - 후불 결제: 협력사가 사장님 대신 상품 구매 → 사장님이 나중에 송금으로 정산
 - 따라서 "입찰 시점 환율"보다 "송금 시점 환율"이 진짜 원가에 가까움
 
-**현재 시스템:**
-- bid_cost.exchange_rate: 입찰 시점 환율
-- settings.exchange_rate: 현재 환율 (open.er-api.com 자동 갱신)
-- 마진 계산: bid_cost.exchange_rate 우선, settings 폴백 (Step 41에서 구현)
+**Step 42 완료 사항:**
+- ✅ remittance_history 테이블 신설 (날짜/CNY/KRW/환율/협력사/위챗/수수료/메모/상태)
+- ✅ remittance_bid_match 테이블 (N:M 매칭, UNIQUE 제약)
+- ✅ services/remittance.py: CRUD + FIFO 자동 매칭 + 가중평균 환율 조회
+- ✅ API 4개: POST add, GET list, POST match, GET unmatched-bids
+- ✅ calc_expected_profit 환율 폴백 체인 확장 (remittance 매칭 → bid_cost → settings → 217)
+- ✅ 대시보드 탭 (`tabs/tab_remittance.html`) + 사이드바 메뉴 등록
 
-**개선 방향 (미래):**
-1. remittance_history 테이블 신설
-   - 컬럼: id, remittance_date, amount_cny, amount_krw, exchange_rate, supplier, notes
-   - 사장님이 송금할 때마다 기록
-2. bid_cost ↔ remittance 매칭
-   - 어떤 입찰이 어떤 송금으로 결제됐는지 매핑
-   - FIFO 또는 사장님 지정 방식
-3. 마진 재계산 로직
-   - 매칭된 송금 환율로 정확한 마진 산출
-   - 미매칭 입찰은 settings 환율 폴백 (현 정책 유지)
-4. 대시보드: 송금 이력 + 미정산 입찰 합계 + 환율 손익 표시
+**다음 단계 (미완):**
+1. 사장님 실제 송금 데이터 입력 → FIFO 매칭 → 마진 재계산 검증
+2. 환율 손익 그래프 (송금 환율 vs 입찰 시점 환율 시계열)
+3. 부분 정산 / 협력사별 미정산 잔액 대시보드 카드
 
-**언제 진행:** 사장님이 송금 데이터 입력 준비되면.
-**작업 추정:** Step 단위 1~2개.
+**언제 진행:** 사장님이 송금 데이터 1~2건 입력 후.
 
 ---
 
