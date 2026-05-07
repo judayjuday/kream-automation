@@ -13814,6 +13814,47 @@ def api_supplier_add():
 
 
 # ═══════════════════════════════════════════
+# Step 46-1: 데이터 품질 검증 API
+# ═══════════════════════════════════════════
+
+@app.route('/api/data-quality/check', methods=['GET'])
+def api_data_quality_check():
+    try:
+        from services import data_quality as dq_svc
+        result = dq_svc.comprehensive_health_check()
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/data-quality/integrity', methods=['GET'])
+def api_data_quality_integrity():
+    try:
+        from services import data_quality as dq_svc
+        return jsonify({'success': True, **dq_svc.check_bid_cost_integrity()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/data-quality/orphans', methods=['GET'])
+def api_data_quality_orphans():
+    try:
+        from services import data_quality as dq_svc
+        return jsonify({'success': True, **dq_svc.find_orphan_records()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/data-quality/duplicates', methods=['GET'])
+def api_data_quality_duplicates():
+    try:
+        from services import data_quality as dq_svc
+        return jsonify({'success': True, **dq_svc.find_duplicates()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
