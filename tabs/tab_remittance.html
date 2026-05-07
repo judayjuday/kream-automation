@@ -91,6 +91,45 @@
     <tbody id="rem-tbody"></tbody>
   </table>
 
+  <!-- 환율 손익 분석 (Step 43-2) -->
+  <h3 style="margin-top:24px;">📊 환율 손익 분석 (FX P&L)</h3>
+  <div id="fx-pnl-summary" style="background:#f0f7ff;padding:16px;border-radius:8px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div>
+        <div style="color:#666;font-size:13px;">매칭 / 미매칭</div>
+        <div style="font-size:18px;font-weight:bold;"><span id="fxp-matched">-</span> / <span id="fxp-unmatched">-</span></div>
+      </div>
+      <div>
+        <div style="color:#666;font-size:13px;">총 환율 손익 (KRW)</div>
+        <div style="font-size:20px;font-weight:bold;" id="fxp-total">-</div>
+      </div>
+      <div>
+        <div style="color:#666;font-size:13px;">건당 평균 (KRW)</div>
+        <div style="font-size:18px;" id="fxp-avg">-</div>
+      </div>
+      <div>
+        <div style="color:#666;font-size:13px;">미매칭 위험 노출 (CNY/KRW)</div>
+        <div style="font-size:14px;color:#ff9800;">
+          <div id="fxp-exposure-cny">-</div>
+          <div id="fxp-exposure-krw">-</div>
+        </div>
+      </div>
+    </div>
+    <button onclick="refreshFxPnl()" style="margin-top:12px;background:#2196f3;color:#fff;padding:6px 16px;">새로고침</button>
+  </div>
+
+  <h4>협력사별 평균 환율</h4>
+  <table id="fxp-supplier-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>협력사</th><th>송금 수</th><th>평균 환율</th>
+        <th>최저</th><th>최고</th>
+        <th>총 CNY</th><th>총 KRW</th><th>실효 환율</th><th>수수료율</th>
+      </tr>
+    </thead>
+    <tbody id="fxp-supplier-tbody"></tbody>
+  </table>
+
   <!-- 매칭 -->
   <h3 style="margin-top:24px;">🔗 매칭</h3>
   <button onclick="autoMatch()" style="background:#4caf50;color:#fff;padding:8px 16px;">FIFO 자동 매칭</button>
@@ -486,9 +525,52 @@ document.addEventListener('click', (e) => {
   if (e.target.id === 'receipt-modal') closeReceiptModal();
 });
 
+// Step 43-2: 환율 손익 (FX P&L) 갱신
+async function refreshFxPnl() {
+  try {
+    const r1 = await fetch('/api/fx-pnl/portfolio');
+    const d1 = await r1.json();
+    if (d1.success) {
+      document.getElementById('fxp-matched').textContent = d1.matched_count;
+      document.getElementById('fxp-unmatched').textContent = d1.unmatched_count;
+      const totalEl = document.getElementById('fxp-total');
+      totalEl.textContent = (d1.total_pnl_krw || 0).toLocaleString() + ' ₩';
+      totalEl.style.color = (d1.total_pnl_krw || 0) >= 0 ? '#4caf50' : '#f44336';
+      document.getElementById('fxp-avg').textContent = (d1.avg_pnl_per_bid || 0).toLocaleString() + ' ₩';
+      document.getElementById('fxp-exposure-cny').textContent = (d1.unmatched_cny_exposure || 0).toLocaleString() + ' ¥';
+      document.getElementById('fxp-exposure-krw').textContent = (d1.unmatched_krw_exposure || 0).toLocaleString() + ' ₩';
+    }
+
+    const r2 = await fetch('/api/fx-pnl/supplier-comparison');
+    const d2 = await r2.json();
+    if (d2.success) {
+      const tbody = document.getElementById('fxp-supplier-tbody');
+      if (!d2.items || d2.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">매칭된 송금이 없습니다.</td></tr>';
+      } else {
+        tbody.innerHTML = d2.items.map(s => `
+          <tr>
+            <td>${s.supplier_name}${s.name_en ? ' ('+s.name_en+')' : ''}</td>
+            <td>${s.remittance_count}</td>
+            <td><strong>${s.avg_rate ? s.avg_rate.toFixed(4) : '-'}</strong></td>
+            <td>${s.min_rate ? s.min_rate.toFixed(4) : '-'}</td>
+            <td>${s.max_rate ? s.max_rate.toFixed(4) : '-'}</td>
+            <td>${(s.total_cny || 0).toLocaleString()}</td>
+            <td>${(s.total_krw || 0).toLocaleString()}</td>
+            <td><strong>${s.effective_rate || '-'}</strong></td>
+            <td>${s.fee_ratio_pct ? s.fee_ratio_pct + '%' : '-'}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (e) {
+    console.error('refreshFxPnl error:', e);
+  }
+}
+
 if (typeof registerTabLoader === 'function') {
-  registerTabLoader('remittance', () => { loadSuppliers(); loadRemittances(); loadUnmatched(); });
+  registerTabLoader('remittance', () => { loadSuppliers(); loadRemittances(); loadUnmatched(); refreshFxPnl(); });
 } else {
-  loadSuppliers(); loadRemittances(); loadUnmatched();
+  loadSuppliers(); loadRemittances(); loadUnmatched(); refreshFxPnl();
 }
 </script>

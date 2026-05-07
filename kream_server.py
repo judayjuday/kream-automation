@@ -13229,6 +13229,44 @@ def api_remittance_unmatched_bids():
 
 
 # ═══════════════════════════════════════════
+# Step 43-2: 환율 손익 대시보드 (FX P&L)
+# ═══════════════════════════════════════════
+
+@app.route('/api/fx-pnl/portfolio', methods=['GET'])
+def api_fx_pnl_portfolio():
+    """전체 포트폴리오 환율 손익."""
+    try:
+        from services import fx_pnl as fx_pnl_svc
+        result = fx_pnl_svc.calculate_portfolio_fx_pnl()
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/fx-pnl/bid/<order_id>', methods=['GET'])
+def api_fx_pnl_bid(order_id):
+    """특정 입찰의 환율 손익."""
+    try:
+        from services import fx_pnl as fx_pnl_svc
+        bid_cost_id = int(request.args.get('bid_cost_id', 0))
+        result = fx_pnl_svc.calculate_fx_pnl_for_bid(bid_cost_id, order_id)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/fx-pnl/supplier-comparison', methods=['GET'])
+def api_fx_pnl_supplier_comparison():
+    """협력사별 평균 환율 비교."""
+    try:
+        from services import fx_pnl as fx_pnl_svc
+        items = fx_pnl_svc.supplier_fx_comparison()
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # Step 42-Phase 2.5: 영수증 + USD/CNY 분리 + 협력사
 # ═══════════════════════════════════════════
 
