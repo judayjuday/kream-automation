@@ -7763,6 +7763,16 @@ def api_health_test_alert():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route('/api/health/advanced', methods=['GET'])
+def api_health_advanced():
+    """헬스체크 강화 (Step 48-F): auth/DB/디스크 종합 + 권장 조치."""
+    try:
+        from services import health_advanced as ha
+        return jsonify({'success': True, **ha.comprehensive_health()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ═══════════════════════════════════════════
 # 판매 패턴 분석
 # ═══════════════════════════════════════════
