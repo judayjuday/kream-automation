@@ -1,103 +1,310 @@
-<!-- Step 42: 송금 환율 시스템 -->
+<!-- Step 42-Phase 2.5: 송금 환율 + 영수증 첨부 시스템 -->
 <div class="tab-content" id="tab-remittance">
   <h2>💸 송금 환율 시스템</h2>
 
   <!-- 요약 카드 -->
-  <div class="card-row" id="remittance-summary">
-    <div class="card">
-      <div class="card-label">총 송금 횟수</div>
-      <div class="card-value" id="rem-count">-</div>
-    </div>
-    <div class="card">
-      <div class="card-label">총 송금 (CNY)</div>
-      <div class="card-value" id="rem-total-cny">-</div>
-    </div>
-    <div class="card">
-      <div class="card-label">총 송금 (KRW)</div>
-      <div class="card-value" id="rem-total-krw">-</div>
-    </div>
-    <div class="card">
-      <div class="card-label">미매칭 입찰 (CNY)</div>
-      <div class="card-value" id="rem-unmatched-cny">-</div>
-    </div>
+  <div class="card-row" id="remittance-summary" style="display:flex;gap:12px;margin-bottom:16px;">
+    <div class="card"><div>총 송금</div><div id="rem-count" style="font-size:24px;font-weight:bold;">-</div></div>
+    <div class="card"><div>총 CNY 입금</div><div id="rem-total-cny" style="font-size:24px;">-</div></div>
+    <div class="card"><div>총 KRW 출금</div><div id="rem-total-krw" style="font-size:24px;">-</div></div>
+    <div class="card"><div>미매칭 입찰 (CNY)</div><div id="rem-unmatched-cny" style="font-size:24px;color:#ff9800;">-</div></div>
   </div>
 
-  <!-- 송금 등록 -->
+  <!-- 새 송금 등록 -->
   <h3>📥 새 송금 등록</h3>
-  <div class="form-row">
-    <input type="date" id="rem-date" />
-    <input type="number" id="rem-cny" placeholder="송금 CNY" step="0.01" />
-    <input type="number" id="rem-krw" placeholder="송금 KRW" />
-    <input type="text" id="rem-supplier" placeholder="협력사 (선택)" />
-    <input type="text" id="rem-wechat" placeholder="위챗 ID (선택)" />
-    <input type="number" id="rem-fee" placeholder="수수료 KRW" />
-    <input type="text" id="rem-notes" placeholder="메모" />
-    <button onclick="addRemittance()">등록</button>
+  <div style="background:#f5f5f5;padding:16px;border-radius:8px;margin-bottom:16px;">
+    <!-- 1행: 기본 정보 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+      <label>송금일자<input type="date" id="rem-date" /></label>
+      <label>송금사
+        <select id="rem-sender-service">
+          <option value="SentBiz">SentBiz</option>
+          <option value="KB">KB국민</option>
+          <option value="Wise">Wise</option>
+          <option value="Hana">하나</option>
+          <option value="Other">기타</option>
+        </select>
+      </label>
+      <label>거래번호 <input type="text" id="rem-transaction-no" placeholder="284274" /></label>
+      <label>협력사
+        <select id="rem-supplier-id"><option value="">-- 선택 --</option></select>
+        <button type="button" onclick="addNewSupplier()" style="margin-top:4px;">+ 신규</button>
+      </label>
+    </div>
+
+    <!-- 2행: 송금 통화/금액 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+      <label>송금 통화
+        <select id="rem-send-currency" onchange="onCurrencyChange()">
+          <option value="CNY">CNY (직접)</option>
+          <option value="USD">USD (경유)</option>
+        </select>
+      </label>
+      <label id="lbl-send-amount" style="display:none;">송금 금액 (USD)
+        <input type="number" id="rem-send-amount" step="0.01" placeholder="49960" />
+      </label>
+      <label id="lbl-send-fx-rate" style="display:none;">FX Rate (USD→KRW)
+        <input type="number" id="rem-send-fx-rate" step="0.01" placeholder="1451.25" />
+      </label>
+      <label>한국 출금 KRW
+        <input type="number" id="rem-amount-krw" placeholder="73040996" />
+      </label>
+    </div>
+
+    <!-- 3행: CNY 입금 + 수수료 -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">
+      <label>협력사 입금 CNY (필수, 사장님 확인값) <span style="color:red;">*</span>
+        <input type="number" id="rem-received-cny" step="0.01" placeholder="예: 350000" />
+      </label>
+      <label>수수료 KRW
+        <input type="number" id="rem-fee-krw" placeholder="536556" />
+      </label>
+      <label>메모
+        <input type="text" id="rem-notes" placeholder="자유 메모" />
+      </label>
+    </div>
+
+    <!-- 4행: 영수증 첨부 -->
+    <div style="margin-top:12px;padding:12px;background:#fff;border:2px dashed #aaa;border-radius:6px;">
+      <label style="font-weight:bold;">📎 영수증 파일 (PNG/JPG/PDF, 최대 10MB)</label>
+      <input type="file" id="rem-receipt-file" accept=".png,.jpg,.jpeg,.pdf,.heic,.webp" style="margin-top:8px;" />
+      <div id="rem-receipt-status" style="margin-top:8px;color:#666;"></div>
+      <div id="rem-receipt-preview" style="margin-top:8px;"></div>
+    </div>
+
+    <button onclick="submitRemittance()" style="margin-top:12px;background:#2196f3;color:#fff;padding:10px 24px;font-size:16px;">
+      💾 송금 등록
+    </button>
+    <div id="rem-add-result" style="margin-top:8px;"></div>
   </div>
-  <div id="rem-add-result" style="margin-top:8px;color:#4caf50;"></div>
 
   <!-- 송금 목록 -->
   <h3>📜 송금 이력</h3>
-  <table id="rem-table" class="data-table">
-    <thead>
+  <table id="rem-table" class="data-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
       <tr>
-        <th>ID</th><th>날짜</th><th>CNY</th><th>KRW</th><th>환율</th>
-        <th>할당</th><th>잔여</th><th>상태</th><th>협력사</th><th>메모</th>
+        <th>ID</th><th>날짜</th><th>송금사</th><th>거래번호</th>
+        <th>송금</th><th>CNY 입금</th><th>KRW 출금</th><th>환율</th>
+        <th>매칭</th><th>상태</th><th>영수증</th><th>액션</th>
       </tr>
     </thead>
     <tbody id="rem-tbody"></tbody>
   </table>
 
   <!-- 매칭 -->
-  <h3>🔗 매칭</h3>
-  <div style="margin-bottom:12px;">
-    <button onclick="autoMatch()" style="background:#2196f3;color:#fff;padding:8px 16px;">
-      FIFO 자동 매칭 실행
-    </button>
-    <span id="match-result" style="margin-left:12px;"></span>
-  </div>
+  <h3 style="margin-top:24px;">🔗 매칭</h3>
+  <button onclick="autoMatch()" style="background:#4caf50;color:#fff;padding:8px 16px;">FIFO 자동 매칭</button>
+  <span id="match-result" style="margin-left:12px;"></span>
 
-  <h4>미매칭 입찰 (오래된 순)</h4>
-  <table id="unmatched-table" class="data-table">
-    <thead>
-      <tr>
-        <th>bid_cost_id</th><th>order_id</th><th>모델</th><th>사이즈</th>
-        <th>CNY</th><th>매칭됨</th><th>잔여 CNY</th><th>입찰일</th>
-      </tr>
+  <h4>미매칭 입찰</h4>
+  <table id="unmatched-table" class="data-table" style="width:100%;">
+    <thead style="background:#eee;">
+      <tr><th>bid_cost_id</th><th>order_id</th><th>모델</th><th>사이즈</th>
+          <th>CNY</th><th>매칭됨</th><th>잔여 CNY</th><th>입찰일</th></tr>
     </thead>
     <tbody id="unmatched-tbody"></tbody>
   </table>
 </div>
 
 <script>
+let _uploadedReceipt = null;  // 업로드된 영수증 메타 임시 저장
+
+function onCurrencyChange() {
+  const cur = document.getElementById('rem-send-currency').value;
+  const isUSD = cur === 'USD';
+  document.getElementById('lbl-send-amount').style.display = isUSD ? '' : 'none';
+  document.getElementById('lbl-send-fx-rate').style.display = isUSD ? '' : 'none';
+}
+
+async function loadSuppliers() {
+  const r = await fetch('/api/supplier/list');
+  const d = await r.json();
+  if (!d.success) return;
+  const sel = document.getElementById('rem-supplier-id');
+  sel.innerHTML = '<option value="">-- 선택 --</option>' +
+    d.items.map(s => `<option value="${s.id}">${s.name}${s.name_en ? ' ('+s.name_en+')' : ''}</option>`).join('');
+}
+
+async function addNewSupplier() {
+  const name = prompt('협력사 이름 (한글 또는 영문):');
+  if (!name) return;
+  const name_en = prompt('영문명 (선택, 영수증의 회사명):') || null;
+  const wechat = prompt('위챗 ID (선택):') || null;
+  const r = await fetch('/api/supplier/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, name_en, wechat_id: wechat}),
+  });
+  const d = await r.json();
+  if (d.success) {
+    await loadSuppliers();
+    document.getElementById('rem-supplier-id').value = d.id;
+  } else {
+    alert('실패: ' + d.error);
+  }
+}
+
+// 영수증 업로드 핸들러
+document.addEventListener('DOMContentLoaded', () => {
+  const fileInput = document.getElementById('rem-receipt-file');
+  if (fileInput) {
+    fileInput.addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const status = document.getElementById('rem-receipt-status');
+      const preview = document.getElementById('rem-receipt-preview');
+      status.textContent = '⏳ 업로드 중...';
+      preview.innerHTML = '';
+
+      const fd = new FormData();
+      fd.append('receipt', f);
+      const txnNo = document.getElementById('rem-transaction-no').value;
+      if (txnNo) fd.append('transaction_no', txnNo);
+
+      try {
+        const r = await fetch('/api/remittance/upload-receipt', {method: 'POST', body: fd});
+        const d = await r.json();
+        if (d.success) {
+          _uploadedReceipt = d;
+          status.innerHTML = `✅ 업로드 완료 (${(d.size_bytes/1024).toFixed(1)} KB)<br>
+            <code style="font-size:11px;">${d.path}</code><br>
+            <code style="font-size:11px;color:#666;">SHA256: ${d.sha256.substring(0,16)}...</code>`;
+          if (f.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              preview.innerHTML = `<img src="${e.target.result}" style="max-width:300px;max-height:200px;border:1px solid #ccc;" />`;
+            };
+            reader.readAsDataURL(f);
+          } else {
+            preview.innerHTML = `<div style="padding:8px;background:#eee;">📄 ${d.original_name}</div>`;
+          }
+        } else {
+          status.textContent = '❌ ' + d.error;
+        }
+      } catch (err) {
+        status.textContent = '❌ 업로드 실패: ' + err.message;
+      }
+    });
+  }
+  loadSuppliers();
+});
+
+async function submitRemittance() {
+  const body = {
+    remittance_date: document.getElementById('rem-date').value,
+    received_cny: parseFloat(document.getElementById('rem-received-cny').value),
+    amount_krw: parseFloat(document.getElementById('rem-amount-krw').value),
+    send_currency: document.getElementById('rem-send-currency').value,
+    sender_service: document.getElementById('rem-sender-service').value,
+    transaction_no: document.getElementById('rem-transaction-no').value || null,
+    supplier_id: parseInt(document.getElementById('rem-supplier-id').value) || null,
+    fee_krw: parseFloat(document.getElementById('rem-fee-krw').value || 0),
+    notes: document.getElementById('rem-notes').value || null,
+  };
+  if (body.send_currency === 'USD') {
+    body.send_amount = parseFloat(document.getElementById('rem-send-amount').value) || null;
+    body.send_fx_rate = parseFloat(document.getElementById('rem-send-fx-rate').value) || null;
+  }
+  if (_uploadedReceipt) {
+    body.receipt_path = _uploadedReceipt.path;
+    body.receipt_original_name = _uploadedReceipt.original_name;
+    body.receipt_sha256 = _uploadedReceipt.sha256;
+  }
+
+  if (!body.remittance_date || !body.received_cny || !body.amount_krw) {
+    alert('날짜 / 협력사 입금 CNY / KRW 출금은 필수');
+    return;
+  }
+
+  const r = await fetch('/api/remittance/add-v2', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  const resultDiv = document.getElementById('rem-add-result');
+  if (d.success) {
+    resultDiv.innerHTML = `<span style="color:#4caf50;">✅ ${d.message}</span>`;
+    // 폼 리셋
+    ['rem-date','rem-received-cny','rem-amount-krw','rem-transaction-no',
+     'rem-send-amount','rem-send-fx-rate','rem-fee-krw','rem-notes',
+     'rem-receipt-file'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    document.getElementById('rem-receipt-status').textContent = '';
+    document.getElementById('rem-receipt-preview').innerHTML = '';
+    _uploadedReceipt = null;
+    loadRemittances();
+    loadUnmatched();
+  } else {
+    resultDiv.innerHTML = `<span style="color:#f44336;">❌ ${d.error}</span>`;
+  }
+}
+
 async function loadRemittances() {
   const r = await fetch('/api/remittance/list?limit=100');
   const d = await r.json();
   if (!d.success) return;
 
   document.getElementById('rem-count').textContent = d.summary.remittance_count;
-  document.getElementById('rem-total-cny').textContent =
-    d.summary.total_remittance_cny.toLocaleString() + ' ¥';
-  document.getElementById('rem-total-krw').textContent =
-    d.summary.total_remittance_krw.toLocaleString() + ' ₩';
-  document.getElementById('rem-unmatched-cny').textContent =
-    d.summary.unmatched_bid_cny.toLocaleString() + ' ¥';
+  document.getElementById('rem-total-cny').textContent = (d.summary.total_remittance_cny || 0).toLocaleString() + ' ¥';
+  document.getElementById('rem-total-krw').textContent = (d.summary.total_remittance_krw || 0).toLocaleString() + ' ₩';
+  document.getElementById('rem-unmatched-cny').textContent = (d.summary.unmatched_bid_cny || 0).toLocaleString() + ' ¥';
 
   const tbody = document.getElementById('rem-tbody');
-  tbody.innerHTML = d.items.map(i => `
-    <tr>
-      <td>${i.id}</td>
-      <td>${i.remittance_date}</td>
-      <td>${i.amount_cny.toLocaleString()}</td>
-      <td>${i.amount_krw.toLocaleString()}</td>
-      <td>${i.exchange_rate}</td>
-      <td>${(i.allocated_cny || 0).toLocaleString()}</td>
-      <td>${(i.amount_cny - (i.allocated_cny || 0)).toLocaleString()}</td>
-      <td>${i.status}</td>
-      <td>${i.supplier || '-'}</td>
-      <td>${i.notes || ''}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = d.items.map(i => {
+    const sendDisplay = i.send_currency === 'USD'
+      ? `USD ${(i.send_amount || 0).toLocaleString()}`
+      : `CNY ${(i.received_cny || i.amount_cny || 0).toLocaleString()}`;
+    const receiptCell = i.receipt_path
+      ? `<a href="/api/remittance/${i.id}/receipt" target="_blank">📎 보기</a>
+         <button onclick="verifyReceipt(${i.id})" style="font-size:11px;">검증</button>`
+      : '<span style="color:#999;">없음</span>';
+    return `
+      <tr>
+        <td>${i.id}</td>
+        <td>${i.remittance_date}</td>
+        <td>${i.sender_service || '-'}</td>
+        <td>${i.transaction_no || '-'}</td>
+        <td>${sendDisplay}</td>
+        <td>${(i.received_cny || i.amount_cny || 0).toLocaleString()}</td>
+        <td>${(i.amount_krw || 0).toLocaleString()}</td>
+        <td><strong>${i.exchange_rate}</strong></td>
+        <td>${(i.allocated_cny || 0).toLocaleString()} / ${(i.amount_cny || 0).toLocaleString()}</td>
+        <td>${i.status}</td>
+        <td>${receiptCell}</td>
+        <td>${(!i.received_cny || i.received_cny === 0) ? `<button onclick="updateCny(${i.id})" style="background:#ff9800;color:#fff;font-size:11px;">CNY 입력</button>` : ''}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function updateCny(id) {
+  const cny = prompt('협력사가 받은 실제 CNY 금액을 입력하세요:');
+  if (!cny || isNaN(parseFloat(cny))) return;
+  const r = await fetch(`/api/remittance/${id}/update-cny`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({received_cny: parseFloat(cny)}),
+  });
+  const d = await r.json();
+  if (d.success) {
+    alert(`업데이트 완료\nCNY: ${d.received_cny}\n환율: ${d.exchange_rate}`);
+    loadRemittances();
+  } else {
+    alert('실패: ' + d.error);
+  }
+}
+
+async function verifyReceipt(id) {
+  const r = await fetch(`/api/remittance/${id}/verify`);
+  const d = await r.json();
+  if (d.success && d.match) {
+    alert('✅ 무결성 검증 통과 (파일 변조 없음)');
+  } else {
+    alert('❌ 검증 실패: ' + (d.error || '해시 불일치'));
+  }
 }
 
 async function loadUnmatched() {
@@ -107,46 +314,11 @@ async function loadUnmatched() {
   const tbody = document.getElementById('unmatched-tbody');
   tbody.innerHTML = d.items.slice(0, 50).map(b => `
     <tr>
-      <td>${b.bid_cost_id}</td>
-      <td>${b.order_id}</td>
-      <td>${b.model}</td>
-      <td>${b.size || '-'}</td>
-      <td>${b.cny_price}</td>
-      <td>${b.matched_cny}</td>
-      <td>${(b.cny_price - b.matched_cny).toFixed(2)}</td>
-      <td>${b.created_at}</td>
+      <td>${b.bid_cost_id}</td><td>${b.order_id}</td><td>${b.model}</td><td>${b.size || '-'}</td>
+      <td>${b.cny_price}</td><td>${b.matched_cny}</td>
+      <td>${(b.cny_price - b.matched_cny).toFixed(2)}</td><td>${b.created_at}</td>
     </tr>
   `).join('');
-}
-
-async function addRemittance() {
-  const body = {
-    remittance_date: document.getElementById('rem-date').value,
-    amount_cny: parseFloat(document.getElementById('rem-cny').value),
-    amount_krw: parseFloat(document.getElementById('rem-krw').value),
-    supplier: document.getElementById('rem-supplier').value || null,
-    wechat_id: document.getElementById('rem-wechat').value || null,
-    fee_krw: parseFloat(document.getElementById('rem-fee').value || 0),
-    notes: document.getElementById('rem-notes').value || null,
-  };
-  if (!body.remittance_date || !body.amount_cny || !body.amount_krw) {
-    alert('날짜/CNY/KRW는 필수');
-    return;
-  }
-  const r = await fetch('/api/remittance/add', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
-  });
-  const d = await r.json();
-  document.getElementById('rem-add-result').textContent =
-    d.success ? `✅ ${d.message}` : `❌ ${d.error}`;
-  if (d.success) {
-    ['rem-date','rem-cny','rem-krw','rem-supplier','rem-wechat','rem-fee','rem-notes']
-      .forEach(id => document.getElementById(id).value = '');
-    loadRemittances();
-    loadUnmatched();
-  }
 }
 
 async function autoMatch() {
@@ -164,12 +336,8 @@ async function autoMatch() {
 }
 
 if (typeof registerTabLoader === 'function') {
-  registerTabLoader('remittance', () => {
-    loadRemittances();
-    loadUnmatched();
-  });
+  registerTabLoader('remittance', () => { loadSuppliers(); loadRemittances(); loadUnmatched(); });
 } else {
-  loadRemittances();
-  loadUnmatched();
+  loadSuppliers(); loadRemittances(); loadUnmatched();
 }
 </script>

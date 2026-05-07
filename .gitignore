@@ -25,3 +25,6 @@ codegen_capture/*.har
 # 백업 파일 (자동 생성, Git 관리 안 함)
 *.bak
 *.bak.*
+
+# Step 42-Phase 2.5: 송금 영수증 (개인정보, 별도 백업)
+receipts/

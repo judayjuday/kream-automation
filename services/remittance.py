@@ -14,6 +14,11 @@
 """
 import sqlite3
 import os
+import hashlib
+import shutil
+import json
+from pathlib import Path
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'price_history.db')
@@ -381,5 +386,246 @@ def get_summary() -> Dict[str, Any]:
             'unmatched_bid_count': len(unmatched),
             'unmatched_bid_cny': round(unmatched_cny, 2),
         }
+    finally:
+        conn.close()
+
+
+# ============================================================
+# Step 42-Phase 2.5: 영수증 파일 + USD 송금 + 협력사
+# ============================================================
+
+RECEIPTS_BASE = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / 'receipts'
+UPLOAD_LOG = RECEIPTS_BASE / '.metadata' / 'upload_log.jsonl'
+
+
+def _ensure_receipts_dirs():
+    """영수증 디렉토리 보장."""
+    (RECEIPTS_BASE / '.metadata').mkdir(parents=True, exist_ok=True)
+
+
+def _compute_sha256(file_path: Path) -> str:
+    """파일 SHA256 해시 계산 (무결성 검증용)."""
+    h = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def save_receipt_file(temp_path: str, original_name: str, transaction_no: str = None) -> Dict[str, Any]:
+    """
+    임시 업로드된 영수증 파일을 영구 위치로 이동.
+    구조: receipts/YYYY/MM/<transaction_no>_<timestamp>_<safe_name>
+
+    절대 규칙: 기존 파일 덮어쓰기 금지. 같은 이름 있으면 timestamp suffix.
+    """
+    _ensure_receipts_dirs()
+    src = Path(temp_path)
+    if not src.exists():
+        return {'success': False, 'error': f'temp file not found: {temp_path}'}
+
+    now = datetime.now()
+    year_month_dir = RECEIPTS_BASE / f"{now.year:04d}" / f"{now.month:02d}"
+    year_month_dir.mkdir(parents=True, exist_ok=True)
+
+    # 파일명 안전화 (공백/특수문자 제거)
+    safe_name = ''.join(c if c.isalnum() or c in '._-' else '_' for c in original_name)
+    timestamp = now.strftime('%Y%m%d_%H%M%S')
+    txn_prefix = f"{transaction_no}_" if transaction_no else ""
+    filename = f"{txn_prefix}{timestamp}_{safe_name}"
+
+    dst = year_month_dir / filename
+    # 충돌 방지
+    counter = 1
+    while dst.exists():
+        dst = year_month_dir / f"{txn_prefix}{timestamp}_{counter}_{safe_name}"
+        counter += 1
+
+    shutil.copy2(str(src), str(dst))
+    sha256 = _compute_sha256(dst)
+    rel_path = str(dst.relative_to(RECEIPTS_BASE.parent))  # kream_automation 기준
+
+    # 업로드 로그 (영구 기록 — 절대 삭제 금지)
+    log_entry = {
+        'timestamp': now.isoformat(),
+        'original_name': original_name,
+        'saved_path': rel_path,
+        'sha256': sha256,
+        'size_bytes': dst.stat().st_size,
+        'transaction_no': transaction_no,
+    }
+    with open(UPLOAD_LOG, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+
+    return {
+        'success': True,
+        'path': rel_path,
+        'sha256': sha256,
+        'size_bytes': dst.stat().st_size,
+        'original_name': original_name,
+    }
+
+
+def verify_receipt_integrity(remittance_id: int) -> Dict[str, Any]:
+    """저장된 영수증 SHA256 검증 (변조 감지)."""
+    rem = get_remittance(remittance_id)
+    if not rem:
+        return {'success': False, 'error': 'remittance not found'}
+    if not rem.get('receipt_path'):
+        return {'success': False, 'error': 'no receipt attached'}
+
+    full_path = RECEIPTS_BASE.parent / rem['receipt_path']
+    if not full_path.exists():
+        return {'success': False, 'error': 'file missing on disk', 'path': rem['receipt_path']}
+
+    actual = _compute_sha256(full_path)
+    expected = rem.get('receipt_sha256')
+    return {
+        'success': actual == expected,
+        'expected': expected,
+        'actual': actual,
+        'path': rem['receipt_path'],
+        'match': actual == expected,
+    }
+
+
+def add_remittance_v2(
+    remittance_date: str,
+    received_cny: float,                  # 협력사 실제 입금 CNY (사장님 확인값)
+    amount_krw: float,                    # 한국 출금 KRW
+    send_currency: str = 'CNY',           # CNY / USD
+    send_amount: Optional[float] = None,  # USD 송금이면 USD 금액
+    send_fx_rate: Optional[float] = None, # 영수증 FX Rate
+    sender_service: Optional[str] = None, # SentBiz / KB / Wise
+    transaction_no: Optional[str] = None,
+    supplier_id: Optional[int] = None,
+    supplier: Optional[str] = None,       # 레거시 호환
+    wechat_id: Optional[str] = None,
+    fee_krw: float = 0,
+    notes: Optional[str] = None,
+    receipt_path: Optional[str] = None,
+    receipt_original_name: Optional[str] = None,
+    receipt_sha256: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    USD 경유 송금 + 영수증 첨부 지원 v2.
+
+    환율(exchange_rate, KRW/CNY)은 amount_krw / received_cny로 자동 계산.
+    이게 진짜 원가 환율 (USD 경유여도 협력사 받은 CNY 기준).
+    """
+    # 절대 규칙 #1: 가짜 값 금지
+    if received_cny <= 0:
+        return {'success': False, 'error': 'received_cny must be > 0 (협력사 입금 CNY 필수)'}
+    if amount_krw <= 0:
+        return {'success': False, 'error': 'amount_krw must be > 0'}
+    if send_currency not in ('CNY', 'USD'):
+        return {'success': False, 'error': 'send_currency must be CNY or USD'}
+
+    exchange_rate = round(amount_krw / received_cny, 4)
+    cny_confirmed_at = datetime.now().isoformat() if received_cny > 0 else None
+    receipt_uploaded_at = datetime.now().isoformat() if receipt_path else None
+
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO remittance_history
+            (remittance_date, amount_cny, amount_krw, exchange_rate,
+             supplier, wechat_id, fee_krw, notes,
+             send_currency, send_amount, send_fx_rate, received_cny, cny_confirmed_at,
+             sender_service, transaction_no, supplier_id,
+             receipt_path, receipt_original_name, receipt_sha256, receipt_uploaded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            remittance_date, received_cny, amount_krw, exchange_rate,
+            supplier, wechat_id, fee_krw, notes,
+            send_currency, send_amount, send_fx_rate, received_cny, cny_confirmed_at,
+            sender_service, transaction_no, supplier_id,
+            receipt_path, receipt_original_name, receipt_sha256, receipt_uploaded_at,
+        ))
+        conn.commit()
+        new_id = cur.lastrowid
+        return {
+            'success': True,
+            'id': new_id,
+            'exchange_rate': exchange_rate,
+            'message': f'송금 등록 완료 (id={new_id}, 환율={exchange_rate}, 통화={send_currency})'
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+# ----- 협력사 마스터 -----
+
+def list_suppliers() -> List[Dict]:
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM remittance_supplier ORDER BY name")
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def add_supplier(name: str, name_en: Optional[str] = None,
+                 wechat_id: Optional[str] = None, bank_account: Optional[str] = None,
+                 default_currency: str = 'CNY', notes: Optional[str] = None) -> Dict[str, Any]:
+    if not name:
+        return {'success': False, 'error': 'name required'}
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO remittance_supplier (name, name_en, wechat_id, bank_account, default_currency, notes)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (name, name_en, wechat_id, bank_account, default_currency, notes))
+        conn.commit()
+        return {'success': True, 'id': cur.lastrowid}
+    except sqlite3.IntegrityError:
+        return {'success': False, 'error': 'supplier name already exists'}
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def update_received_cny(remittance_id: int, received_cny: float) -> Dict[str, Any]:
+    """
+    USD 송금 후 협력사로부터 CNY 입금 확인되면 호출.
+    환율 재계산 + cny_confirmed_at 갱신.
+    """
+    if received_cny <= 0:
+        return {'success': False, 'error': 'received_cny must be > 0'}
+
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT amount_krw FROM remittance_history WHERE id = ?", (remittance_id,))
+        row = cur.fetchone()
+        if not row:
+            return {'success': False, 'error': 'remittance not found'}
+
+        new_rate = round(row['amount_krw'] / received_cny, 4)
+        now = datetime.now().isoformat()
+        cur.execute("""
+            UPDATE remittance_history
+            SET received_cny = ?, amount_cny = ?, exchange_rate = ?,
+                cny_confirmed_at = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (received_cny, received_cny, new_rate, now, remittance_id))
+        conn.commit()
+        return {
+            'success': True,
+            'id': remittance_id,
+            'received_cny': received_cny,
+            'exchange_rate': new_rate,
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
     finally:
         conn.close()

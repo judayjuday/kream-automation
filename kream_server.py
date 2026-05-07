@@ -18,6 +18,7 @@ import re
 import sqlite3
 import smtplib
 import subprocess
+import tempfile
 import threading
 import time
 import traceback
@@ -29,6 +30,7 @@ from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response
+from werkzeug.utils import secure_filename
 import openpyxl
 
 # ── Step 18-D: APScheduler (일일 자동화 + 운영 가시성) ──
@@ -13222,6 +13224,180 @@ def api_remittance_unmatched_bids():
             'count': len(items),
             'total_cny': round(sum(b['cny_price'] - b['matched_cny'] for b in items), 2),
         })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
+# Step 42-Phase 2.5: 영수증 + USD/CNY 분리 + 협력사
+# ═══════════════════════════════════════════
+
+@app.route('/api/remittance/upload-receipt', methods=['POST'])
+def api_remittance_upload_receipt():
+    """
+    영수증 파일 업로드 (multipart/form-data).
+    files: receipt
+    form: transaction_no (optional, 파일명 prefix용)
+    응답: {success, path, sha256, size_bytes, original_name}
+    """
+    try:
+        from services import remittance as remittance_svc
+        if 'receipt' not in request.files:
+            return jsonify({'success': False, 'error': 'no file uploaded'}), 400
+
+        f = request.files['receipt']
+        if not f.filename:
+            return jsonify({'success': False, 'error': 'empty filename'}), 400
+
+        # 확장자 화이트리스트
+        allowed_ext = {'.png', '.jpg', '.jpeg', '.pdf', '.heic', '.webp'}
+        ext = os.path.splitext(f.filename)[1].lower()
+        if ext not in allowed_ext:
+            return jsonify({'success': False,
+                            'error': f'extension not allowed: {ext}'}), 400
+
+        # 크기 제한 (10MB)
+        f.seek(0, 2)
+        size = f.tell()
+        f.seek(0)
+        if size > 10 * 1024 * 1024:
+            return jsonify({'success': False, 'error': 'file too large (max 10MB)'}), 400
+
+        # 임시 저장 후 services로 위임
+        original_name = secure_filename(f.filename) or 'receipt'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            f.save(tmp.name)
+            tmp_path = tmp.name
+
+        transaction_no = request.form.get('transaction_no')
+        try:
+            result = remittance_svc.save_receipt_file(tmp_path, original_name, transaction_no)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+        return jsonify(result), (200 if result['success'] else 500)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/add-v2', methods=['POST'])
+def api_remittance_add_v2():
+    """
+    USD/CNY 분리 + 영수증 메타 포함 v2 등록.
+    body: {
+      remittance_date, received_cny, amount_krw,
+      send_currency?, send_amount?, send_fx_rate?,
+      sender_service?, transaction_no?, supplier_id?,
+      supplier?, wechat_id?, fee_krw?, notes?,
+      receipt_path?, receipt_original_name?, receipt_sha256?
+    }
+    """
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        for k in ('remittance_date', 'received_cny', 'amount_krw'):
+            if k not in data:
+                return jsonify({'success': False, 'error': f'missing {k}'}), 400
+
+        result = remittance_svc.add_remittance_v2(
+            remittance_date=data['remittance_date'],
+            received_cny=float(data['received_cny']),
+            amount_krw=float(data['amount_krw']),
+            send_currency=data.get('send_currency', 'CNY'),
+            send_amount=float(data['send_amount']) if data.get('send_amount') else None,
+            send_fx_rate=float(data['send_fx_rate']) if data.get('send_fx_rate') else None,
+            sender_service=data.get('sender_service'),
+            transaction_no=data.get('transaction_no'),
+            supplier_id=int(data['supplier_id']) if data.get('supplier_id') else None,
+            supplier=data.get('supplier'),
+            wechat_id=data.get('wechat_id'),
+            fee_krw=float(data.get('fee_krw', 0)),
+            notes=data.get('notes'),
+            receipt_path=data.get('receipt_path'),
+            receipt_original_name=data.get('receipt_original_name'),
+            receipt_sha256=data.get('receipt_sha256'),
+        )
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/update-cny', methods=['POST'])
+def api_remittance_update_cny(rid):
+    """USD 송금 후 협력사 입금 CNY 확인 시 호출. body: {received_cny}"""
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        if 'received_cny' not in data:
+            return jsonify({'success': False, 'error': 'received_cny required'}), 400
+        result = remittance_svc.update_received_cny(rid, float(data['received_cny']))
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/receipt', methods=['GET'])
+def api_remittance_get_receipt(rid):
+    """저장된 영수증 파일 다운로드/표시."""
+    try:
+        from services import remittance as remittance_svc
+        rem = remittance_svc.get_remittance(rid)
+        if not rem:
+            return jsonify({'success': False, 'error': 'not found'}), 404
+        if not rem.get('receipt_path'):
+            return jsonify({'success': False, 'error': 'no receipt'}), 404
+
+        full_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            rem['receipt_path']
+        )
+        if not os.path.exists(full_path):
+            return jsonify({'success': False, 'error': 'file missing on disk'}), 404
+
+        return send_file(full_path, as_attachment=False)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/verify', methods=['GET'])
+def api_remittance_verify(rid):
+    """영수증 무결성(SHA256) 검증."""
+    try:
+        from services import remittance as remittance_svc
+        result = remittance_svc.verify_receipt_integrity(rid)
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/supplier/list', methods=['GET'])
+def api_supplier_list():
+    try:
+        from services import remittance as remittance_svc
+        return jsonify({'success': True, 'items': remittance_svc.list_suppliers()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/supplier/add', methods=['POST'])
+def api_supplier_add():
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        if 'name' not in data:
+            return jsonify({'success': False, 'error': 'name required'}), 400
+        result = remittance_svc.add_supplier(
+            name=data['name'],
+            name_en=data.get('name_en'),
+            wechat_id=data.get('wechat_id'),
+            bank_account=data.get('bank_account'),
+            default_currency=data.get('default_currency', 'CNY'),
+            notes=data.get('notes'),
+        )
+        return jsonify(result), (200 if result['success'] else 400)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
