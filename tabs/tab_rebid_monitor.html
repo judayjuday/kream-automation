@@ -90,6 +90,18 @@
     <tbody id="rm-recent-tbody"></tbody>
   </table>
 
+  <!-- 모델별 ROI -->
+  <h3 style="margin-top:24px;">💰 모델별 ROI 분석 (최근 30일)</h3>
+  <table id="rm-roi-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>모델</th><th>사이즈</th><th>시도</th><th>성공</th>
+        <th>실패율</th><th>총 마진</th><th>평균 마진</th><th>ROI/시도</th>
+      </tr>
+    </thead>
+    <tbody id="rm-roi-tbody"></tbody>
+  </table>
+
   <!-- 백테스트 -->
   <h3 style="margin-top:24px;">🔮 시뮬레이션 (과거 데이터 백테스트)</h3>
   <div style="background:#f3e5f5;padding:12px;border-radius:6px;margin-bottom:12px;">
@@ -276,12 +288,36 @@ async function emergencyStop() {
   }
 }
 
+async function loadModelRoi() {
+  const r = await fetch('/api/auto-rebid/model-roi?days=30');
+  const d = await r.json();
+  if (!d.success) return;
+  const tbody = document.getElementById('rm-roi-tbody');
+  if (d.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">데이터 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = d.items.slice(0, 30).map(m => `
+    <tr>
+      <td><strong>${m.model}</strong></td>
+      <td>${m.size || '-'}</td>
+      <td>${m.attempts}</td>
+      <td style="color:#4caf50;">${m.success}</td>
+      <td style="color:${m.fail_rate_pct >= 20 ? '#f44336' : '#666'};">${m.fail_rate_pct}%</td>
+      <td><strong>${m.total_profit.toLocaleString()}</strong></td>
+      <td>${m.avg_profit.toLocaleString()}</td>
+      <td style="color:#2196f3;"><strong>${m.roi_per_attempt.toLocaleString()}</strong></td>
+    </tr>
+  `).join('');
+}
+
 function loadAllRebidMonitor() {
   loadRebidStatus();
   loadRealtimeStats(24);
   loadModelStats();
   loadSkipReasons();
   loadRecentExecutions();
+  loadModelRoi();
 }
 
 if (typeof registerTabLoader === 'function') {

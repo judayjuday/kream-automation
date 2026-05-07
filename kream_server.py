@@ -13647,6 +13647,17 @@ def api_supplier_list():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/auto-rebid/model-roi', methods=['GET'])
+def api_auto_rebid_model_roi():
+    try:
+        from services import rebid_monitor as rebid_monitor_svc
+        days = int(request.args.get('days', 30))
+        items = rebid_monitor_svc.model_roi_analysis(days)
+        return jsonify({'success': True, 'items': items, 'days': days})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/auto-rebid/backtest', methods=['POST'])
 def api_auto_rebid_backtest():
     try:

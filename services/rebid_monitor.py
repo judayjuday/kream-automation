@@ -126,6 +126,46 @@ def skip_reasons(hours: int = 24) -> List[Dict]:
         conn.close()
 
 
+def model_roi_analysis(days: int = 30) -> List[Dict]:
+    """
+    모델별 ROI 분석:
+    - 자동 재입찰 시도 횟수
+    - 성공 횟수 + 누적 마진
+    - 평균 마진
+    - 실패율
+    - ROI 점수 (마진 ÷ 시도)
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT
+                model, size,
+                COUNT(*) as attempts,
+                SUM(CASE WHEN action = 'auto_modified' THEN 1 ELSE 0 END) as success,
+                SUM(CASE WHEN action = 'modify_failed' THEN 1 ELSE 0 END) as failed,
+                SUM(CASE WHEN action LIKE 'skipped_%' THEN 1 ELSE 0 END) as skipped,
+                COALESCE(SUM(CASE WHEN action = 'auto_modified' THEN expected_profit ELSE 0 END), 0) as total_profit,
+                COALESCE(AVG(CASE WHEN action = 'auto_modified' THEN expected_profit ELSE NULL END), 0) as avg_profit
+            FROM auto_rebid_log
+            WHERE executed_at >= datetime('now', '-{days} days')
+              AND action NOT LIKE 'dry_run_%'
+            GROUP BY model, size
+            HAVING attempts >= 1
+            ORDER BY total_profit DESC
+        """)
+        items = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d['fail_rate_pct'] = round(d['failed'] / max(d['success'] + d['failed'], 1) * 100, 2)
+            d['success_rate_pct'] = round(d['success'] / max(d['attempts'], 1) * 100, 2)
+            d['roi_per_attempt'] = round(d['total_profit'] / max(d['attempts'], 1), 2)
+            items.append(d)
+        return items
+    finally:
+        conn.close()
+
+
 def recent_executions(limit: int = 50) -> List[Dict]:
     """최근 실행 이력 (성공/실패 모두)."""
     conn = _get_conn()
