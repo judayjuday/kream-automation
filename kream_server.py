@@ -13647,6 +13647,42 @@ def api_supplier_list():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/auto-rebid/emergency-stop', methods=['POST'])
+def api_auto_rebid_emergency_stop():
+    """
+    비상 정지: settings.auto_rebid_enabled = false
+    절대 규칙 #7 예외: 사장님이 비상 시 즉시 정지 가능 (안전 우선).
+    실행 시 백업 자동 생성 + 알림.
+    """
+    try:
+        import json as _json
+        from datetime import datetime as _dt
+        settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
+
+        backup_path = settings_path + '.bak.emergency_stop.' + _dt.now().strftime('%Y%m%d_%H%M%S')
+        import shutil as _shutil
+        _shutil.copy2(settings_path, backup_path)
+
+        with open(settings_path, 'r') as f:
+            s = _json.load(f)
+
+        was_enabled = s.get('auto_rebid_enabled', False)
+        s['auto_rebid_enabled'] = False
+        s['auto_rebid_emergency_stopped_at'] = _dt.now().isoformat()
+
+        with open(settings_path, 'w') as f:
+            _json.dump(s, f, ensure_ascii=False, indent=2)
+
+        return jsonify({
+            'success': True,
+            'message': f'비상 정지 완료. (이전 상태: {"enabled" if was_enabled else "already disabled"})',
+            'backup': os.path.basename(backup_path),
+            'note': '재가동하려면 settings.json에서 auto_rebid_enabled=true 변경 + 서버 재시작',
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/auto-rebid/realtime-stats', methods=['GET'])
 def api_auto_rebid_realtime():
     try:
