@@ -124,3 +124,90 @@ def list_all(bulk_only=False):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ============================================================
+# Step 43-7: CSV 일괄 업로드
+# ============================================================
+import csv
+import io
+from typing import Dict, Any
+
+
+def bulk_upsert_from_csv(csv_text: str) -> Dict[str, Any]:
+    """
+    CSV 일괄 업로드 (UPSERT).
+
+    필수 컬럼: model, cny_price
+    선택 컬럼: size, category, brand, is_bulk_item, notes, source
+
+    절대 규칙 #7: 인보이스 단가 자동 시드 금지.
+    이 함수는 사장님이 검증한 단가만 입력하는 용도.
+    """
+    reader = csv.DictReader(io.StringIO(csv_text))
+    inserted = 0
+    updated = 0
+    errors = []
+
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        for line_no, row in enumerate(reader, start=2):
+            try:
+                model = (row.get('model') or '').strip()
+                cny_str = (row.get('cny_price') or '').strip()
+                if not model or not cny_str:
+                    errors.append(f'L{line_no}: model/cny_price 필수')
+                    continue
+                cny = float(cny_str)
+                if cny <= 0:
+                    errors.append(f'L{line_no}: cny_price > 0')
+                    continue
+
+                size = (row.get('size') or '').strip() or None
+                category = (row.get('category') or '').strip() or None
+                brand = (row.get('brand') or '').strip() or None
+                is_bulk = 1 if (row.get('is_bulk_item') or '').strip().lower() in ('1','true','y','yes') else 0
+                notes = (row.get('notes') or '').strip() or None
+                source = (row.get('source') or '').strip() or '사장님 일괄 입력 (CSV)'
+
+                # NULL-safe UPSERT (size NULL 처리)
+                if size is None:
+                    cur.execute("""
+                        SELECT id FROM model_price_book WHERE model = ? AND size IS NULL
+                    """, (model,))
+                else:
+                    cur.execute("""
+                        SELECT id FROM model_price_book WHERE model = ? AND size = ?
+                    """, (model, size))
+                existing = cur.fetchone()
+                if existing:
+                    cur.execute("""
+                        UPDATE model_price_book
+                        SET cny_price = ?, category = ?, brand = ?,
+                            is_bulk_item = ?, notes = ?, source = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (cny, category, brand, is_bulk, notes, source, existing[0]))
+                    updated += 1
+                else:
+                    cur.execute("""
+                        INSERT INTO model_price_book
+                        (model, size, cny_price, category, brand, is_bulk_item, notes, source, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (model, size, cny, category, brand, is_bulk, notes, source))
+                    inserted += 1
+            except Exception as e:
+                errors.append(f'L{line_no}: {e}')
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        'success': True,
+        'inserted': inserted,
+        'updated': updated,
+        'errors': errors[:20],
+        'total_errors': len(errors),
+    }

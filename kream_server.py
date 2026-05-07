@@ -13296,6 +13296,30 @@ def api_fx_pnl_trends():
 
 
 # ═══════════════════════════════════════════
+# Step 43-7: model_price_book CSV 일괄 입력
+# ═══════════════════════════════════════════
+
+@app.route('/api/price-book/bulk-upload', methods=['POST'])
+def api_price_book_bulk_upload():
+    """CSV 일괄 업로드. body: {csv_text} 또는 multipart file."""
+    try:
+        from services import price_book as price_book_svc
+        if 'file' in request.files:
+            csv_text = request.files['file'].read().decode('utf-8-sig')
+        else:
+            data = request.get_json() or {}
+            csv_text = data.get('csv_text', '')
+
+        if not csv_text:
+            return jsonify({'success': False, 'error': 'csv_text or file required'}), 400
+
+        result = price_book_svc.bulk_upsert_from_csv(csv_text)
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # Step 43-4: 인보이스번호 추적
 # ═══════════════════════════════════════════
 

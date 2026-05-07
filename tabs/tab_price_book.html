@@ -87,6 +87,104 @@
           </div>
         </div>
 
+        <!-- Step 43-7: CSV 일괄 업로드 -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title">
+            <span class="icon">📤</span> CSV 일괄 업로드 (Step 43-7)
+          </div>
+          <p style="margin:0 0 8px;font-size:13px;">
+            <strong>형식:</strong> <code>model, cny_price</code> (필수) / <code>size, category, brand, is_bulk_item, notes, source</code> (선택)<br>
+            <small style="color:#d32f2f;">⚠️ 절대 규칙 #7: 인보이스 단가 자동 시드 금지. 사장님이 검증한 단가만 입력.</small>
+          </p>
+          <textarea id="pb-csv-text" rows="6" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border:1px solid #d1d5db;border-radius:6px;"
+            placeholder="model,size,cny_price,category,brand
+IX7693,ONE SIZE,205,가방,
+JQ4110,W250,370,가방,
+1203A243-021,235,380,신발,Onitsuka Tiger"></textarea>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:12px;">
+            <button class="btn btn-primary" onclick="bulkUploadPb()" style="font-size:13px;">업로드</button>
+            <span id="pb-bulk-result" style="font-size:13px;"></span>
+          </div>
+        </div>
+
+        <!-- Step 43-8: bid_cost 단가 불일치 감지 -->
+        <div class="card" style="margin-bottom:16px;background:#ffebee;">
+          <div class="card-title">
+            <span class="icon">⚠️</span> 단가 불일치 감지 (Step 43-8)
+          </div>
+          <p style="margin:0 0 8px;font-size:13px;">
+            bid_cost와 model_price_book 단가가 <strong>±<span id="pb-threshold-display">20</span>%</strong> 이상 차이나는 케이스.<br>
+            <small>인보이스 단가 잘못 시드한 경우, 협력사 단가 변경 패턴 감지에 사용.</small>
+          </p>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <input type="number" id="pb-threshold" value="20" min="5" max="100" style="width:80px;padding:6px;border:1px solid #d1d5db;border-radius:6px;" />
+            <span>%</span>
+            <button class="btn btn-outline" onclick="detectAnomalies()" style="font-size:13px;">탐지</button>
+            <span id="pb-anomaly-count" style="font-size:13px;"></span>
+          </div>
+          <div style="overflow-x:auto;margin-top:12px;">
+            <table id="pb-anomaly-table" style="width:100%;display:none;">
+              <thead>
+                <tr><th>모델</th><th>사이즈</th><th>bid_cost CNY</th><th>price_book CNY</th><th>차이</th><th>차이%</th><th>입찰일</th></tr>
+              </thead>
+              <tbody id="pb-anomaly-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <script>
+        async function bulkUploadPb() {
+          const csv = document.getElementById('pb-csv-text').value;
+          if (!csv.trim()) { alert('CSV 입력 필요'); return; }
+          const r = await fetch('/api/price-book/bulk-upload', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({csv_text: csv}),
+          });
+          const d = await r.json();
+          const res = document.getElementById('pb-bulk-result');
+          if (d.success) {
+            res.innerHTML = `<span style="color:#4caf50;">✅ 추가 ${d.inserted} / 수정 ${d.updated}건${d.total_errors ? ' (에러 '+d.total_errors+'건: '+(d.errors||[]).join(' | ')+')' : ''}</span>`;
+            if (typeof pbReload === 'function') pbReload();
+          } else {
+            res.innerHTML = `<span style="color:#f44336;">❌ ${d.error}</span>`;
+          }
+        }
+
+        async function detectAnomalies() {
+          const threshold = document.getElementById('pb-threshold').value;
+          document.getElementById('pb-threshold-display').textContent = threshold;
+          const r = await fetch('/api/price-book/anomalies?threshold=' + threshold);
+          const d = await r.json();
+          if (!d.success) {
+            document.getElementById('pb-anomaly-count').innerHTML = `<span style="color:#f44336;">❌ ${d.error}</span>`;
+            return;
+          }
+          const cnt = document.getElementById('pb-anomaly-count');
+          cnt.textContent = ` → ${d.count}건 발견`;
+          cnt.style.color = d.count > 0 ? '#f44336' : '#4caf50';
+
+          const table = document.getElementById('pb-anomaly-table');
+          const tbody = document.getElementById('pb-anomaly-tbody');
+          if (d.count === 0) {
+            table.style.display = 'none';
+            return;
+          }
+          table.style.display = '';
+          tbody.innerHTML = d.items.map(a => `
+            <tr>
+              <td>${a.model}</td>
+              <td>${a.size || '-'}</td>
+              <td>${a.bid_cny}</td>
+              <td>${a.book_cny}</td>
+              <td style="color:${a.diff_cny >= 0 ? '#f44336' : '#2196f3'};">${a.diff_cny >= 0 ? '+' : ''}${a.diff_cny}</td>
+              <td><strong>${a.diff_pct}%</strong></td>
+              <td>${a.created_at}</td>
+            </tr>
+          `).join('');
+        }
+        </script>
+
         <!-- 모달: 신규 등록 / 수정 -->
         <div id="pb-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:9999; align-items:center; justify-content:center">
           <div style="background:#fff; border-radius:8px; padding:20px; min-width:420px; max-width:560px; width:92%; max-height:90vh; overflow-y:auto">
