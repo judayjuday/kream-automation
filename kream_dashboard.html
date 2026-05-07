@@ -449,6 +449,9 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="nav-item" onclick="showTab('settings')">
         <span class="nav-icon">⚙️</span> 환율/수수료
       </div>
+      <div class="nav-item" data-tab="data_quality" onclick="showTab('data_quality')">
+        <span class="nav-icon">🔍</span> 데이터 품질
+      </div>
     </div>
     <div class="sidebar-rate">
       <div id="sidebar-rate-text" style="font-weight:600; color:#bbb">CNY — 원</div>
@@ -823,6 +826,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-price_book" class="tab-view" data-tab-title="단가표"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-remittance" class="tab-view" data-tab-title="송금 환율"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-rebid_monitor" class="tab-view" data-tab-title="자동 재입찰 모니터링"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-data_quality" class="tab-view" data-tab-title="데이터 품질"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
   </div>
@@ -887,7 +891,8 @@ function showTab(id) {
     market: '📈 시장 모니터링',
     cleanup: '🧹 입찰 정리 도구',
     settings: '환율 / 수수료 설정',
-    rebid_monitor: '🤖 자동 재입찰 모니터링'
+    rebid_monitor: '🤖 자동 재입찰 모니터링',
+    data_quality: '🔍 데이터 품질'
   };
   document.getElementById('page-title').textContent = titles[id] || '';
 
