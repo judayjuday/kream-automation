@@ -211,3 +211,44 @@ def bulk_upsert_from_csv(csv_text: str) -> Dict[str, Any]:
         'errors': errors[:20],
         'total_errors': len(errors),
     }
+
+
+# ============================================================
+# Step 43-8: bid_cost 단가 불일치 감지
+# ============================================================
+
+def detect_bid_cost_anomalies(threshold_pct: float = 20.0):
+    """
+    bid_cost와 model_price_book 단가 차이가 임계값 이상인 케이스 탐지.
+    threshold_pct=20: ±20% 이상 차이나면 경고.
+    인보이스 잘못 시드 / 협력사 단가 변동 패턴 감지용.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                bc.order_id, bc.model, bc.size, bc.cny_price as bid_cny,
+                pb.cny_price as book_cny,
+                bc.created_at
+            FROM bid_cost bc
+            LEFT JOIN model_price_book pb
+                ON pb.model = bc.model
+                AND (pb.size = bc.size OR pb.size IS NULL)
+            WHERE pb.cny_price IS NOT NULL
+        """)
+        rows = cur.fetchall()
+        anomalies = []
+        for r in rows:
+            d = dict(r)
+            if d['book_cny'] and d['bid_cny']:
+                diff_pct = abs(d['bid_cny'] - d['book_cny']) / d['book_cny'] * 100
+                if diff_pct >= threshold_pct:
+                    d['diff_pct'] = round(diff_pct, 2)
+                    d['diff_cny'] = round(d['bid_cny'] - d['book_cny'], 2)
+                    anomalies.append(d)
+        anomalies.sort(key=lambda x: x['diff_pct'], reverse=True)
+        return anomalies
+    finally:
+        conn.close()

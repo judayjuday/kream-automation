@@ -13320,6 +13320,22 @@ def api_price_book_bulk_upload():
 
 
 # ═══════════════════════════════════════════
+# Step 43-8: bid_cost 단가 불일치 감지
+# ═══════════════════════════════════════════
+
+@app.route('/api/price-book/anomalies', methods=['GET'])
+def api_price_book_anomalies():
+    """bid_cost와 model_price_book 단가 차이 ±N% 이상 탐지."""
+    try:
+        from services import price_book as price_book_svc
+        threshold = float(request.args.get('threshold', 20))
+        items = price_book_svc.detect_bid_cost_anomalies(threshold)
+        return jsonify({'success': True, 'items': items, 'count': len(items), 'threshold_pct': threshold})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # Step 43-4: 인보이스번호 추적
 # ═══════════════════════════════════════════
 
