@@ -14069,6 +14069,47 @@ def api_search_global():
 
 
 # ═══════════════════════════════════════════
+# Step 47-5: 데이터 Export (CSV/JSON)
+# ═══════════════════════════════════════════
+
+@app.route('/api/export/list', methods=['GET'])
+def api_export_list():
+    try:
+        from services import data_export as export_svc
+        return jsonify(export_svc.list_tables())
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/export/<table>.csv', methods=['GET'])
+def api_export_csv(table):
+    try:
+        from services import data_export as export_svc
+        limit = int(request.args.get('limit', 10000))
+        result = export_svc.export_table_csv(table, limit)
+        if not result['success']:
+            return jsonify(result), 400
+        filename = f'{table}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        return Response(
+            result['csv'],
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/export/<table>.json', methods=['GET'])
+def api_export_json(table):
+    try:
+        from services import data_export as export_svc
+        limit = int(request.args.get('limit', 10000))
+        return jsonify(export_svc.export_table_json(table, limit))
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 

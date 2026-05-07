@@ -70,6 +70,14 @@
       <li><strong>외부 백업:</strong> receipts/ 폴더는 별도 백업 필요 (외장 SSD/iCloud)</li>
     </ul>
   </div>
+
+  <!-- Step 47-5: 데이터 Export -->
+  <h3 style="margin-top:24px;">📤 데이터 Export</h3>
+  <div style="background:#e8eaf6;padding:12px;border-radius:6px;">
+    <p style="margin:0 0 8px;font-size:13px;">테이블별 CSV/JSON 다운로드. 회계/세무 자료, 분석용.</p>
+    <button onclick="loadExportList()" style="background:#3f51b5;color:#fff;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">테이블 목록</button>
+    <div id="export-list" style="margin-top:12px;"></div>
+  </div>
 </div>
 
 <script>
@@ -175,6 +183,25 @@ async function loadExternalScript() {
     <code style="display:block;background:#fff;padding:8px;border:1px solid #ddd;font-size:12px;">${d.commands.external_ssd_cp}</code>
     <div style="margin-top:8px;font-size:11px;color:#d32f2f;">⚠️ 위 명령어를 터미널에 직접 붙여넣어 실행. (자동 실행 안 함)</div>
   `;
+}
+
+async function loadExportList() {
+  const r = await fetch('/api/export/list');
+  const d = await r.json();
+  if (!d.success) return;
+  const div = document.getElementById('export-list');
+  div.innerHTML = '<table style="width:100%;border-collapse:collapse;"><thead style="background:#eee;"><tr><th>테이블</th><th>레코드</th><th>다운로드</th></tr></thead><tbody>' +
+    Object.entries(d.tables).map(([t, cnt]) => `
+      <tr>
+        <td><strong>${t}</strong></td>
+        <td>${cnt !== null ? cnt.toLocaleString() : '-'}</td>
+        <td>
+          <a href="/api/export/${t}.csv" target="_blank" style="margin-right:8px;">📄 CSV</a>
+          <a href="/api/export/${t}.json" target="_blank">📋 JSON</a>
+        </td>
+      </tr>
+    `).join('') +
+    '</tbody></table>';
 }
 
 if (typeof registerTabLoader === 'function') {
