@@ -13958,6 +13958,15 @@ def api_backup_verify(filename):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/backup/external-script', methods=['GET'])
+def api_backup_external_script():
+    try:
+        from services import backup_manager as backup_svc
+        return jsonify(backup_svc.generate_external_backup_script())
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════

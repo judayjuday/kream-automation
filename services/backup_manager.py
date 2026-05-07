@@ -174,3 +174,45 @@ def verify_backup(backup_filename: str) -> Dict[str, Any]:
         'actual': actual,
         'filename': backup_filename,
     }
+
+
+def generate_external_backup_script() -> Dict[str, Any]:
+    """
+    receipts/ 외부 백업 스크립트 자동 생성.
+    - rsync 또는 cp 명령어
+    - 백업 대상 검증 (파일 수, 용량)
+    """
+    receipts_dir = os.path.join(BASE_DIR, 'receipts')
+    if not os.path.exists(receipts_dir):
+        return {'success': False, 'error': 'receipts/ not found'}
+
+    # 통계
+    file_count = 0
+    total_size = 0
+    for root, dirs, files in os.walk(receipts_dir):
+        for f in files:
+            if f.startswith('.'):
+                continue
+            file_count += 1
+            try:
+                total_size += os.path.getsize(os.path.join(root, f))
+            except Exception:
+                pass
+
+    # 명령어 생성
+    today = datetime.now().strftime('%Y%m%d')
+    rsync_cmd = f'rsync -av --progress {receipts_dir}/ ~/iCloud_Backup/receipts_{today}/'
+    cp_cmd = f'cp -r {receipts_dir} /Volumes/Backup_SSD/kream_receipts_{today}/'
+
+    return {
+        'success': True,
+        'receipts_dir': receipts_dir,
+        'file_count': file_count,
+        'total_size_bytes': total_size,
+        'total_size_mb': round(total_size / 1024 / 1024, 2),
+        'commands': {
+            'icloud_rsync': rsync_cmd,
+            'external_ssd_cp': cp_cmd,
+        },
+        'note': 'receipts/ 는 git 추적 제외. 주 1회 외부 백업 권장.',
+    }
