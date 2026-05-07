@@ -452,6 +452,9 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="nav-item" data-tab="data_quality" onclick="showTab('data_quality')">
         <span class="nav-icon">🔍</span> 데이터 품질
       </div>
+      <div class="nav-item" data-tab="backup" onclick="showTab('backup')">
+        <span class="nav-icon">💾</span> 백업 관리
+      </div>
     </div>
     <div class="sidebar-rate">
       <div id="sidebar-rate-text" style="font-weight:600; color:#bbb">CNY — 원</div>
@@ -827,6 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-remittance" class="tab-view" data-tab-title="송금 환율"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-rebid_monitor" class="tab-view" data-tab-title="자동 재입찰 모니터링"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-data_quality" class="tab-view" data-tab-title="데이터 품질"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-backup" class="tab-view" data-tab-title="백업 관리"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
   </div>
@@ -892,7 +896,8 @@ function showTab(id) {
     cleanup: '🧹 입찰 정리 도구',
     settings: '환율 / 수수료 설정',
     rebid_monitor: '🤖 자동 재입찰 모니터링',
-    data_quality: '🔍 데이터 품질'
+    data_quality: '🔍 데이터 품질',
+    backup: '💾 백업 관리'
   };
   document.getElementById('page-title').textContent = titles[id] || '';
 

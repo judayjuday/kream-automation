@@ -1,0 +1,123 @@
+<!-- 백업 관리 (Step 46-6) -->
+<div class="tab-content" id="tab-backup">
+  <h2>💾 백업 관리</h2>
+
+  <!-- 요약 -->
+  <div id="bk-summary" style="background:#e8f5e9;padding:16px;border-radius:8px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div><div style="color:#666;font-size:13px;">일일 백업</div><div style="font-size:24px;" id="bk-daily-count">-</div></div>
+      <div><div style="color:#666;font-size:13px;">시간별 백업</div><div style="font-size:24px;" id="bk-hourly-count">-</div></div>
+      <div><div style="color:#666;font-size:13px;">총 용량</div><div style="font-size:24px;" id="bk-total-size">-</div></div>
+      <div>
+        <button onclick="createHourlyBackup()" style="background:#2196f3;color:#fff;padding:8px 16px;">즉시 백업</button>
+        <button onclick="cleanupBackups()" style="background:#ff9800;color:#fff;padding:8px 16px;margin-top:4px;">정리 (7일+)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 시간별 백업 -->
+  <h3>⏱ 시간별 백업 (최근 50개)</h3>
+  <table id="bk-hourly-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr><th>파일명</th><th>크기</th><th>생성일시</th><th>SHA256</th><th>액션</th></tr>
+    </thead>
+    <tbody id="bk-hourly-tbody"></tbody>
+  </table>
+
+  <!-- 일일 백업 -->
+  <h3 style="margin-top:24px;">📅 일일 백업 (최근 30개)</h3>
+  <table id="bk-daily-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr><th>파일명</th><th>크기</th><th>생성일시</th></tr>
+    </thead>
+    <tbody id="bk-daily-tbody"></tbody>
+  </table>
+
+  <!-- 가이드 -->
+  <h3 style="margin-top:24px;">📖 백업 정책</h3>
+  <div style="background:#fff;padding:12px;border-left:4px solid #2196f3;font-size:13px;">
+    <ul style="margin:0;padding-left:20px;">
+      <li><strong>시간별 백업:</strong> 4시간마다 자동 (SQLite online backup, 안전)</li>
+      <li><strong>일일 백업:</strong> 기존 시스템 (작업 전 수동 백업)</li>
+      <li><strong>자동 정리:</strong> 매일 00:30, 7일 이상된 hourly 삭제</li>
+      <li><strong>무결성:</strong> 모든 hourly 백업에 SHA256 해시 + 메타데이터</li>
+      <li><strong>외부 백업:</strong> receipts/ 폴더는 별도 백업 필요 (외장 SSD/iCloud)</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+async function loadBackups() {
+  const r = await fetch('/api/backup/list');
+  const d = await r.json();
+  if (!d.success) return;
+
+  document.getElementById('bk-daily-count').textContent = d.daily_count;
+  document.getElementById('bk-hourly-count').textContent = d.hourly_count;
+  document.getElementById('bk-total-size').textContent = d.total_size_mb + ' MB';
+
+  const ht = document.getElementById('bk-hourly-tbody');
+  ht.innerHTML = d.hourly.slice().reverse().map(h => `
+    <tr>
+      <td style="font-family:monospace;font-size:11px;">${h.name}</td>
+      <td>${(h.size_bytes/1024/1024).toFixed(2)} MB</td>
+      <td>${h.mtime}</td>
+      <td style="font-family:monospace;font-size:10px;">${h.sha256 ? h.sha256.substring(0,16)+'...' : '-'}</td>
+      <td><button onclick="verifyBackup('${h.name}')" style="font-size:11px;">검증</button></td>
+    </tr>
+  `).join('');
+
+  const dt = document.getElementById('bk-daily-tbody');
+  dt.innerHTML = d.daily.slice().reverse().map(b => `
+    <tr>
+      <td style="font-family:monospace;font-size:11px;">${b.name}</td>
+      <td>${(b.size_bytes/1024/1024).toFixed(2)} MB</td>
+      <td>${b.mtime}</td>
+    </tr>
+  `).join('');
+}
+
+async function createHourlyBackup() {
+  if (!confirm('지금 즉시 백업을 생성하시겠습니까?')) return;
+  const r = await fetch('/api/backup/create-hourly', {method: 'POST'});
+  const d = await r.json();
+  if (d.success) {
+    alert(`✅ 백업 완료\n${d.path}\nSHA256: ${d.sha256.substring(0,32)}...`);
+    loadBackups();
+  } else {
+    alert('❌ ' + d.error);
+  }
+}
+
+async function cleanupBackups() {
+  if (!confirm('7일 이상된 시간별 백업을 정리하시겠습니까?')) return;
+  const r = await fetch('/api/backup/cleanup', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({keep_days: 7}),
+  });
+  const d = await r.json();
+  if (d.success) {
+    alert(`✅ 정리 완료\n삭제: ${d.deleted}개 / 유지: ${d.kept}개`);
+    loadBackups();
+  } else {
+    alert('❌ ' + d.error);
+  }
+}
+
+async function verifyBackup(filename) {
+  const r = await fetch('/api/backup/verify/' + encodeURIComponent(filename));
+  const d = await r.json();
+  if (d.success && d.match) {
+    alert('✅ 무결성 검증 통과 (변조 없음)');
+  } else {
+    alert('❌ 검증 실패: ' + (d.error || 'SHA256 불일치'));
+  }
+}
+
+if (typeof registerTabLoader === 'function') {
+  registerTabLoader('backup', loadBackups);
+} else {
+  loadBackups();
+}
+</script>
