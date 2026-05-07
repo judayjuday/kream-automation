@@ -1,0 +1,84 @@
+<!-- API 카탈로그 (Step 47-6) -->
+<div class="tab-content" id="tab-api_catalog">
+  <h2>📚 API 카탈로그</h2>
+
+  <div id="cat-summary" style="background:#fff3e0;padding:12px;border-radius:6px;margin-bottom:12px;">
+    <div style="font-size:18px;">총 <strong id="cat-total">-</strong>개 API</div>
+    <div id="cat-categories" style="margin-top:8px;font-size:13px;color:#666;"></div>
+  </div>
+
+  <input type="text" id="cat-filter" placeholder="🔍 경로/설명 필터" style="width:300px;padding:6px;margin-bottom:12px;"
+         oninput="filterCatalog()" />
+
+  <div id="cat-content"></div>
+</div>
+
+<script>
+let _catalogData = null;
+
+async function loadCatalog() {
+  const r = await fetch('/api/catalog');
+  const d = await r.json();
+  if (!d.success) return;
+  _catalogData = d;
+
+  document.getElementById('cat-total').textContent = d.total_count;
+  document.getElementById('cat-categories').innerHTML =
+    Object.entries(d.category_counts)
+      .sort((a,b) => b[1] - a[1])
+      .map(([k,v]) => `<span style="display:inline-block;background:#fff;padding:2px 8px;margin:2px;border-radius:12px;">${k}: ${v}</span>`)
+      .join('');
+
+  renderCatalog('');
+}
+
+function renderCatalog(filter) {
+  if (!_catalogData) return;
+  const div = document.getElementById('cat-content');
+  let html = '';
+  const f = filter.toLowerCase();
+
+  for (const [cat, items] of Object.entries(_catalogData.categories)) {
+    const filtered = items.filter(i =>
+      !f || i.path.toLowerCase().includes(f) || (i.doc || '').toLowerCase().includes(f)
+    );
+    if (filtered.length === 0) continue;
+
+    html += `<details open style="margin-bottom:12px;border:1px solid #ddd;border-radius:6px;">
+      <summary style="background:#f5f5f5;padding:10px;cursor:pointer;font-weight:bold;">
+        ${cat} (${filtered.length})
+      </summary>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead style="background:#fafafa;">
+          <tr>
+            <th style="text-align:left;padding:6px;">메소드</th>
+            <th style="text-align:left;padding:6px;">경로</th>
+            <th style="text-align:left;padding:6px;">설명</th>
+          </tr>
+        </thead>
+        <tbody>${filtered.map(i => {
+          const methodColor = {GET:'#4caf50', POST:'#2196f3', DELETE:'#f44336', PUT:'#ff9800'}[i.methods[0]] || '#999';
+          return `<tr>
+            <td style="padding:6px;"><span style="background:${methodColor};color:#fff;padding:2px 6px;border-radius:3px;font-size:11px;">${i.methods.join(',')}</span></td>
+            <td style="padding:6px;font-family:monospace;font-size:11px;"><code>${i.path}</code></td>
+            <td style="padding:6px;color:#666;">${i.doc || '-'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </details>`;
+  }
+
+  div.innerHTML = html || '<div style="color:#999;text-align:center;padding:20px;">필터에 맞는 API 없음</div>';
+}
+
+function filterCatalog() {
+  const f = document.getElementById('cat-filter').value;
+  renderCatalog(f);
+}
+
+if (typeof registerTabLoader === 'function') {
+  registerTabLoader('api_catalog', loadCatalog);
+} else {
+  loadCatalog();
+}
+</script>

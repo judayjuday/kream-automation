@@ -14110,6 +14110,20 @@ def api_export_json(table):
 
 
 # ═══════════════════════════════════════════
+# Step 47-6: API 자동 카탈로그
+# ═══════════════════════════════════════════
+
+@app.route('/api/catalog', methods=['GET'])
+def api_catalog():
+    """Flask 라우트 자동 스캔 결과."""
+    try:
+        from services import api_catalog as cat_svc
+        return jsonify({'success': True, **cat_svc.scan_routes(app)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
