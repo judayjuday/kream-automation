@@ -13647,6 +13647,20 @@ def api_supplier_list():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/auto-rebid/backtest', methods=['POST'])
+def api_auto_rebid_backtest():
+    try:
+        data = request.get_json() or {}
+        days = int(data.get('days', 30))
+        min_profit = int(data.get('min_profit', 3000))
+        cooldown = int(data.get('cooldown_hours', 6))
+        from services import rebid_simulator as rs
+        result = rs.simulate_backtest(days, min_profit, cooldown)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/daily-report/preview', methods=['GET'])
 def api_daily_report_preview():
     try:

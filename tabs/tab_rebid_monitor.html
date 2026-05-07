@@ -89,6 +89,18 @@
     </thead>
     <tbody id="rm-recent-tbody"></tbody>
   </table>
+
+  <!-- 백테스트 -->
+  <h3 style="margin-top:24px;">🔮 시뮬레이션 (과거 데이터 백테스트)</h3>
+  <div style="background:#f3e5f5;padding:12px;border-radius:6px;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label>기간(일) <input type="number" id="bt-days" value="30" min="7" max="365" style="width:60px;" /></label>
+      <label>min_profit <input type="number" id="bt-min-profit" value="3000" step="500" style="width:80px;" /></label>
+      <label>쿨다운(h) <input type="number" id="bt-cooldown" value="6" style="width:60px;" /></label>
+      <button onclick="runBacktest()" style="background:#9c27b0;color:#fff;padding:6px 16px;">백테스트 실행</button>
+    </div>
+    <div id="bt-result" style="margin-top:12px;"></div>
+  </div>
 </div>
 
 <script>
@@ -210,6 +222,46 @@ async function loadRecentExecutions() {
       <td style="color:${colorMap[r.action] || '#666'};">${r.action}</td>
     </tr>
   `).join('');
+}
+
+async function runBacktest() {
+  const body = {
+    days: parseInt(document.getElementById('bt-days').value),
+    min_profit: parseInt(document.getElementById('bt-min-profit').value),
+    cooldown_hours: parseInt(document.getElementById('bt-cooldown').value),
+  };
+  document.getElementById('bt-result').innerHTML = '⏳ 시뮬레이션 중...';
+  const r = await fetch('/api/auto-rebid/backtest', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!d.success) {
+    document.getElementById('bt-result').innerHTML = `<span style="color:#f44336;">❌ ${d.error}</span>`;
+    return;
+  }
+  document.getElementById('bt-result').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">
+      <div><strong>후보:</strong> ${d.total_candidates}</div>
+      <div style="color:#4caf50;"><strong>GO:</strong> ${d.go}</div>
+      <div style="color:#ff9800;"><strong>LOW:</strong> ${d.low}</div>
+      <div style="color:#9c27b0;"><strong>NO_COST:</strong> ${d.no_cost}</div>
+      <div style="color:#795548;"><strong>COOLDOWN:</strong> ${d.cooldown}</div>
+    </div>
+    <div style="font-size:18px;">예상 누적 마진: <strong>${d.total_profit.toLocaleString()}원</strong></div>
+    <div>건당 평균: ${d.avg_profit.toLocaleString()}원</div>
+    <h5 style="margin-top:12px;">샘플 GO 후보 (최대 20건)</h5>
+    <table style="width:100%;font-size:12px;">
+      <thead style="background:#eee;"><tr><th>모델</th><th>사이즈</th><th>판매가</th><th>원가</th><th>마진</th><th>판매일</th></tr></thead>
+      <tbody>${d.samples.map(s => `
+        <tr><td>${s.model}</td><td>${s.size||'-'}</td>
+            <td>${s.sale_price.toLocaleString()}</td>
+            <td>${s.cost.toLocaleString()}</td>
+            <td><strong>${s.profit.toLocaleString()}</strong></td>
+            <td>${s.trade_date}</td></tr>`).join('')}</tbody>
+    </table>
+  `;
 }
 
 async function emergencyStop() {
