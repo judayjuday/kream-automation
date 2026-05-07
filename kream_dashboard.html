@@ -422,6 +422,9 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="nav-item" data-tab="remittance" onclick="showTab('remittance')">
         <span class="nav-icon">💸</span> 송금 환율
       </div>
+      <div class="nav-item" data-tab="rebid_monitor" onclick="showTab('rebid_monitor')">
+        <span class="nav-icon">🤖</span> 자동 재입찰 모니터링
+      </div>
     </div>
     <div class="nav-group">
       <div class="nav-label">도구</div>
@@ -819,6 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="tab-settings" class="tab-view" data-tab-title="환율/수수료"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-price_book" class="tab-view" data-tab-title="단가표"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
       <div id="tab-remittance" class="tab-view" data-tab-title="송금 환율"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
+      <div id="tab-rebid_monitor" class="tab-view" data-tab-title="자동 재입찰 모니터링"><div class="text-muted" style="padding:40px;text-align:center">로딩 중...</div></div>
 
     </div>
   </div>
@@ -882,7 +886,8 @@ function showTab(id) {
     realized: '💰 판매 마진 확정',
     market: '📈 시장 모니터링',
     cleanup: '🧹 입찰 정리 도구',
-    settings: '환율 / 수수료 설정'
+    settings: '환율 / 수수료 설정',
+    rebid_monitor: '🤖 자동 재입찰 모니터링'
   };
   document.getElementById('page-title').textContent = titles[id] || '';
 
@@ -964,6 +969,7 @@ function _onTabShown(id) {
   }
   if (id === 'settings') { try { loadSettings(); loadAlertSettings(); loadAutoAdjustSettings(); loadAutoRebidSettings(); } catch(e) {} }
   if (id === 'adjust') { try { loadAutoAdjustStatus(); loadAutoAdjustHistory(); loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadExpiringBids(); loadEmailPassword(); } catch(e) {} }
+  if (id === 'rebid_monitor') { try { loadAllRebidMonitor(); } catch(e) {} }
 }
 
 // ═══ 스텝 전환 ═══

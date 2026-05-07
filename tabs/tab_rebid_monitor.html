@@ -1,0 +1,246 @@
+<!-- 자동 재입찰 모니터링 (Step 45-1) -->
+<div class="tab-content" id="tab-rebid-monitor">
+  <h2>🤖 자동 재입찰 모니터링</h2>
+
+  <!-- 토글 상태 + 비상 정지 -->
+  <div id="rm-status-bar" style="background:#e3f2fd;padding:12px;border-radius:6px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <strong>현재 상태:</strong> <span id="rm-toggle-status">로딩 중...</span>
+      | <span id="rm-daily-info"></span>
+    </div>
+    <div>
+      <button id="rm-emergency-stop" onclick="emergencyStop()"
+              style="background:#f44336;color:#fff;padding:8px 16px;font-weight:bold;display:none;">
+        🚨 비상 정지
+      </button>
+    </div>
+  </div>
+
+  <!-- 실시간 통계 카드 -->
+  <h3>📊 실시간 통계</h3>
+  <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <button onclick="loadRealtimeStats(1)">1시간</button>
+    <button onclick="loadRealtimeStats(6)">6시간</button>
+    <button onclick="loadRealtimeStats(24)" style="background:#2196f3;color:#fff;">24시간</button>
+    <button onclick="loadRealtimeStats(168)">7일</button>
+  </div>
+
+  <div id="rm-stats-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+    <div class="stat-card" style="background:#fff;border:1px solid #ddd;padding:12px;border-radius:6px;">
+      <div style="color:#666;font-size:13px;">성공 (auto_modified)</div>
+      <div style="font-size:28px;font-weight:bold;color:#4caf50;" id="rm-success">-</div>
+    </div>
+    <div class="stat-card" style="background:#fff;border:1px solid #ddd;padding:12px;border-radius:6px;">
+      <div style="color:#666;font-size:13px;">총 마진 (KRW)</div>
+      <div style="font-size:24px;font-weight:bold;" id="rm-profit">-</div>
+    </div>
+    <div class="stat-card" style="background:#fff;border:1px solid #ddd;padding:12px;border-radius:6px;">
+      <div style="color:#666;font-size:13px;">건당 평균</div>
+      <div style="font-size:20px;" id="rm-avg-profit">-</div>
+    </div>
+    <div class="stat-card" style="background:#fff;border:1px solid #ddd;padding:12px;border-radius:6px;">
+      <div style="color:#666;font-size:13px;">실패율</div>
+      <div style="font-size:24px;" id="rm-fail-rate">-</div>
+    </div>
+  </div>
+
+  <!-- 액션별 카운트 -->
+  <h4>액션별 분포</h4>
+  <div id="rm-action-bars"></div>
+
+  <!-- 시간대별 -->
+  <h4>시간대별 (최근 데이터)</h4>
+  <table id="rm-hourly-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr><th>시각</th><th>총</th><th>성공</th><th>실패</th><th>마진</th></tr>
+    </thead>
+    <tbody id="rm-hourly-tbody"></tbody>
+  </table>
+
+  <!-- 모델별 -->
+  <h3 style="margin-top:24px;">📦 모델별 통계 (최근 7일)</h3>
+  <table id="rm-model-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>모델</th><th>사이즈</th><th>총 시도</th>
+        <th>성공</th><th>실패</th><th>총 마진</th><th>마지막 시도</th>
+      </tr>
+    </thead>
+    <tbody id="rm-model-tbody"></tbody>
+  </table>
+
+  <!-- 스킵 사유 -->
+  <h3 style="margin-top:24px;">⏭ 스킵 사유 (최근 24시간)</h3>
+  <table id="rm-skip-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr><th>액션</th><th>사유</th><th>건수</th></tr>
+    </thead>
+    <tbody id="rm-skip-tbody"></tbody>
+  </table>
+
+  <!-- 최근 실행 이력 -->
+  <h3 style="margin-top:24px;">📜 최근 실행 이력</h3>
+  <table id="rm-recent-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>시각</th><th>모델</th><th>사이즈</th>
+        <th>이전가</th><th>새가</th><th>마진</th><th>액션</th>
+      </tr>
+    </thead>
+    <tbody id="rm-recent-tbody"></tbody>
+  </table>
+</div>
+
+<script>
+async function loadRebidStatus() {
+  const r = await fetch('/api/auto-rebid/status');
+  const d = await r.json();
+  if (!d.success) {
+    document.getElementById('rm-toggle-status').textContent = '오류: ' + (d.error || 'N/A');
+    return;
+  }
+  const enabled = d.enabled || d.auto_rebid_enabled;
+  const dryRun = d.dry_run || d.auto_rebid_dry_run;
+  const status = enabled ? (dryRun ? '⚠️ DRY-RUN 활성' : '🟢 ENABLE 활성') : '⚪ DISABLE';
+  document.getElementById('rm-toggle-status').textContent = status;
+  document.getElementById('rm-daily-info').textContent =
+    `오늘 실행: ${d.today_executed || 0} / 한도: ${d.daily_max || '?'} | min_profit: ${d.min_profit || '?'}원`;
+
+  const stopBtn = document.getElementById('rm-emergency-stop');
+  stopBtn.style.display = (enabled && !dryRun) ? '' : 'none';
+}
+
+async function loadRealtimeStats(hours = 24) {
+  const r = await fetch('/api/auto-rebid/realtime-stats?hours=' + hours);
+  const d = await r.json();
+  if (!d.success) return;
+
+  document.getElementById('rm-success').textContent = d.success_count;
+  document.getElementById('rm-profit').textContent = d.total_profit.toLocaleString() + ' ₩';
+  document.getElementById('rm-avg-profit').textContent = d.avg_profit.toLocaleString() + ' ₩';
+  const failEl = document.getElementById('rm-fail-rate');
+  failEl.textContent = d.fail_rate_pct + ' %';
+  failEl.style.color = d.fail_rate_pct >= 20 ? '#f44336' : (d.fail_rate_pct >= 10 ? '#ff9800' : '#4caf50');
+
+  const total = Object.values(d.by_action).reduce((a,b)=>a+b, 0);
+  const colors = {auto_modified:'#4caf50', modify_failed:'#f44336', skipped_low:'#ff9800',
+                  skipped_no_cost:'#9c27b0', skipped_active_bid_exists:'#607d8b',
+                  skipped_cooldown:'#795548'};
+  document.getElementById('rm-action-bars').innerHTML = Object.entries(d.by_action).map(([k,v]) => {
+    const pct = total > 0 ? (v/total*100).toFixed(1) : 0;
+    return `
+      <div style="display:flex;align-items:center;margin-bottom:4px;">
+        <div style="width:200px;">${k}</div>
+        <div style="flex:1;background:#eee;height:24px;border-radius:4px;overflow:hidden;">
+          <div style="width:${pct}%;background:${colors[k]||'#999'};height:100%;color:#fff;padding-left:6px;font-size:12px;line-height:24px;">
+            ${v}건 (${pct}%)
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('rm-hourly-tbody').innerHTML = (d.hourly || []).slice(0, 24).map(h => `
+    <tr>
+      <td>${h.hour}</td><td>${h.cnt}</td>
+      <td style="color:#4caf50;">${h.success_cnt}</td>
+      <td style="color:${h.fail_cnt > 0 ? '#f44336' : '#999'};">${h.fail_cnt}</td>
+      <td>${h.profit.toLocaleString()}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadModelStats() {
+  const r = await fetch('/api/auto-rebid/model-stats?hours=168');
+  const d = await r.json();
+  if (!d.success) return;
+  const tbody = document.getElementById('rm-model-tbody');
+  if (d.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">실행 이력 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = d.items.slice(0, 30).map(m => `
+    <tr>
+      <td><strong>${m.model}</strong></td>
+      <td>${m.size || '-'}</td>
+      <td>${m.total_attempts}</td>
+      <td style="color:#4caf50;">${m.success}</td>
+      <td style="color:${m.failed > 0 ? '#f44336' : '#999'};">${m.failed}</td>
+      <td><strong>${m.total_profit.toLocaleString()}</strong></td>
+      <td style="font-size:11px;">${m.last_attempt}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadSkipReasons() {
+  const r = await fetch('/api/auto-rebid/skip-reasons?hours=24');
+  const d = await r.json();
+  if (!d.success) return;
+  const tbody = document.getElementById('rm-skip-tbody');
+  if (d.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#999;">스킵 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = d.items.map(s => `
+    <tr>
+      <td>${s.action}</td>
+      <td>${s.skip_reason || '-'}</td>
+      <td><strong>${s.cnt}</strong></td>
+    </tr>
+  `).join('');
+}
+
+async function loadRecentExecutions() {
+  const r = await fetch('/api/auto-rebid/recent-executions?limit=30');
+  const d = await r.json();
+  if (!d.success) return;
+  const tbody = document.getElementById('rm-recent-tbody');
+  if (d.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">실행 이력 없음 (DRY-RUN/ENABLE 전)</td></tr>';
+    return;
+  }
+  const colorMap = {auto_modified:'#4caf50', modify_failed:'#f44336'};
+  tbody.innerHTML = d.items.map(r => `
+    <tr>
+      <td style="font-size:11px;">${r.executed_at}</td>
+      <td>${r.model}</td>
+      <td>${r.size || '-'}</td>
+      <td>${r.old_price ? r.old_price.toLocaleString() : '-'}</td>
+      <td>${r.new_price ? r.new_price.toLocaleString() : '-'}</td>
+      <td>${r.expected_profit ? r.expected_profit.toLocaleString() : '-'}</td>
+      <td style="color:${colorMap[r.action] || '#666'};">${r.action}</td>
+    </tr>
+  `).join('');
+}
+
+async function emergencyStop() {
+  if (!confirm('⚠️ 비상 정지\n\n자동 재입찰을 즉시 중단하시겠습니까?\n(다시 켜려면 settings.json에서 auto_rebid_enabled=true 변경 후 서버 재시작 필요)')) return;
+  const r = await fetch('/api/auto-rebid/emergency-stop', {method: 'POST'});
+  const d = await r.json();
+  if (d.success) {
+    alert('✅ 비상 정지 완료\n' + d.message);
+    loadRebidStatus();
+  } else {
+    alert('❌ 실패: ' + d.error);
+  }
+}
+
+function loadAllRebidMonitor() {
+  loadRebidStatus();
+  loadRealtimeStats(24);
+  loadModelStats();
+  loadSkipReasons();
+  loadRecentExecutions();
+}
+
+if (typeof registerTabLoader === 'function') {
+  registerTabLoader('rebid_monitor', loadAllRebidMonitor);
+} else {
+  loadAllRebidMonitor();
+}
+
+setInterval(() => {
+  if (document.getElementById('tab-rebid-monitor') && document.getElementById('tab-rebid-monitor').style.display !== 'none') {
+    loadRebidStatus();
+  }
+}, 30000);
+</script>

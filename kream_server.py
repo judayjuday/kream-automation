@@ -13647,6 +13647,50 @@ def api_supplier_list():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/auto-rebid/realtime-stats', methods=['GET'])
+def api_auto_rebid_realtime():
+    try:
+        from services import rebid_monitor as rebid_monitor_svc
+        hours = int(request.args.get('hours', 24))
+        result = rebid_monitor_svc.realtime_stats(hours)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/auto-rebid/model-stats', methods=['GET'])
+def api_auto_rebid_model_stats():
+    try:
+        from services import rebid_monitor as rebid_monitor_svc
+        hours = int(request.args.get('hours', 168))
+        items = rebid_monitor_svc.model_stats(hours)
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/auto-rebid/skip-reasons', methods=['GET'])
+def api_auto_rebid_skip_reasons():
+    try:
+        from services import rebid_monitor as rebid_monitor_svc
+        hours = int(request.args.get('hours', 24))
+        items = rebid_monitor_svc.skip_reasons(hours)
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/auto-rebid/recent-executions', methods=['GET'])
+def api_auto_rebid_recent():
+    try:
+        from services import rebid_monitor as rebid_monitor_svc
+        limit = int(request.args.get('limit', 50))
+        items = rebid_monitor_svc.recent_executions(limit)
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/supplier/add', methods=['POST'])
 def api_supplier_add():
     try:
