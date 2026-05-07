@@ -13373,6 +13373,80 @@ def api_remittance_verify(rid):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/remittance/<int:rid>/receipts', methods=['GET'])
+def api_remittance_receipts(rid):
+    """송금에 첨부된 모든 영수증 목록."""
+    try:
+        from services import remittance as remittance_svc
+        items = remittance_svc.list_receipts(rid)
+        return jsonify({'success': True, 'items': items, 'count': len(items)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/attach-receipt', methods=['POST'])
+def api_remittance_attach_receipt(rid):
+    """
+    이미 업로드된 영수증을 송금에 추가 첨부.
+    body: {receipt_path, original_name?, sha256?, size_bytes?, receipt_type?, description?}
+
+    워크플로우:
+    1. /api/remittance/upload-receipt 로 파일 업로드 → path/sha256 받음
+    2. 이 API로 receipt_type + description과 함께 첨부
+    """
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        if 'receipt_path' not in data:
+            return jsonify({'success': False, 'error': 'receipt_path required'}), 400
+
+        result = remittance_svc.attach_receipt(
+            remittance_id=rid,
+            receipt_path=data['receipt_path'],
+            original_name=data.get('original_name'),
+            sha256=data.get('sha256'),
+            size_bytes=int(data['size_bytes']) if data.get('size_bytes') else None,
+            receipt_type=data.get('receipt_type', 'other'),
+            description=data.get('description'),
+        )
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/receipt/<int:receipt_id>', methods=['GET'])
+def api_receipt_get(receipt_id):
+    """영수증 파일 다운로드 (ID 기반)."""
+    try:
+        from services import remittance as remittance_svc
+        r = remittance_svc.get_receipt(receipt_id)
+        if not r:
+            return jsonify({'success': False, 'error': 'not found'}), 404
+
+        full_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            r['receipt_path']
+        )
+        if not os.path.exists(full_path):
+            return jsonify({'success': False, 'error': 'file missing on disk'}), 404
+
+        from flask import send_file
+        return send_file(full_path, as_attachment=False)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/receipt/<int:receipt_id>', methods=['DELETE'])
+def api_receipt_delete(receipt_id):
+    """영수증 메타 삭제 (파일은 보존)."""
+    try:
+        from services import remittance as remittance_svc
+        result = remittance_svc.delete_receipt(receipt_id)
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/supplier/list', methods=['GET'])
 def api_supplier_list():
     try:

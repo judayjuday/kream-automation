@@ -104,6 +104,41 @@
     </thead>
     <tbody id="unmatched-tbody"></tbody>
   </table>
+
+  <!-- 영수증 관리 모달 -->
+  <div id="receipt-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
+    <div style="background:#fff;max-width:800px;margin:50px auto;padding:20px;border-radius:8px;max-height:80vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;">📎 영수증 관리 — 송금 #<span id="modal-rid"></span></h3>
+        <button onclick="closeReceiptModal()" style="font-size:20px;background:none;border:none;cursor:pointer;">✕</button>
+      </div>
+
+      <!-- 첨부된 영수증 목록 -->
+      <h4>첨부된 영수증</h4>
+      <div id="modal-receipt-list" style="margin-bottom:16px;"></div>
+
+      <!-- 새 영수증 추가 -->
+      <h4>+ 영수증 추가</h4>
+      <div style="background:#f5f5f5;padding:12px;border-radius:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <label>타입
+            <select id="modal-receipt-type">
+              <option value="send">송금증 (SentBiz 등)</option>
+              <option value="arrival">입금명세서 (협력사)</option>
+              <option value="invoice">인보이스</option>
+              <option value="other">기타</option>
+            </select>
+          </label>
+          <label>설명 (선택)
+            <input type="text" id="modal-receipt-desc" placeholder="예: 5/6 도달, 인보이스 수수료 4030 위안" />
+          </label>
+        </div>
+        <input type="file" id="modal-receipt-file" accept=".png,.jpg,.jpeg,.pdf,.heic,.webp" />
+        <button onclick="uploadAndAttach()" style="margin-left:8px;background:#4caf50;color:#fff;padding:6px 16px;">업로드 + 첨부</button>
+        <div id="modal-upload-status" style="margin-top:8px;color:#666;"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -257,10 +292,9 @@ async function loadRemittances() {
     const sendDisplay = i.send_currency === 'USD'
       ? `USD ${(i.send_amount || 0).toLocaleString()}`
       : `CNY ${(i.received_cny || i.amount_cny || 0).toLocaleString()}`;
-    const receiptCell = i.receipt_path
-      ? `<a href="/api/remittance/${i.id}/receipt" target="_blank">📎 보기</a>
-         <button onclick="verifyReceipt(${i.id})" style="font-size:11px;">검증</button>`
-      : '<span style="color:#999;">없음</span>';
+    const receiptCell = `<button onclick="showReceipts(${i.id})" style="font-size:11px;background:#2196f3;color:#fff;">
+                           📎 영수증 관리
+                         </button>`;
     return `
       <tr>
         <td>${i.id}</td>
@@ -334,6 +368,123 @@ async function autoMatch() {
   loadRemittances();
   loadUnmatched();
 }
+
+// ============================================================
+// Step 42-Phase 2.6: 영수증 관리 모달
+// ============================================================
+let _modalRid = null;
+
+async function showReceipts(rid) {
+  _modalRid = rid;
+  document.getElementById('modal-rid').textContent = rid;
+  document.getElementById('receipt-modal').style.display = 'block';
+  await loadModalReceipts();
+}
+
+function closeReceiptModal() {
+  document.getElementById('receipt-modal').style.display = 'none';
+  _modalRid = null;
+  ['modal-receipt-desc','modal-receipt-file'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('modal-upload-status').textContent = '';
+  loadRemittances();  // 메인 목록도 갱신
+}
+
+async function loadModalReceipts() {
+  if (!_modalRid) return;
+  const r = await fetch(`/api/remittance/${_modalRid}/receipts`);
+  const d = await r.json();
+  const list = document.getElementById('modal-receipt-list');
+
+  if (!d.success || d.count === 0) {
+    list.innerHTML = '<p style="color:#999;">첨부된 영수증이 없습니다.</p>';
+    return;
+  }
+
+  const typeLabel = {send:'🇰🇷 송금증', arrival:'🇨🇳 입금명세서', invoice:'📄 인보이스', other:'📎 기타'};
+  list.innerHTML = d.items.map(r => `
+    <div style="border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div><strong>${typeLabel[r.receipt_type] || r.receipt_type}</strong>
+             <span style="color:#666;font-size:12px;">— ${r.original_name || ''}</span></div>
+        ${r.description ? `<div style="font-size:13px;color:#555;margin-top:4px;">${r.description}</div>` : ''}
+        <div style="font-size:11px;color:#999;margin-top:4px;">
+          ${r.uploaded_at} · ${r.size_bytes ? (r.size_bytes/1024).toFixed(1)+'KB' : '?'}
+        </div>
+      </div>
+      <div>
+        <a href="/api/receipt/${r.id}" target="_blank" style="margin-right:8px;">🔍 보기</a>
+        <button onclick="deleteReceipt(${r.id})" style="background:#f44336;color:#fff;font-size:11px;">메타 삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function uploadAndAttach() {
+  if (!_modalRid) return;
+  const fileInput = document.getElementById('modal-receipt-file');
+  const f = fileInput.files[0];
+  if (!f) {
+    alert('파일을 선택하세요');
+    return;
+  }
+
+  const status = document.getElementById('modal-upload-status');
+  status.textContent = '⏳ 업로드 중...';
+
+  // 1. 파일 업로드
+  const fd = new FormData();
+  fd.append('receipt', f);
+  let r = await fetch('/api/remittance/upload-receipt', {method:'POST', body:fd});
+  let d = await r.json();
+  if (!d.success) {
+    status.textContent = '❌ 업로드 실패: ' + d.error;
+    return;
+  }
+  const uploaded = d;
+
+  // 2. 송금에 첨부
+  r = await fetch(`/api/remittance/${_modalRid}/attach-receipt`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      receipt_path: uploaded.path,
+      original_name: uploaded.original_name,
+      sha256: uploaded.sha256,
+      size_bytes: uploaded.size_bytes,
+      receipt_type: document.getElementById('modal-receipt-type').value,
+      description: document.getElementById('modal-receipt-desc').value || null,
+    }),
+  });
+  d = await r.json();
+  if (d.success) {
+    status.innerHTML = `<span style="color:#4caf50;">✅ 첨부 완료</span>`;
+    fileInput.value = '';
+    document.getElementById('modal-receipt-desc').value = '';
+    loadModalReceipts();
+  } else {
+    status.textContent = '❌ 첨부 실패: ' + d.error;
+  }
+}
+
+async function deleteReceipt(receiptId) {
+  if (!confirm('이 영수증의 메타데이터를 삭제하시겠습니까?\n(파일 자체는 receipts/ 폴더에 보존됩니다)')) return;
+  const r = await fetch(`/api/receipt/${receiptId}`, {method: 'DELETE'});
+  const d = await r.json();
+  if (d.success) {
+    alert(d.message);
+    loadModalReceipts();
+  } else {
+    alert('실패: ' + d.error);
+  }
+}
+
+// 모달 외부 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'receipt-modal') closeReceiptModal();
+});
 
 if (typeof registerTabLoader === 'function') {
   registerTabLoader('remittance', () => { loadSuppliers(); loadRemittances(); loadUnmatched(); });

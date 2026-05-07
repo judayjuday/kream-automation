@@ -593,6 +593,114 @@ def add_supplier(name: str, name_en: Optional[str] = None,
         conn.close()
 
 
+# ============================================================
+# Step 42-Phase 2.6: 다중 영수증 첨부
+# ============================================================
+
+def list_receipts(remittance_id: int) -> List[Dict]:
+    """특정 송금의 영수증 목록 (오래된 순)."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM remittance_receipt
+            WHERE remittance_id = ?
+            ORDER BY uploaded_at ASC, id ASC
+        """, (remittance_id,))
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def attach_receipt(
+    remittance_id: int,
+    receipt_path: str,
+    original_name: Optional[str] = None,
+    sha256: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+    receipt_type: str = 'other',
+    description: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    송금에 영수증 1개 추가 첨부.
+
+    receipt_type:
+      - 'send'    : 송금증 (SentBiz 등 한국 측)
+      - 'arrival' : 협력사 입금 명세서 (인보이스)
+      - 'invoice' : 별도 인보이스/세금계산서
+      - 'other'   : 기타
+    """
+    if receipt_type not in ('send', 'arrival', 'invoice', 'other'):
+        return {'success': False, 'error': f'invalid receipt_type: {receipt_type}'}
+
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        # 송금 존재 확인
+        cur.execute("SELECT 1 FROM remittance_history WHERE id = ?", (remittance_id,))
+        if not cur.fetchone():
+            return {'success': False, 'error': f'remittance {remittance_id} not found'}
+
+        cur.execute("""
+            INSERT INTO remittance_receipt
+            (remittance_id, receipt_type, receipt_path, original_name, sha256,
+             size_bytes, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (remittance_id, receipt_type, receipt_path, original_name, sha256,
+              size_bytes, description))
+        conn.commit()
+        return {
+            'success': True,
+            'id': cur.lastrowid,
+            'remittance_id': remittance_id,
+            'receipt_type': receipt_type,
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def get_receipt(receipt_id: int) -> Optional[Dict]:
+    """영수증 1건 조회."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM remittance_receipt WHERE id = ?", (receipt_id,))
+        r = cur.fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+def delete_receipt(receipt_id: int) -> Dict[str, Any]:
+    """
+    영수증 메타데이터 삭제 (DB만, 파일은 보존).
+    절대 규칙 #2/#3: 데이터 영구 삭제는 신중히. 파일은 receipts/ 에 그대로 보존.
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM remittance_receipt WHERE id = ?", (receipt_id,))
+        r = cur.fetchone()
+        if not r:
+            return {'success': False, 'error': 'receipt not found'}
+
+        cur.execute("DELETE FROM remittance_receipt WHERE id = ?", (receipt_id,))
+        conn.commit()
+        return {
+            'success': True,
+            'message': f'영수증 메타 삭제 완료 (파일은 receipts/{r["receipt_path"]} 보존)',
+            'preserved_file': r['receipt_path'],
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
 def update_received_cny(remittance_id: int, received_cny: float) -> Dict[str, Any]:
     """
     USD 송금 후 협력사로부터 CNY 입금 확인되면 호출.
