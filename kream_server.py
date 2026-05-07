@@ -13272,6 +13272,29 @@ def api_fx_pnl_supplier_comparison():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/fx-pnl/monthly', methods=['GET'])
+def api_fx_pnl_monthly():
+    """월별 송금 통계 (Step 43-6)."""
+    try:
+        from services import fx_pnl as fx_pnl_svc
+        items = fx_pnl_svc.monthly_remittance_stats()
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/fx-pnl/trends', methods=['GET'])
+def api_fx_pnl_trends():
+    """최근 N일 송금 추세 (Step 43-6)."""
+    try:
+        from services import fx_pnl as fx_pnl_svc
+        days = int(request.args.get('days', 90))
+        result = fx_pnl_svc.remittance_trends(days)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ═══════════════════════════════════════════
 # Step 43-4: 인보이스번호 추적
 # ═══════════════════════════════════════════

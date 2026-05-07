@@ -217,3 +217,54 @@ def supplier_fx_comparison() -> List[Dict]:
         return results
     finally:
         conn.close()
+
+
+# ============================================================
+# Step 43-6: 송금 통계 대시보드
+# ============================================================
+
+def monthly_remittance_stats() -> List[Dict]:
+    """월별 송금 통계."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                strftime('%Y-%m', remittance_date) as month,
+                COUNT(*) as count,
+                SUM(amount_cny) as total_cny,
+                SUM(amount_krw) as total_krw,
+                AVG(exchange_rate) as avg_rate,
+                MIN(exchange_rate) as min_rate,
+                MAX(exchange_rate) as max_rate,
+                SUM(fee_krw) as total_fee_krw
+            FROM remittance_history
+            WHERE status != 'cancelled'
+            GROUP BY month
+            ORDER BY month DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def remittance_trends(days: int = 90) -> Dict[str, Any]:
+    """최근 N일 송금 추세."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                remittance_date as date,
+                COUNT(*) as count,
+                SUM(amount_cny) as cny,
+                AVG(exchange_rate) as rate
+            FROM remittance_history
+            WHERE status != 'cancelled'
+              AND remittance_date >= date('now', ?)
+            GROUP BY remittance_date
+            ORDER BY remittance_date ASC
+        """, (f'-{days} days',))
+        return {'days': days, 'series': [dict(r) for r in cur.fetchall()]}
+    finally:
+        conn.close()

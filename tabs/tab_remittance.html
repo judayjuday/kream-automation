@@ -130,6 +130,17 @@
     <tbody id="fxp-supplier-tbody"></tbody>
   </table>
 
+  <h4 style="margin-top:16px;">월별 송금 통계</h4>
+  <table id="fxp-monthly-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>월</th><th>송금 수</th><th>총 CNY</th><th>총 KRW</th>
+        <th>평균 환율</th><th>최저</th><th>최고</th><th>총 수수료</th>
+      </tr>
+    </thead>
+    <tbody id="fxp-monthly-tbody"></tbody>
+  </table>
+
   <!-- 매칭 -->
   <h3 style="margin-top:24px;">🔗 매칭</h3>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -606,6 +617,29 @@ async function refreshFxPnl() {
             <td>${(s.total_krw || 0).toLocaleString()}</td>
             <td><strong>${s.effective_rate || '-'}</strong></td>
             <td>${s.fee_ratio_pct ? s.fee_ratio_pct + '%' : '-'}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    // Step 43-6: 월별 송금 통계
+    const r3 = await fetch('/api/fx-pnl/monthly');
+    const d3 = await r3.json();
+    if (d3.success) {
+      const tbody = document.getElementById('fxp-monthly-tbody');
+      if (!d3.items || d3.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">송금 데이터가 없습니다.</td></tr>';
+      } else {
+        tbody.innerHTML = d3.items.map(m => `
+          <tr>
+            <td><strong>${m.month}</strong></td>
+            <td>${m.count}</td>
+            <td>${(m.total_cny || 0).toLocaleString()}</td>
+            <td>${(m.total_krw || 0).toLocaleString()}</td>
+            <td><strong>${m.avg_rate ? m.avg_rate.toFixed(4) : '-'}</strong></td>
+            <td>${m.min_rate ? m.min_rate.toFixed(4) : '-'}</td>
+            <td>${m.max_rate ? m.max_rate.toFixed(4) : '-'}</td>
+            <td>${(m.total_fee_krw || 0).toLocaleString()}</td>
           </tr>
         `).join('');
       }
