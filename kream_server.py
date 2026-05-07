@@ -13892,6 +13892,48 @@ def api_pi_history(model):
 
 
 # ═══════════════════════════════════════════
+# Step 46-4: 시간별 백업 시스템 API
+# ═══════════════════════════════════════════
+
+@app.route('/api/backup/create-hourly', methods=['POST'])
+def api_backup_create_hourly():
+    try:
+        from services import backup_manager as backup_svc
+        return jsonify(backup_svc.create_hourly_backup())
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/backup/cleanup', methods=['POST'])
+def api_backup_cleanup():
+    try:
+        from services import backup_manager as backup_svc
+        data = request.get_json() or {}
+        keep_days = int(data.get('keep_days', 7))
+        return jsonify(backup_svc.cleanup_old_hourly(keep_days))
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/backup/list', methods=['GET'])
+def api_backup_list():
+    try:
+        from services import backup_manager as backup_svc
+        return jsonify(backup_svc.list_backups())
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/backup/verify/<path:filename>', methods=['GET'])
+def api_backup_verify(filename):
+    try:
+        from services import backup_manager as backup_svc
+        return jsonify(backup_svc.verify_backup(filename))
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
