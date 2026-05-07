@@ -8033,5 +8033,97 @@ async function loadCapitalChart(hours) {
 }
 </script>
 
+<!-- Step 47-8: 글로벌 단축키 + UX -->
+<script>
+(function() {
+  // 단축키 매핑
+  const SHORTCUTS = {
+    'h': 'home',
+    'r': 'remittance',
+    'i': 'insights',
+    'm': 'rebid_monitor',
+    'q': 'data_quality',
+    'b': 'backup',
+    'p': 'price_book',
+    'a': 'api_catalog',
+    '/': 'GLOBAL_SEARCH',
+  };
+
+  document.addEventListener('keydown', (e) => {
+    // 입력 필드에서는 무시
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    // Cmd/Ctrl 함께 눌렀을 때만
+    if (!e.metaKey && !e.ctrlKey) return;
+
+    const key = e.key.toLowerCase();
+    const action = SHORTCUTS[key];
+    if (!action) return;
+
+    e.preventDefault();
+    if (action === 'GLOBAL_SEARCH') {
+      const input = document.getElementById('gs-query');
+      if (input) input.focus();
+    } else if (typeof showTab === 'function') {
+      showTab(action);
+    }
+  });
+
+  // 단축키 도움말 토글 (Cmd/Ctrl + ?)
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === '?') {
+      e.preventDefault();
+      showShortcutsHelp();
+    }
+  });
+
+  function showShortcutsHelp() {
+    const help = `단축키 목록 (Cmd/Ctrl + 키):
+
+🏠 H — 홈
+💸 R — 송금환율
+📈 I — 인사이트
+🤖 M — 자동 재입찰 모니터링
+🔍 Q — 데이터 품질
+💾 B — 백업
+📋 P — 단가표
+📚 A — API 카탈로그
+🔎 / — 전역 검색 포커스
+
+ESC — 검색 결과 닫기`;
+    alert(help);
+  }
+
+  // 글로벌 자동 저장 알림 (커스텀 이벤트)
+  window.showSaveNotice = function(text, color) {
+    color = color || '#4caf50';
+    let notice = document.getElementById('global-notice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'global-notice';
+      notice.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:6px;color:#fff;z-index:9999;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.2);transition:opacity 0.3s;';
+      document.body.appendChild(notice);
+    }
+    notice.style.background = color;
+    notice.textContent = text;
+    notice.style.opacity = '1';
+    setTimeout(() => { notice.style.opacity = '0'; }, 2500);
+  };
+
+  // 페이지 떠날 때 경고 (수정 중)
+  let _hasUnsavedChanges = false;
+  window.markUnsaved = () => { _hasUnsavedChanges = true; };
+  window.markSaved = () => { _hasUnsavedChanges = false; };
+  window.addEventListener('beforeunload', (e) => {
+    if (_hasUnsavedChanges) {
+      e.preventDefault();
+      e.returnValue = '저장하지 않은 변경사항이 있습니다.';
+    }
+  });
+
+  console.log('✅ Step 47-8 단축키 + UX 활성화. Cmd+? 으로 단축키 보기.');
+})();
+</script>
+
 </body>
 </html>
