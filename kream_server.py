@@ -13133,6 +13133,99 @@ def api_notifications_cleanup():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+# ============================================================
+# Step 42: 송금 환율 시스템 API
+# ============================================================
+
+@app.route('/api/remittance/add', methods=['POST'])
+def api_remittance_add():
+    """송금 이력 등록.
+    body: {remittance_date, amount_cny, amount_krw, supplier?, wechat_id?, fee_krw?, notes?}
+    """
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        required = ['remittance_date', 'amount_cny', 'amount_krw']
+        for k in required:
+            if k not in data:
+                return jsonify({'success': False, 'error': f'missing {k}'}), 400
+
+        result = remittance_svc.add_remittance(
+            remittance_date=data['remittance_date'],
+            amount_cny=float(data['amount_cny']),
+            amount_krw=float(data['amount_krw']),
+            supplier=data.get('supplier'),
+            wechat_id=data.get('wechat_id'),
+            fee_krw=float(data.get('fee_krw', 0)),
+            notes=data.get('notes'),
+        )
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/list', methods=['GET'])
+def api_remittance_list():
+    """송금 이력 목록.
+    query: ?limit=50&status=active|depleted|cancelled
+    """
+    try:
+        from services import remittance as remittance_svc
+        limit = int(request.args.get('limit', 50))
+        status = request.args.get('status')
+        items = remittance_svc.list_remittances(limit=limit, status=status)
+        summary = remittance_svc.get_summary()
+        return jsonify({'success': True, 'items': items, 'summary': summary})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/match', methods=['POST'])
+def api_remittance_match():
+    """매칭 실행.
+    body:
+      - 수동: {remittance_id, bid_cost_id, order_id?, allocated_cny?}
+      - 자동: {auto_fifo: true, max_matches?}
+    """
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        if data.get('auto_fifo'):
+            result = remittance_svc.auto_match_fifo(
+                max_matches=int(data.get('max_matches', 100))
+            )
+        else:
+            if 'remittance_id' not in data or 'bid_cost_id' not in data:
+                return jsonify({'success': False,
+                                'error': 'remittance_id and bid_cost_id required'}), 400
+            result = remittance_svc.match_bid_to_remittance(
+                remittance_id=int(data['remittance_id']),
+                bid_cost_id=int(data['bid_cost_id']),
+                order_id=data.get('order_id'),
+                allocated_cny=float(data['allocated_cny']) if data.get('allocated_cny') else None,
+                method='manual',
+            )
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/unmatched-bids', methods=['GET'])
+def api_remittance_unmatched_bids():
+    """매칭 안 된 bid_cost 목록."""
+    try:
+        from services import remittance as remittance_svc
+        items = remittance_svc.get_unmatched_bids()
+        return jsonify({
+            'success': True,
+            'items': items,
+            'count': len(items),
+            'total_cny': round(sum(b['cny_price'] - b['matched_cny'] for b in items), 2),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════

@@ -1,0 +1,175 @@
+<!-- Step 42: 송금 환율 시스템 -->
+<div class="tab-content" id="tab-remittance">
+  <h2>💸 송금 환율 시스템</h2>
+
+  <!-- 요약 카드 -->
+  <div class="card-row" id="remittance-summary">
+    <div class="card">
+      <div class="card-label">총 송금 횟수</div>
+      <div class="card-value" id="rem-count">-</div>
+    </div>
+    <div class="card">
+      <div class="card-label">총 송금 (CNY)</div>
+      <div class="card-value" id="rem-total-cny">-</div>
+    </div>
+    <div class="card">
+      <div class="card-label">총 송금 (KRW)</div>
+      <div class="card-value" id="rem-total-krw">-</div>
+    </div>
+    <div class="card">
+      <div class="card-label">미매칭 입찰 (CNY)</div>
+      <div class="card-value" id="rem-unmatched-cny">-</div>
+    </div>
+  </div>
+
+  <!-- 송금 등록 -->
+  <h3>📥 새 송금 등록</h3>
+  <div class="form-row">
+    <input type="date" id="rem-date" />
+    <input type="number" id="rem-cny" placeholder="송금 CNY" step="0.01" />
+    <input type="number" id="rem-krw" placeholder="송금 KRW" />
+    <input type="text" id="rem-supplier" placeholder="협력사 (선택)" />
+    <input type="text" id="rem-wechat" placeholder="위챗 ID (선택)" />
+    <input type="number" id="rem-fee" placeholder="수수료 KRW" />
+    <input type="text" id="rem-notes" placeholder="메모" />
+    <button onclick="addRemittance()">등록</button>
+  </div>
+  <div id="rem-add-result" style="margin-top:8px;color:#4caf50;"></div>
+
+  <!-- 송금 목록 -->
+  <h3>📜 송금 이력</h3>
+  <table id="rem-table" class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th><th>날짜</th><th>CNY</th><th>KRW</th><th>환율</th>
+        <th>할당</th><th>잔여</th><th>상태</th><th>협력사</th><th>메모</th>
+      </tr>
+    </thead>
+    <tbody id="rem-tbody"></tbody>
+  </table>
+
+  <!-- 매칭 -->
+  <h3>🔗 매칭</h3>
+  <div style="margin-bottom:12px;">
+    <button onclick="autoMatch()" style="background:#2196f3;color:#fff;padding:8px 16px;">
+      FIFO 자동 매칭 실행
+    </button>
+    <span id="match-result" style="margin-left:12px;"></span>
+  </div>
+
+  <h4>미매칭 입찰 (오래된 순)</h4>
+  <table id="unmatched-table" class="data-table">
+    <thead>
+      <tr>
+        <th>bid_cost_id</th><th>order_id</th><th>모델</th><th>사이즈</th>
+        <th>CNY</th><th>매칭됨</th><th>잔여 CNY</th><th>입찰일</th>
+      </tr>
+    </thead>
+    <tbody id="unmatched-tbody"></tbody>
+  </table>
+</div>
+
+<script>
+async function loadRemittances() {
+  const r = await fetch('/api/remittance/list?limit=100');
+  const d = await r.json();
+  if (!d.success) return;
+
+  document.getElementById('rem-count').textContent = d.summary.remittance_count;
+  document.getElementById('rem-total-cny').textContent =
+    d.summary.total_remittance_cny.toLocaleString() + ' ¥';
+  document.getElementById('rem-total-krw').textContent =
+    d.summary.total_remittance_krw.toLocaleString() + ' ₩';
+  document.getElementById('rem-unmatched-cny').textContent =
+    d.summary.unmatched_bid_cny.toLocaleString() + ' ¥';
+
+  const tbody = document.getElementById('rem-tbody');
+  tbody.innerHTML = d.items.map(i => `
+    <tr>
+      <td>${i.id}</td>
+      <td>${i.remittance_date}</td>
+      <td>${i.amount_cny.toLocaleString()}</td>
+      <td>${i.amount_krw.toLocaleString()}</td>
+      <td>${i.exchange_rate}</td>
+      <td>${(i.allocated_cny || 0).toLocaleString()}</td>
+      <td>${(i.amount_cny - (i.allocated_cny || 0)).toLocaleString()}</td>
+      <td>${i.status}</td>
+      <td>${i.supplier || '-'}</td>
+      <td>${i.notes || ''}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadUnmatched() {
+  const r = await fetch('/api/remittance/unmatched-bids');
+  const d = await r.json();
+  if (!d.success) return;
+  const tbody = document.getElementById('unmatched-tbody');
+  tbody.innerHTML = d.items.slice(0, 50).map(b => `
+    <tr>
+      <td>${b.bid_cost_id}</td>
+      <td>${b.order_id}</td>
+      <td>${b.model}</td>
+      <td>${b.size || '-'}</td>
+      <td>${b.cny_price}</td>
+      <td>${b.matched_cny}</td>
+      <td>${(b.cny_price - b.matched_cny).toFixed(2)}</td>
+      <td>${b.created_at}</td>
+    </tr>
+  `).join('');
+}
+
+async function addRemittance() {
+  const body = {
+    remittance_date: document.getElementById('rem-date').value,
+    amount_cny: parseFloat(document.getElementById('rem-cny').value),
+    amount_krw: parseFloat(document.getElementById('rem-krw').value),
+    supplier: document.getElementById('rem-supplier').value || null,
+    wechat_id: document.getElementById('rem-wechat').value || null,
+    fee_krw: parseFloat(document.getElementById('rem-fee').value || 0),
+    notes: document.getElementById('rem-notes').value || null,
+  };
+  if (!body.remittance_date || !body.amount_cny || !body.amount_krw) {
+    alert('날짜/CNY/KRW는 필수');
+    return;
+  }
+  const r = await fetch('/api/remittance/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  document.getElementById('rem-add-result').textContent =
+    d.success ? `✅ ${d.message}` : `❌ ${d.error}`;
+  if (d.success) {
+    ['rem-date','rem-cny','rem-krw','rem-supplier','rem-wechat','rem-fee','rem-notes']
+      .forEach(id => document.getElementById(id).value = '');
+    loadRemittances();
+    loadUnmatched();
+  }
+}
+
+async function autoMatch() {
+  if (!confirm('FIFO 자동 매칭을 실행하시겠습니까?')) return;
+  const r = await fetch('/api/remittance/match', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({auto_fifo: true}),
+  });
+  const d = await r.json();
+  document.getElementById('match-result').textContent =
+    d.success ? `✅ ${d.message}` : `❌ ${d.error}`;
+  loadRemittances();
+  loadUnmatched();
+}
+
+if (typeof registerTabLoader === 'function') {
+  registerTabLoader('remittance', () => {
+    loadRemittances();
+    loadUnmatched();
+  });
+} else {
+  loadRemittances();
+  loadUnmatched();
+}
+</script>

@@ -145,10 +145,11 @@ def calc_settlement(price):
 def calc_expected_profit(rebid_price, cost_row, settings=None):
     """원가 없으면 None 반환 (절대 규칙 #1).
 
-    Step 41 환율 폴백 체인:
-      1) cost_row.exchange_rate (입찰 시점 환율, bid_cost에서 옴)
-      2) settings.exchange_rate (현재 환율)
-      3) 217 (안전 폴백)
+    Step 42 환율 폴백 체인 (확장):
+      1) remittance_bid_match → remittance.exchange_rate (가중평균, order_id 기반) ← 신규 최우선
+      2) cost_row.exchange_rate (입찰 시점 환율, bid_cost에서 옴)
+      3) settings.exchange_rate (현재 환율)
+      4) 217 (안전 폴백)
 
     배송비 폴백:
       1) cost_row.overseas_shipping
@@ -160,7 +161,21 @@ def calc_expected_profit(rebid_price, cost_row, settings=None):
     settings = settings or {}
     cny = cost_row["cny_price"]
 
-    rate = cost_row.get("exchange_rate")
+    # Step 42: remittance 매칭 환율 최우선 (order_id 기반)
+    rate = None
+    order_id = cost_row.get("order_id")
+    if order_id:
+        try:
+            from services import remittance as _rem_svc
+            matched_rate = _rem_svc.get_matched_exchange_rate(order_id)
+            if matched_rate and matched_rate > 0:
+                rate = matched_rate
+        except Exception:
+            pass  # 매칭 조회 실패 시 폴백 진행
+
+    # 기존 폴백 체인 (Step 41)
+    if not rate:
+        rate = cost_row.get("exchange_rate")
     if not rate:
         rate = settings.get("exchange_rate")
     if not rate:
