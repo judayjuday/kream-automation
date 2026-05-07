@@ -13273,6 +13273,54 @@ def api_fx_pnl_supplier_comparison():
 
 
 # ═══════════════════════════════════════════
+# Step 43-4: 인보이스번호 추적
+# ═══════════════════════════════════════════
+
+@app.route('/api/remittance/<int:rid>/invoice', methods=['POST'])
+def api_remittance_link_invoice(rid):
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        if 'invoice_no' not in data:
+            return jsonify({'success': False, 'error': 'invoice_no required'}), 400
+        result = remittance_svc.link_invoice(
+            rid,
+            invoice_no=data['invoice_no'],
+            invoice_date=data.get('invoice_date'),
+            invoice_amount_usd=float(data['invoice_amount_usd']) if data.get('invoice_amount_usd') else None,
+            invoice_amount_cny=float(data['invoice_amount_cny']) if data.get('invoice_amount_cny') else None,
+            description=data.get('description'),
+        )
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/invoices', methods=['GET'])
+def api_remittance_invoices(rid):
+    try:
+        from services import remittance as remittance_svc
+        items = remittance_svc.list_invoices(rid)
+        return jsonify({'success': True, 'items': items, 'count': len(items)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/invoice/search', methods=['GET'])
+def api_invoice_search():
+    """?q=JPUSD-202604"""
+    try:
+        from services import remittance as remittance_svc
+        q = request.args.get('q', '').strip()
+        if not q:
+            return jsonify({'success': False, 'error': 'query required'}), 400
+        items = remittance_svc.find_by_invoice(q)
+        return jsonify({'success': True, 'items': items, 'count': len(items)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # Step 42-Phase 2.5: 영수증 + USD/CNY 분리 + 협력사
 # ═══════════════════════════════════════════
 

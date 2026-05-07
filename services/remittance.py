@@ -827,3 +827,81 @@ def update_received_cny(remittance_id: int, received_cny: float) -> Dict[str, An
         return {'success': False, 'error': str(e)}
     finally:
         conn.close()
+
+
+# ============================================================
+# Step 43-4: 인보이스번호 추적
+# ============================================================
+
+def link_invoice(remittance_id: int, invoice_no: str,
+                 invoice_date: Optional[str] = None,
+                 invoice_amount_usd: Optional[float] = None,
+                 invoice_amount_cny: Optional[float] = None,
+                 description: Optional[str] = None) -> Dict[str, Any]:
+    """송금에 인보이스 연결.
+    절대 규칙 #7: 인보이스 단가는 시스템 의사결정에 사용 금지. 추적/메모 용도만.
+    """
+    if not invoice_no:
+        return {'success': False, 'error': 'invoice_no required'}
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, invoice_no_primary FROM remittance_history WHERE id = ?", (remittance_id,))
+        row = cur.fetchone()
+        if not row:
+            return {'success': False, 'error': 'remittance not found'}
+
+        try:
+            cur.execute("""
+                INSERT INTO remittance_invoice
+                (remittance_id, invoice_no, invoice_date, invoice_amount_usd, invoice_amount_cny, description)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (remittance_id, invoice_no, invoice_date, invoice_amount_usd, invoice_amount_cny, description))
+        except sqlite3.IntegrityError:
+            return {'success': False, 'error': '이미 연결됨 (UNIQUE)'}
+
+        new_id = cur.lastrowid
+
+        # primary가 없으면 첫 인보이스를 primary로
+        if not row['invoice_no_primary']:
+            cur.execute("UPDATE remittance_history SET invoice_no_primary = ? WHERE id = ?",
+                        (invoice_no, remittance_id))
+
+        conn.commit()
+        return {'success': True, 'id': new_id}
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def list_invoices(remittance_id: int) -> List[Dict]:
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM remittance_invoice
+            WHERE remittance_id = ?
+            ORDER BY id ASC
+        """, (remittance_id,))
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def find_by_invoice(invoice_no: str) -> List[Dict]:
+    """인보이스번호로 송금 검색."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT rh.*, ri.invoice_no, ri.invoice_date, ri.invoice_amount_usd
+            FROM remittance_invoice ri
+            JOIN remittance_history rh ON rh.id = ri.remittance_id
+            WHERE ri.invoice_no LIKE ?
+            ORDER BY rh.remittance_date DESC
+        """, (f'%{invoice_no}%',))
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
