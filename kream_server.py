@@ -13187,13 +13187,19 @@ def api_remittance_match():
     """매칭 실행.
     body:
       - 수동: {remittance_id, bid_cost_id, order_id?, allocated_cny?}
-      - 자동: {auto_fifo: true, max_matches?}
+      - FIFO 자동: {auto_fifo: true, max_matches?}
+      - 협력사 인지 (Step 43-3): {auto_supplier: true, supplier_id?: int, max_matches?}
     """
     try:
         from services import remittance as remittance_svc
         data = request.get_json() or {}
         if data.get('auto_fifo'):
             result = remittance_svc.auto_match_fifo(
+                max_matches=int(data.get('max_matches', 100))
+            )
+        elif data.get('auto_supplier'):
+            result = remittance_svc.auto_match_supplier_aware(
+                supplier_id=int(data['supplier_id']) if data.get('supplier_id') else None,
                 max_matches=int(data.get('max_matches', 100))
             )
         else:

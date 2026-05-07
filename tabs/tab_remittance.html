@@ -132,8 +132,21 @@
 
   <!-- 매칭 -->
   <h3 style="margin-top:24px;">🔗 매칭</h3>
-  <button onclick="autoMatch()" style="background:#4caf50;color:#fff;padding:8px 16px;">FIFO 자동 매칭</button>
-  <span id="match-result" style="margin-left:12px;"></span>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button onclick="autoMatch()" style="background:#4caf50;color:#fff;padding:8px 16px;">
+      FIFO 자동 매칭 (모든 송금)
+    </button>
+    <button onclick="autoMatchSupplier()" style="background:#2196f3;color:#fff;padding:8px 16px;">
+      협력사 인지 매칭 (협력사 있는 송금 우선)
+    </button>
+    <select id="match-supplier-id" style="padding:6px;">
+      <option value="">전체 협력사</option>
+    </select>
+    <button onclick="autoMatchSupplierFiltered()" style="background:#ff9800;color:#fff;padding:8px 16px;">
+      선택 협력사만
+    </button>
+    <span id="match-result" style="margin-left:12px;"></span>
+  </div>
 
   <h4>미매칭 입찰</h4>
   <table id="unmatched-table" class="data-table" style="width:100%;">
@@ -194,9 +207,43 @@ async function loadSuppliers() {
   const r = await fetch('/api/supplier/list');
   const d = await r.json();
   if (!d.success) return;
-  const sel = document.getElementById('rem-supplier-id');
-  sel.innerHTML = '<option value="">-- 선택 --</option>' +
+  const sel1 = document.getElementById('rem-supplier-id');
+  const sel2 = document.getElementById('match-supplier-id');
+  if (sel1) sel1.innerHTML = '<option value="">-- 선택 --</option>' +
     d.items.map(s => `<option value="${s.id}">${s.name}${s.name_en ? ' ('+s.name_en+')' : ''}</option>`).join('');
+  if (sel2) sel2.innerHTML = '<option value="">전체 협력사</option>' +
+    d.items.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+// Step 43-3: 협력사 인지 매칭
+async function autoMatchSupplier() {
+  if (!confirm('협력사 인지 매칭을 실행하시겠습니까?\n(협력사 정보 있는 송금이 우선 매칭됩니다)')) return;
+  const r = await fetch('/api/remittance/match', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({auto_supplier: true}),
+  });
+  const d = await r.json();
+  document.getElementById('match-result').textContent = d.success ? '✅ ' + (d.message || '완료') : '❌ ' + d.error;
+  if (typeof loadRemittances === 'function') loadRemittances();
+  if (typeof loadUnmatched === 'function') loadUnmatched();
+  if (typeof refreshFxPnl === 'function') refreshFxPnl();
+}
+
+async function autoMatchSupplierFiltered() {
+  const sid = document.getElementById('match-supplier-id').value;
+  if (!sid) { alert('협력사 선택'); return; }
+  if (!confirm(`협력사 ID ${sid} 송금만 매칭하시겠습니까?`)) return;
+  const r = await fetch('/api/remittance/match', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({auto_supplier: true, supplier_id: parseInt(sid)}),
+  });
+  const d = await r.json();
+  document.getElementById('match-result').textContent = d.success ? '✅ ' + (d.message || '완료') : '❌ ' + d.error;
+  if (typeof loadRemittances === 'function') loadRemittances();
+  if (typeof loadUnmatched === 'function') loadUnmatched();
+  if (typeof refreshFxPnl === 'function') refreshFxPnl();
 }
 
 async function addNewSupplier() {

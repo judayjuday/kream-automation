@@ -322,6 +322,96 @@ def auto_match_fifo(max_matches: int = 100) -> Dict[str, Any]:
     }
 
 
+def auto_match_supplier_aware(
+    supplier_id: Optional[int] = None,
+    max_matches: int = 100
+) -> Dict[str, Any]:
+    """
+    협력사 인지 매칭 (Step 43-3).
+    - supplier_id 지정: 해당 협력사 송금 → 모든 미매칭 입찰 (FIFO)
+    - supplier_id 미지정: 협력사 있는 송금부터 우선 처리, 협력사 없는 송금은 후순위
+    """
+    matched = 0
+    skipped = 0
+    errors = []
+
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        if supplier_id:
+            cur.execute("""
+                SELECT id, amount_cny, allocated_cny, supplier_id FROM remittance_history
+                WHERE status = 'active' AND supplier_id = ?
+                ORDER BY remittance_date ASC, id ASC
+            """, (supplier_id,))
+        else:
+            # 협력사 있는 것 우선
+            cur.execute("""
+                SELECT id, amount_cny, allocated_cny, supplier_id FROM remittance_history
+                WHERE status = 'active'
+                ORDER BY (supplier_id IS NULL) ASC, remittance_date ASC, id ASC
+            """)
+        remittances = [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+    if not remittances:
+        return {'success': True, 'matched': 0, 'message': 'no active remittance'}
+
+    unmatched = get_unmatched_bids()
+    if not unmatched:
+        return {'success': True, 'matched': 0, 'message': 'no unmatched bids'}
+
+    rem_idx = 0
+    rem = remittances[rem_idx]
+    rem_remaining = rem['amount_cny'] - rem['allocated_cny']
+
+    for bid in unmatched:
+        if matched >= max_matches:
+            break
+        bid_remaining = bid['cny_price'] - bid['matched_cny']
+        if bid_remaining <= 0:
+            continue
+
+        while rem_remaining < bid_remaining and rem_idx < len(remittances) - 1:
+            rem_idx += 1
+            rem = remittances[rem_idx]
+            rem_remaining = rem['amount_cny'] - rem['allocated_cny']
+
+        if rem_remaining < bid_remaining:
+            if rem_remaining > 0:
+                result = match_bid_to_remittance(
+                    rem['id'], bid['bid_cost_id'], bid['order_id'],
+                    rem_remaining, 'supplier_aware_partial'
+                )
+                if result['success']:
+                    matched += 1
+                    rem_remaining = 0
+                else:
+                    errors.append(result['error'])
+            skipped += 1
+            continue
+
+        result = match_bid_to_remittance(
+            rem['id'], bid['bid_cost_id'], bid['order_id'],
+            bid_remaining, 'supplier_aware_fifo'
+        )
+        if result['success']:
+            matched += 1
+            rem_remaining -= bid_remaining
+        else:
+            errors.append(result['error'])
+
+    return {
+        'success': True,
+        'matched': matched,
+        'skipped': skipped,
+        'errors': errors[:10],
+        'method': 'supplier_aware',
+        'message': f'협력사 인지 매칭 {matched}건 완료, {skipped}건 스킵'
+    }
+
+
 # ============================================================
 # 환율 조회 (마진 재계산용)
 # ============================================================
