@@ -13321,6 +13321,42 @@ def api_invoice_search():
 
 
 # ═══════════════════════════════════════════
+# Step 43-5: 매칭 해제 / 송금 취소 API
+# ═══════════════════════════════════════════
+
+@app.route('/api/remittance/match/<int:match_id>', methods=['DELETE'])
+def api_unmatch(match_id):
+    try:
+        from services import remittance as remittance_svc
+        result = remittance_svc.unmatch(match_id)
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/cancel', methods=['POST'])
+def api_cancel_remittance(rid):
+    try:
+        from services import remittance as remittance_svc
+        data = request.get_json() or {}
+        reason = data.get('reason', '')
+        result = remittance_svc.cancel_remittance(rid, reason)
+        return jsonify(result), (200 if result['success'] else 400)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/remittance/<int:rid>/matches', methods=['GET'])
+def api_remittance_matches(rid):
+    try:
+        from services import remittance as remittance_svc
+        items = remittance_svc.list_matches(rid)
+        return jsonify({'success': True, 'items': items, 'count': len(items)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # Step 42-Phase 2.5: 영수증 + USD/CNY 분리 + 협력사
 # ═══════════════════════════════════════════
 

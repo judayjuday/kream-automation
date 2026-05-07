@@ -905,3 +905,115 @@ def find_by_invoice(invoice_no: str) -> List[Dict]:
         return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
+
+
+# ============================================================
+# Step 43-5: 매칭 해제 / 송금 취소 (운영 안전망)
+# ============================================================
+
+def unmatch(match_id: int) -> Dict[str, Any]:
+    """매칭 해제. 송금 allocated_cny 자동 재계산.
+    절대 규칙 #2/#3 준수: bid_cost/sales_history 미접촉, 매칭 row만 제거.
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM remittance_bid_match WHERE id = ?", (match_id,))
+        m = cur.fetchone()
+        if not m:
+            return {'success': False, 'error': 'match not found'}
+
+        rid = m['remittance_id']
+        alloc = m['allocated_cny']
+
+        cur.execute("DELETE FROM remittance_bid_match WHERE id = ?", (match_id,))
+
+        # 송금 allocated_cny 재계산
+        cur.execute("""
+            UPDATE remittance_history
+            SET allocated_cny = COALESCE((
+                SELECT SUM(allocated_cny) FROM remittance_bid_match WHERE remittance_id = ?
+            ), 0),
+            updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (rid, rid))
+
+        # depleted였던 게 active로 돌아갔으면 그대로 두고, 잔액 0이면 다시 depleted
+        cur.execute("""
+            UPDATE remittance_history
+            SET status = CASE
+                WHEN allocated_cny >= amount_cny - 0.01 THEN 'depleted'
+                ELSE 'active'
+            END
+            WHERE id = ? AND status != 'cancelled'
+        """, (rid,))
+
+        conn.commit()
+        return {
+            'success': True,
+            'unmatched_id': match_id,
+            'remittance_id': rid,
+            'released_cny': alloc,
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def cancel_remittance(remittance_id: int, reason: str = '') -> Dict[str, Any]:
+    """
+    송금 취소. 모든 매칭 해제 + status='cancelled'.
+    절대 규칙 #2/#3: 데이터 삭제 아님, status만 변경.
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM remittance_history WHERE id = ?", (remittance_id,))
+        rem = cur.fetchone()
+        if not rem:
+            return {'success': False, 'error': 'remittance not found'}
+        if rem['status'] == 'cancelled':
+            return {'success': False, 'error': 'already cancelled'}
+
+        # 모든 매칭 해제 (매칭 row만 삭제, 입찰/판매 데이터는 미접촉)
+        cur.execute("DELETE FROM remittance_bid_match WHERE remittance_id = ?", (remittance_id,))
+        unmatched = cur.rowcount
+
+        # status 변경
+        new_notes = (rem['notes'] or '') + f' | [CANCELLED] {reason}'
+        cur.execute("""
+            UPDATE remittance_history
+            SET status = 'cancelled', allocated_cny = 0, notes = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_notes.strip(), remittance_id))
+
+        conn.commit()
+        return {
+            'success': True,
+            'remittance_id': remittance_id,
+            'matches_released': unmatched,
+        }
+    except Exception as e:
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def list_matches(remittance_id: int) -> List[Dict]:
+    """송금에 연결된 매칭 목록."""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT rbm.*, bc.model, bc.size, bc.cny_price as bid_cny
+            FROM remittance_bid_match rbm
+            LEFT JOIN bid_cost bc ON bc.order_id = rbm.order_id
+            WHERE rbm.remittance_id = ?
+            ORDER BY rbm.created_at DESC
+        """, (remittance_id,))
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
