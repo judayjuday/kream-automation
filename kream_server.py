@@ -13855,6 +13855,43 @@ def api_data_quality_duplicates():
 
 
 # ═══════════════════════════════════════════
+# Step 46-2: 단가표 인텔리전스 API
+# ═══════════════════════════════════════════
+
+@app.route('/api/price-intel/estimate', methods=['GET'])
+def api_pi_estimate():
+    try:
+        from services import price_intelligence as pi_svc
+        model = request.args.get('model', '').strip()
+        size = request.args.get('size', '').strip() or None
+        if not model:
+            return jsonify({'success': False, 'error': 'model required'}), 400
+        result = pi_svc.estimate_price_for_model(model, size)
+        return jsonify({'success': True, 'model': model, 'size': size, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/price-intel/missing-models', methods=['GET'])
+def api_pi_missing():
+    try:
+        from services import price_intelligence as pi_svc
+        items = pi_svc.find_models_without_pricebook()
+        return jsonify({'success': True, 'items': items, 'count': len(items)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/price-intel/history/<path:model>', methods=['GET'])
+def api_pi_history(model):
+    try:
+        from services import price_intelligence as pi_svc
+        return jsonify({'success': True, **pi_svc.price_change_history(model)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
