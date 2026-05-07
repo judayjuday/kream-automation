@@ -2,6 +2,25 @@
 <div class="tab-content" id="tab-backup">
   <h2>💾 백업 관리</h2>
 
+  <!-- 시스템 모니터링 (Step 46-8) -->
+  <div id="sys-overview" style="background:#1a237e;color:#fff;padding:12px;border-radius:6px;margin-bottom:12px;">
+    <h4 style="margin:0 0 8px;">🖥 시스템 상태</h4>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:13px;">
+      <div>
+        <div style="opacity:0.8;">디스크</div>
+        <div id="sys-disk" style="font-size:18px;">-</div>
+      </div>
+      <div>
+        <div style="opacity:0.8;">DB 크기</div>
+        <div id="sys-db" style="font-size:18px;">-</div>
+      </div>
+      <div>
+        <div style="opacity:0.8;">backups/ 용량</div>
+        <div id="sys-backups" style="font-size:18px;">-</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 요약 -->
   <div id="bk-summary" style="background:#e8f5e9;padding:16px;border-radius:8px;margin-bottom:16px;">
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
@@ -54,7 +73,25 @@
 </div>
 
 <script>
+async function loadSystemOverview() {
+  const r = await fetch('/api/system/overview');
+  const d = await r.json();
+  if (!d.success) return;
+  const disk = d.disk || {};
+  document.getElementById('sys-disk').textContent =
+    (disk.used_gb !== undefined) ? `${disk.used_gb} / ${disk.total_gb} GB (${disk.used_pct}%)` : '-';
+  const db = d.database || {};
+  document.getElementById('sys-db').textContent =
+    (db.db_size_mb !== undefined) ? `${db.db_size_mb} MB (${db.table_count}개 테이블)` : '-';
+  const folders = d.folders || {};
+  document.getElementById('sys-backups').textContent =
+    folders.backups && folders.backups.exists
+      ? `${folders.backups.size_mb} MB (${folders.backups.file_count}개 파일)`
+      : '-';
+}
+
 async function loadBackups() {
+  loadSystemOverview();
   const r = await fetch('/api/backup/list');
   const d = await r.json();
   if (!d.success) return;

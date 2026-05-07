@@ -13968,6 +13968,19 @@ def api_backup_external_script():
 
 
 # ═══════════════════════════════════════════
+# Step 46-8: 시스템 모니터링 API
+# ═══════════════════════════════════════════
+
+@app.route('/api/system/overview', methods=['GET'])
+def api_system_overview():
+    try:
+        from services import system_monitor as sysm_svc
+        return jsonify({'success': True, **sysm_svc.system_overview()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
