@@ -148,3 +148,84 @@ def run_daily_report() -> Dict[str, Any]:
         'discord': discord_result,
         'message_preview': message,
     }
+
+
+def check_alerts() -> List[Dict]:
+    """이상 패턴 감지 → 알림 대상 반환."""
+    conn = _get_conn()
+    alerts = []
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN action = 'modify_failed' THEN 1 ELSE 0 END) as failed
+            FROM auto_rebid_log
+            WHERE executed_at >= datetime('now', '-1 hour')
+              AND action IN ('auto_modified', 'modify_failed')
+        """)
+        r = dict(cur.fetchone())
+        if (r['total'] or 0) >= 5:
+            rate = r['failed'] / r['total'] * 100
+            if rate >= 20:
+                alerts.append({
+                    'type': 'high_fail_rate',
+                    'severity': 'critical',
+                    'message': f'⚠️ 최근 1시간 실패율 {rate:.1f}% (총 {r["total"]}건 중 {r["failed"]}건 실패)',
+                })
+
+        s = _load_settings()
+        daily_max = s.get('auto_rebid_daily_max', 20)
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM auto_rebid_log
+            WHERE date(executed_at) = date('now', 'localtime')
+              AND action = 'auto_modified'
+        """)
+        today = cur.fetchone()['cnt']
+        usage = today / daily_max * 100 if daily_max > 0 else 0
+        if usage >= 80:
+            alerts.append({
+                'type': 'daily_quota_warning',
+                'severity': 'warning',
+                'message': f'📊 일 한도 {today}/{daily_max} ({usage:.0f}%)',
+            })
+
+        cur.execute("""
+            SELECT COUNT(*) as cnt, MIN(expected_profit) as min_profit
+            FROM auto_rebid_log
+            WHERE date(executed_at) = date('now', 'localtime')
+              AND action = 'auto_modified'
+              AND expected_profit < 0
+        """)
+        neg = dict(cur.fetchone())
+        if (neg['cnt'] or 0) > 0:
+            alerts.append({
+                'type': 'negative_profit',
+                'severity': 'critical',
+                'message': f'🚨 오늘 음수 마진 {neg["cnt"]}건 발생 (최저 {neg["min_profit"]:,.0f}원)',
+            })
+
+        return alerts
+    finally:
+        conn.close()
+
+
+def send_alerts_if_any() -> Dict[str, Any]:
+    """이상 감지 → Discord 발송."""
+    alerts = check_alerts()
+    if not alerts:
+        return {'success': True, 'alerts_count': 0}
+
+    lines = ['🚨 **자동 재입찰 알림**', '']
+    for a in alerts:
+        lines.append(f'[{a["severity"].upper()}] {a["message"]}')
+    msg = '\n'.join(lines)
+
+    discord_result = send_discord(msg)
+    return {
+        'success': True,
+        'alerts_count': len(alerts),
+        'alerts': alerts,
+        'discord': discord_result,
+    }

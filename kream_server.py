@@ -13647,6 +13647,26 @@ def api_supplier_list():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/auto-rebid/check-alerts', methods=['GET'])
+def api_auto_rebid_check_alerts():
+    try:
+        from services import daily_report as dr
+        alerts = dr.check_alerts()
+        return jsonify({'success': True, 'alerts': alerts, 'count': len(alerts)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/auto-rebid/send-alerts', methods=['POST'])
+def api_auto_rebid_send_alerts():
+    try:
+        from services import daily_report as dr
+        result = dr.send_alerts_if_any()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/auto-rebid/model-roi', methods=['GET'])
 def api_auto_rebid_model_roi():
     try:
