@@ -13981,6 +13981,50 @@ def api_system_overview():
 
 
 # ═══════════════════════════════════════════
+# Step 47-1: 비즈니스 인사이트 (마진/카테고리/협력사 ROI)
+# ═══════════════════════════════════════════
+
+@app.route('/api/insights/margin-trend', methods=['GET'])
+def api_insights_margin_trend():
+    try:
+        from services import business_insights as bi_svc
+        days = int(request.args.get('days', 30))
+        items = bi_svc.margin_trend_daily(days)
+        return jsonify({'success': True, 'days': days, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/insights/category-profitability', methods=['GET'])
+def api_insights_category():
+    try:
+        from services import business_insights as bi_svc
+        items = bi_svc.category_profitability()
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/insights/supplier-roi', methods=['GET'])
+def api_insights_supplier_roi():
+    try:
+        from services import business_insights as bi_svc
+        items = bi_svc.supplier_roi()
+        return jsonify({'success': True, 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/insights/dashboard', methods=['GET'])
+def api_insights_dashboard():
+    try:
+        from services import business_insights as bi_svc
+        return jsonify({'success': True, **bi_svc.comprehensive_dashboard()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 
