@@ -13892,6 +13892,31 @@ def api_pi_history(model):
 
 
 # ═══════════════════════════════════════════
+# Step 46-5: 백업 스케줄러 hooks
+# ═══════════════════════════════════════════
+
+def _run_hourly_backup():
+    try:
+        from services import backup_manager as bm
+        result = bm.create_hourly_backup()
+        if result.get('success'):
+            print(f"[backup] hourly backup created: {result.get('path')}")
+        else:
+            print(f"[backup] hourly failed: {result.get('error')}")
+    except Exception as e:
+        print(f"[backup] hourly exception: {e}")
+
+
+def _run_daily_backup_cleanup():
+    try:
+        from services import backup_manager as bm
+        result = bm.cleanup_old_hourly(keep_days=7)
+        print(f"[backup] cleanup: deleted={result.get('deleted')}, kept={result.get('kept')}")
+    except Exception as e:
+        print(f"[backup] cleanup exception: {e}")
+
+
+# ═══════════════════════════════════════════
 # Step 46-4: 시간별 백업 시스템 API
 # ═══════════════════════════════════════════
 
@@ -14022,6 +14047,30 @@ if __name__ == "__main__":
             print("[SCHEDULER] auto_relogin_check 등록 (30분)")
         except Exception as e:
             print(f"[SCHEDULER] auto_relogin_check 실패: {e}")
+    # Step 46-5: 백업 스케줄러 (4시간마다 hourly + 매일 00:30 정리)
+    if scheduler is not None:
+        try:
+            scheduler.add_job(
+                _run_hourly_backup,
+                'interval', hours=4,
+                id='hourly_backup',
+                replace_existing=True,
+                misfire_grace_time=600,
+            )
+            print("[SCHEDULER] hourly_backup 등록 (4h)")
+        except Exception as e:
+            print(f"[SCHEDULER] hourly_backup 실패: {e}")
+        try:
+            scheduler.add_job(
+                _run_daily_backup_cleanup,
+                'cron', hour=0, minute=30,
+                id='daily_backup_cleanup',
+                replace_existing=True,
+                misfire_grace_time=3600,
+            )
+            print("[SCHEDULER] daily_backup_cleanup 등록 (매일 00:30)")
+        except Exception as e:
+            print(f"[SCHEDULER] daily_backup_cleanup 실패: {e}")
     if scheduler is not None:
         try:
             scheduler.start()
