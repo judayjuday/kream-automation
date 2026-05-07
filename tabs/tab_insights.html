@@ -1,0 +1,192 @@
+<!-- 비즈니스 인사이트 (Step 47-3) -->
+<div class="tab-content" id="tab-insights">
+  <h2>📈 비즈니스 인사이트</h2>
+
+  <!-- 일별 마진 추세 -->
+  <h3>📊 일별 마진 추세 (최근 30일)</h3>
+  <div id="bi-trend-summary" style="background:#e8f5e9;padding:12px;border-radius:6px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div><div style="color:#666;font-size:13px;">총 판매</div><div id="bi-total-sales" style="font-size:24px;font-weight:bold;">-</div></div>
+      <div><div style="color:#666;font-size:13px;">총 매출</div><div id="bi-total-revenue" style="font-size:20px;">-</div></div>
+      <div><div style="color:#666;font-size:13px;">총 마진</div><div id="bi-total-profit" style="font-size:20px;font-weight:bold;color:#4caf50;">-</div></div>
+      <div><div style="color:#666;font-size:13px;">평균 마진/건</div><div id="bi-avg-profit" style="font-size:18px;">-</div></div>
+    </div>
+  </div>
+
+  <table id="bi-trend-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead style="background:#eee;">
+      <tr><th>날짜</th><th>판매수</th><th>매출</th><th>매칭수</th><th>원가</th><th>마진</th></tr>
+    </thead>
+    <tbody id="bi-trend-tbody"></tbody>
+  </table>
+
+  <!-- 카테고리별 -->
+  <h3 style="margin-top:24px;">📦 카테고리별 수익성</h3>
+  <table id="bi-category-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>카테고리</th><th>입찰</th><th>판매</th>
+        <th>전환율</th><th>평균 원가</th><th>평균 판매가</th>
+        <th>총 마진</th><th>건당 평균 마진</th>
+      </tr>
+    </thead>
+    <tbody id="bi-category-tbody"></tbody>
+  </table>
+
+  <!-- 협력사별 ROI -->
+  <h3 style="margin-top:24px;">🤝 협력사별 ROI</h3>
+  <table id="bi-supplier-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr>
+        <th>협력사</th><th>송금 수</th><th>투자액 KRW</th>
+        <th>매칭 입찰</th><th>판매 완료</th>
+        <th>판매 전환율</th><th>실현 마진</th><th>ROI %</th>
+      </tr>
+    </thead>
+    <tbody id="bi-supplier-tbody"></tbody>
+  </table>
+
+  <!-- 시장 변동성 -->
+  <h3 style="margin-top:24px;">⚡ KREAM 시장 변동성 TOP (최근 7일)</h3>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+    <label>기간(일) <input type="number" id="bi-vol-days" value="7" min="1" max="90" style="width:60px;" /></label>
+    <button onclick="loadVolatility()" style="background:#9c27b0;color:#fff;padding:6px 16px;">조회</button>
+  </div>
+  <table id="bi-vol-table" style="width:100%;border-collapse:collapse;">
+    <thead style="background:#eee;">
+      <tr><th>모델</th><th>샘플</th><th>최저</th><th>최고</th><th>평균</th><th>변동폭</th><th>변동성%</th></tr>
+    </thead>
+    <tbody id="bi-vol-tbody"></tbody>
+  </table>
+
+  <!-- 모델별 가격 추세 검색 -->
+  <h3 style="margin-top:24px;">🔍 모델별 시장 가격 추세</h3>
+  <div style="margin-bottom:12px;">
+    <input type="text" id="bi-model-search" placeholder="모델명" style="width:200px;" />
+    <input type="number" id="bi-model-days" value="30" min="7" max="365" style="width:60px;" />
+    <button onclick="loadMarketTrend()" style="background:#2196f3;color:#fff;padding:6px 16px;">조회</button>
+  </div>
+  <div id="bi-trend-result"></div>
+</div>
+
+<script>
+async function loadInsights() {
+  const r = await fetch('/api/insights/dashboard');
+  const d = await r.json();
+  if (!d.success) return;
+
+  // 일별 추세
+  const tr = d.daily_trend_30d;
+  const totalSales = tr.reduce((a,x) => a + x.sales_count, 0);
+  const totalRev = tr.reduce((a,x) => a + (x.total_revenue||0), 0);
+  const totalProf = tr.reduce((a,x) => a + (x.total_profit||0), 0);
+  const totalMatched = tr.reduce((a,x) => a + x.matched_count, 0);
+
+  document.getElementById('bi-total-sales').textContent = totalSales;
+  document.getElementById('bi-total-revenue').textContent = totalRev.toLocaleString() + ' ₩';
+  document.getElementById('bi-total-profit').textContent = totalProf.toLocaleString() + ' ₩';
+  document.getElementById('bi-avg-profit').textContent =
+    (totalMatched > 0 ? Math.round(totalProf/totalMatched).toLocaleString() : 0) + ' ₩';
+
+  document.getElementById('bi-trend-tbody').innerHTML = tr.slice().reverse().map(t => `
+    <tr>
+      <td>${t.date}</td>
+      <td>${t.sales_count}</td>
+      <td>${(t.total_revenue||0).toLocaleString()}</td>
+      <td>${t.matched_count}</td>
+      <td>${(t.total_cost||0).toLocaleString()}</td>
+      <td style="color:${t.total_profit >= 0 ? '#4caf50' : '#f44336'};font-weight:bold;">
+        ${(t.total_profit||0).toLocaleString()}
+      </td>
+    </tr>
+  `).join('');
+
+  // 카테고리
+  document.getElementById('bi-category-tbody').innerHTML = d.category_profitability.map(c => `
+    <tr>
+      <td><strong>${c.category}</strong></td>
+      <td>${c.bid_count}</td>
+      <td>${c.sale_count}</td>
+      <td>${c.conversion_rate}%</td>
+      <td>${Math.round(c.avg_cost_krw).toLocaleString()}</td>
+      <td>${Math.round(c.avg_sale_krw).toLocaleString()}</td>
+      <td style="color:${c.total_profit >= 0 ? '#4caf50' : '#f44336'};font-weight:bold;">
+        ${Math.round(c.total_profit).toLocaleString()}
+      </td>
+      <td>${Math.round(c.avg_profit_per_sale).toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  // 협력사 ROI
+  document.getElementById('bi-supplier-tbody').innerHTML = d.supplier_roi.map(s => `
+    <tr>
+      <td><strong>${s.supplier_name}</strong></td>
+      <td>${s.remittance_count}</td>
+      <td>${s.total_invested_krw.toLocaleString()}</td>
+      <td>${s.matched_bid_count}</td>
+      <td>${s.sold_count}</td>
+      <td>${s.sell_through_rate}%</td>
+      <td style="color:${s.realized_profit >= 0 ? '#4caf50' : '#f44336'};font-weight:bold;">
+        ${Math.round(s.realized_profit).toLocaleString()}
+      </td>
+      <td style="font-size:18px;font-weight:bold;color:${s.roi_pct >= 0 ? '#4caf50' : '#f44336'};">
+        ${s.roi_pct}%
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadVolatility() {
+  const days = document.getElementById('bi-vol-days').value;
+  const r = await fetch(`/api/insights/volatility-top?days=${days}&limit=20`);
+  const d = await r.json();
+  if (!d.success) return;
+  const tbody = document.getElementById('bi-vol-tbody');
+  if (d.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">데이터 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = d.items.map(v => `
+    <tr>
+      <td><strong>${v.model}</strong></td>
+      <td>${v.samples}</td>
+      <td>${(v.min_p||0).toLocaleString()}</td>
+      <td>${(v.max_p||0).toLocaleString()}</td>
+      <td>${Math.round(v.avg_p||0).toLocaleString()}</td>
+      <td>${(v.range_krw||0).toLocaleString()}</td>
+      <td style="color:#9c27b0;font-weight:bold;">${v.volatility_pct}%</td>
+    </tr>
+  `).join('');
+}
+
+async function loadMarketTrend() {
+  const model = document.getElementById('bi-model-search').value.trim();
+  const days = document.getElementById('bi-model-days').value;
+  if (!model) { alert('모델명 필수'); return; }
+  const r = await fetch(`/api/insights/market-trend/${encodeURIComponent(model)}?days=${days}`);
+  const d = await r.json();
+  const div = document.getElementById('bi-trend-result');
+  if (!d.success || (d.history && d.history.length === 0)) {
+    div.innerHTML = `<span style="color:#999;">${d.note || '데이터 없음'}</span>`;
+    return;
+  }
+  const changeColor = d.change_pct > 0 ? '#f44336' : (d.change_pct < 0 ? '#4caf50' : '#666');
+  div.innerHTML = `
+    <div style="background:#fff;padding:12px;border:1px solid #ddd;border-radius:6px;">
+      <strong>${d.model}</strong> | 샘플 ${d.sample_count}건 | 평균 ${d.avg_price?.toLocaleString()}원<br>
+      <strong>${d.first_price?.toLocaleString()} → ${d.last_price?.toLocaleString()}</strong>
+      <span style="color:${changeColor};font-weight:bold;margin-left:8px;">${d.change_pct >= 0 ? '+' : ''}${d.change_pct}%</span>
+      <table style="width:100%;margin-top:8px;font-size:12px;">
+        <thead style="background:#eee;"><tr><th>일시</th><th>가격</th></tr></thead>
+        <tbody>${d.history.slice(-50).map(h => `<tr><td>${h.ts}</td><td>${h.price?.toLocaleString()}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+if (typeof registerTabLoader === 'function') {
+  registerTabLoader('insights', () => { loadInsights(); loadVolatility(); });
+} else {
+  loadInsights(); loadVolatility();
+}
+</script>
