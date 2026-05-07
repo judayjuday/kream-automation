@@ -13647,6 +13647,27 @@ def api_supplier_list():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/daily-report/preview', methods=['GET'])
+def api_daily_report_preview():
+    try:
+        from services import daily_report as dr
+        report = dr.build_daily_report()
+        message = dr.format_for_discord(report)
+        return jsonify({'success': True, 'report': report, 'message_preview': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/daily-report/send-now', methods=['POST'])
+def api_daily_report_send_now():
+    try:
+        from services import daily_report as dr
+        result = dr.run_daily_report()
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/auto-rebid/emergency-stop', methods=['POST'])
 def api_auto_rebid_emergency_stop():
     """
