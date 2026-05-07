@@ -14051,6 +14051,24 @@ def api_insights_volatility():
 
 
 # ═══════════════════════════════════════════
+# Step 47-4: 전역 검색
+# ═══════════════════════════════════════════
+
+@app.route('/api/search/global', methods=['GET'])
+def api_search_global():
+    try:
+        from services import global_search as gs_svc
+        q = request.args.get('q', '').strip()
+        limit = int(request.args.get('limit', 20))
+        if len(q) < 2:
+            return jsonify({'success': False, 'error': 'query too short (min 2 chars)'}), 400
+        result = gs_svc.search(q, limit)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════
 # 실행
 # ═══════════════════════════════════════════
 

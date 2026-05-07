@@ -469,6 +469,14 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="main">
     <div class="header">
       <h1 id="page-title">상품 등록 / 입찰</h1>
+      <!-- Step 47-4: 전역 검색 -->
+      <div id="global-search-bar" style="position:relative;display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:16px;">
+        <input type="text" id="gs-query" placeholder="🔍 모델/order_id/인보이스/협력사"
+               style="width:260px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;"
+               onkeydown="if(event.key==='Enter')globalSearch()" />
+        <button onclick="globalSearch()" style="background:#1a237e;color:#fff;padding:6px 12px;border:none;border-radius:6px;font-size:13px;cursor:pointer;">검색</button>
+        <div id="gs-results" style="position:absolute;top:38px;right:0;background:#fff;border:1px solid #ddd;width:780px;max-height:600px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:12px;z-index:1500;border-radius:8px;"></div>
+      </div>
       <div style="display:flex;align-items:center;gap:16px">
         <!-- 헬스체크 신호등 -->
         <div id="health-lights" style="display:flex;gap:8px;align-items:center">
@@ -986,6 +994,70 @@ function _onTabShown(id) {
   if (id === 'adjust') { try { loadAutoAdjustStatus(); loadAutoAdjustHistory(); loadMonitorStatus(); loadPendingAdjustments(); loadAdjustHistory(); loadConditionalBids(); loadExpiringBids(); loadEmailPassword(); } catch(e) {} }
   if (id === 'rebid_monitor') { try { loadAllRebidMonitor(); } catch(e) {} }
 }
+
+// ═══ Step 47-4: 전역 검색 ═══
+async function globalSearch() {
+  const q = document.getElementById('gs-query').value.trim();
+  if (q.length < 2) { alert('2자 이상 입력'); return; }
+  const div = document.getElementById('gs-results');
+  div.style.display = 'block';
+  div.innerHTML = '⏳ 검색 중...';
+
+  try {
+    const r = await fetch(`/api/search/global?q=${encodeURIComponent(q)}&limit=10`);
+    const d = await r.json();
+    if (!d.success) {
+      div.innerHTML = `❌ ${d.error || '검색 실패'}`;
+      return;
+    }
+    if (d.total_count === 0) {
+      div.innerHTML = `<div style="color:#999;">검색 결과 없음 ("${q}")</div>`;
+      return;
+    }
+
+    let html = `<div style="margin-bottom:8px;"><strong>"${q}"</strong> 검색 결과 (총 ${d.total_count}건)
+                <button onclick="document.getElementById('gs-results').style.display='none'" style="float:right;font-size:11px;cursor:pointer;">닫기</button></div>`;
+
+    const sections = [
+      {key:'bid_cost', label:'📦 입찰 원가', cols:['order_id','model','size','cny_price']},
+      {key:'sales', label:'💰 판매', cols:['order_id','model','sale_price','trade_date','ship_status']},
+      {key:'remittance', label:'💸 송금', cols:['id','remittance_date','transaction_no','supplier','amount_krw']},
+      {key:'invoices', label:'📄 인보이스', cols:['invoice_no','invoice_date','supplier','invoice_amount_usd']},
+      {key:'suppliers', label:'🤝 협력사', cols:['id','name','name_en']},
+      {key:'price_book', label:'📋 단가표', cols:['model','size','cny_price','category']},
+      {key:'auto_rebid_log', label:'🤖 자동 재입찰', cols:['executed_at','model','size','action','expected_profit']},
+    ];
+
+    for (const sec of sections) {
+      const items = d[sec.key];
+      if (!items || items.length === 0) continue;
+      html += `<h4 style="margin:12px 0 4px;">${sec.label} (${items.length})</h4>`;
+      html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+      html += '<thead style="background:#eee;"><tr>' + sec.cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+      html += items.map(i => '<tr>' + sec.cols.map(c => `<td>${i[c] !== null && i[c] !== undefined ? i[c] : '-'}</td>`).join('') + '</tr>').join('');
+      html += '</tbody></table>';
+    }
+    div.innerHTML = html;
+  } catch (e) {
+    div.innerHTML = `❌ ${e.message}`;
+  }
+}
+
+// ESC 누르면 닫기
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const r = document.getElementById('gs-results');
+    if (r) r.style.display = 'none';
+  }
+});
+
+// 외부 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  const bar = document.getElementById('global-search-bar');
+  if (bar && !bar.contains(e.target)) {
+    document.getElementById('gs-results').style.display = 'none';
+  }
+});
 
 // ═══ 스텝 전환 ═══
 function setStep(n) {
